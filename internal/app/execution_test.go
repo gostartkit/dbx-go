@@ -100,7 +100,7 @@ func TestExecutePlanTransaction(t *testing.T) {
 				},
 			}
 
-			err := app.executePlan(context.Background(), plan, runner)
+			_, err := app.executePlan(context.Background(), plan, runner)
 			if tc.wantErr && err == nil {
 				t.Fatalf("expected error, got nil")
 			}
@@ -126,7 +126,7 @@ func TestRunPlanDryRunSkipsTransaction(t *testing.T) {
 		},
 	}
 
-	if err := app.runPlan(context.Background(), plan, runner, true); err != nil {
+	if _, err := app.runPlan(context.Background(), plan, runner, true); err != nil {
 		t.Fatalf("runPlan returned error: %v", err)
 	}
 	if runner.beginCount != 0 || runner.execCount != 0 {

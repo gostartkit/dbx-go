@@ -13,6 +13,10 @@ import (
 	"pkg.gostartkit.com/dbx/internal/util"
 )
 
+type Options struct {
+	ConfigDir string
+}
+
 type Application struct {
 	prompt             *ui.Prompt
 	store              *config.Store
@@ -25,9 +29,17 @@ type Application struct {
 }
 
 func New(in io.Reader, out io.Writer, _ io.Writer) (*Application, error) {
-	rootDir, err := config.DefaultRootDir()
-	if err != nil {
-		return nil, err
+	return NewWithOptions(in, out, nil, Options{})
+}
+
+func NewWithOptions(in io.Reader, out io.Writer, _ io.Writer, opts Options) (*Application, error) {
+	rootDir := opts.ConfigDir
+	if rootDir == "" {
+		var err error
+		rootDir, err = config.DefaultRootDir()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	store := config.NewStore(rootDir)

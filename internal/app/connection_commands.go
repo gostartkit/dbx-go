@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"strconv"
@@ -123,6 +124,14 @@ func (a *Application) handleConnectionDelete(ctx context.Context, name string) e
 		return nil
 	}
 
+	if err := a.deleteConnectionByName(name); err != nil {
+		return err
+	}
+	a.prompt.Printf("Deleted connection %s.\n", name)
+	return nil
+}
+
+func (a *Application) deleteConnectionByName(name string) error {
 	if err := a.store.DeleteConnection(name); err != nil {
 		return util.WrapLayer("config", "delete connection "+name, err)
 	}
@@ -142,8 +151,6 @@ func (a *Application) handleConnectionDelete(ctx context.Context, name string) e
 			return util.WrapLayer("config", "clear session after delete", err)
 		}
 	}
-
-	a.prompt.Printf("Deleted connection %s.\n", name)
 	return nil
 }
 
@@ -196,6 +203,8 @@ func (a *Application) handleConnectionShow(ctx context.Context, name string) err
 		}
 		if strings.TrimSpace(cfg.SSH.PasswordEnv) != "" {
 			a.prompt.Printf("  password_env: %s\n", cfg.SSH.PasswordEnv)
+		} else if strings.TrimSpace(cfg.SSH.Password) != "" {
+			a.prompt.Println("  password: [redacted]")
 		}
 	}
 
@@ -420,12 +429,15 @@ func (a *Application) testConnection(ctx context.Context, cfg *config.Connection
 }
 
 func (a *Application) connectWithConfig(ctx context.Context, cfg *config.ConnectionConfig, persistSession bool) error {
-	runtimeCfg, err := a.prepareConnectionForOpen(ctx, cfg)
-	if err != nil {
+	if err := a.activateConnection(ctx, cfg, persistSession); err != nil {
 		return err
 	}
+	a.prompt.Printf("Connected to %s.\n", cfg.Name)
+	return nil
+}
 
-	db, err := a.connector.Open(ctx, runtimeCfg)
+func (a *Application) activateConnection(ctx context.Context, cfg *config.ConnectionConfig, persistSession bool) error {
+	db, err := a.openConnection(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -443,9 +455,20 @@ func (a *Application) connectWithConfig(ctx context.Context, cfg *config.Connect
 			return util.WrapLayer("config", "save session", err)
 		}
 	}
-
-	a.prompt.Printf("Connected to %s.\n", cfg.Name)
 	return nil
+}
+
+func (a *Application) openConnection(ctx context.Context, cfg *config.ConnectionConfig) (*sql.DB, error) {
+	runtimeCfg, err := a.prepareConnectionForOpen(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := a.connector.Open(ctx, runtimeCfg)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 func (a *Application) prepareConnectionForOpen(ctx context.Context, cfg *config.ConnectionConfig) (*config.ConnectionConfig, error) {

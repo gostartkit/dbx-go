@@ -20,6 +20,18 @@ func NewService(store *config.Store) *Service {
 }
 
 func (s *Service) Resolve(command string, cfg *config.ConnectionConfig) (*Template, error) {
+	templates, err := s.List(command, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if len(templates) == 0 {
+		return nil, fmt.Errorf("no template found for command %q and driver %q", command, cfg.Driver)
+	}
+	chosen := templates[0]
+	return &chosen, nil
+}
+
+func (s *Service) List(command string, cfg *config.ConnectionConfig) ([]Template, error) {
 	layers := []struct {
 		layer     string
 		sourceDir string
@@ -39,6 +51,7 @@ func (s *Service) Resolve(command string, cfg *config.ConnectionConfig) (*Templa
 		},
 	}
 
+	matchesFound := make([]Template, 0)
 	for _, layer := range layers {
 		var templates []Template
 		var err error
@@ -53,13 +66,28 @@ func (s *Service) Resolve(command string, cfg *config.ConnectionConfig) (*Templa
 
 		for _, tpl := range templates {
 			if matches(tpl, command, cfg.Driver) {
-				chosen := tpl
-				return &chosen, nil
+				matchesFound = append(matchesFound, tpl)
 			}
 		}
 	}
 
-	return nil, fmt.Errorf("no template found for command %q and driver %q", command, cfg.Driver)
+	return matchesFound, nil
+}
+
+func (s *Service) ResolveNamed(command string, cfg *config.ConnectionConfig, name string) (*Template, error) {
+	templates, err := s.List(command, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, tpl := range templates {
+		if strings.EqualFold(strings.TrimSpace(tpl.Name), strings.TrimSpace(name)) {
+			chosen := tpl
+			return &chosen, nil
+		}
+	}
+
+	return nil, fmt.Errorf("template %q not found for command %q and driver %q", name, command, cfg.Driver)
 }
 
 func (s *Service) loadDir(dir string, layer string) ([]Template, error) {

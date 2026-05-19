@@ -66,6 +66,8 @@ dbx/
 
 ## Commands
 
+REPL commands:
+
 ```text
 /
 help
@@ -88,6 +90,36 @@ exit
 ```
 
 `/` is reserved for command discovery. Operational commands do not use a `/` prefix.
+
+Non-interactive CLI commands:
+
+```text
+dbx connect <name>
+dbx connections
+
+dbx connection create <name> [flags]
+dbx connection edit <name> [flags]
+dbx connection delete <name> [flags]
+dbx connection show <name>
+
+dbx create database <name> [flags]
+dbx list databases [flags]
+dbx drop database <name> [flags]
+
+dbx status
+dbx help
+dbx help <command>
+```
+
+Global CLI flags:
+
+```text
+--connection <name>
+--config-dir <path>
+--dry-run
+--yes
+--format text|json
+```
 
 ## REPL Ergonomics
 
@@ -136,6 +168,8 @@ Running `dbx` enters the interactive shell:
 ```bash
 dbx
 ```
+
+Any supported REPL operation can also run as a one-shot CLI command. This is useful for scripts, CI jobs, and release automation.
 
 ## Configuration
 
@@ -425,6 +459,107 @@ Committed transaction.
 Database appdb created.
 ```
 
+## Non-Interactive CLI
+
+Create a saved connection:
+
+```bash
+dbx connection create prod \
+  --mode ssh \
+  --host 10.0.1.20 \
+  --port 3306 \
+  --user root \
+  --password-env MYSQL_PROD_PASSWORD \
+  --ssh-host bastion.example.com \
+  --ssh-port 22 \
+  --ssh-user ubuntu \
+  --ssh-private-key ~/.ssh/id_rsa \
+  --connect-timeout 10 \
+  --query-timeout 30
+```
+
+Edit only the fields you want to change:
+
+```bash
+dbx connection edit prod \
+  --host 10.0.1.30 \
+  --user admin \
+  --query-timeout 60
+```
+
+Delete a connection without an interactive confirmation:
+
+```bash
+dbx connection delete prod --yes
+```
+
+Show a connection in JSON with secrets redacted:
+
+```bash
+dbx connection show prod --format json
+```
+
+Create a database from a saved connection:
+
+```bash
+dbx --connection prod create database app_demo --yes
+```
+
+Render a template without executing it:
+
+```bash
+dbx --connection prod \
+  --dry-run \
+  --format json \
+  create database app_demo \
+  --template create_database_with_user \
+  --input password=secret123
+```
+
+Example dry-run JSON output:
+
+```json
+{
+  "ok": true,
+  "connection": "prod",
+  "command": "create database",
+  "template": "create_database_with_user",
+  "dry_run": true,
+  "actions": [
+    {
+      "description": "Create database",
+      "sql": "CREATE DATABASE IF NOT EXISTS `app_demo`",
+      "status": "dry-run"
+    },
+    {
+      "description": "Create user",
+      "sql": "CREATE USER IF NOT EXISTS 'app_demo'@'%' IDENTIFIED BY '***'",
+      "status": "dry-run"
+    }
+  ]
+}
+```
+
+List databases for scripts:
+
+```bash
+dbx --connection prod list databases --format json
+```
+
+Drop a database safely:
+
+```bash
+dbx --connection prod drop database app_demo --yes
+```
+
+Inspect status using an explicit saved connection instead of the persisted session:
+
+```bash
+dbx status --connection prod --format json
+```
+
+For CI and shell scripts, prefer `--format json`, `--yes`, and `--dry-run` where appropriate.
+
 ## Installation
 
 Build locally:
@@ -452,6 +587,19 @@ sh scripts/release.sh
 ```
 
 This writes platform archives and `checksums.txt` to `dist/`.
+
+CI or release automation example:
+
+```bash
+dbx --config-dir "$PWD/.dbx" connection create ci \
+  --mode direct \
+  --host 127.0.0.1 \
+  --port 3306 \
+  --user root \
+  --password-env MYSQL_CI_PASSWORD
+
+dbx --config-dir "$PWD/.dbx" --connection ci --dry-run --format json create database ci_demo
+```
 
 ## Security Notes
 
@@ -481,9 +629,10 @@ make release
 - REPL history is persisted, but arrow-key navigation is intentionally not implemented.
 - TAB completion is lightweight and does not provide full shell-style line editing.
 - Dry-run is session-scoped and not persisted.
+- A saved connection that uses `password_prompt` still needs an interactive terminal when a command must actually open the database.
 - SSH verification expects a prepared `known_hosts` file.
 - MySQL can implicitly commit around statements such as `CREATE DATABASE` and `CREATE USER`, so `transaction: true` is best-effort for those workflows.
-- The CLI entrypoint is intentionally REPL-first; one-shot subcommands are not a focus.
+- One-shot CLI commands reuse the same core services as the REPL, but the product direction remains REPL-first.
 
 ## Future Roadmap
 

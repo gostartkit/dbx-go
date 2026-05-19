@@ -227,7 +227,9 @@ func (a *Application) handleCreateDatabase(ctx context.Context) error {
 		return nil
 	}
 
-	if err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun); err != nil {
+	result, err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun)
+	a.printPlanResult(result)
+	if err != nil {
 		return err
 	}
 
@@ -260,7 +262,11 @@ func (a *Application) handleListDatabases(ctx context.Context) error {
 		return nil
 	}
 	if a.dryRun {
-		a.reportDryRun(plan)
+		a.printPlanResult(&PlanExecutionResult{
+			OK:      true,
+			DryRun:  true,
+			Actions: []ActionResult{{Description: plan.Actions[0].Description, SQL: plan.Actions[0].SQL, Status: ActionStatusDryRun}},
+		})
 		return nil
 	}
 
@@ -337,7 +343,9 @@ func (a *Application) handleDropDatabase(ctx context.Context) error {
 		return nil
 	}
 
-	if err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun); err != nil {
+	result, err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun)
+	a.printPlanResult(result)
+	if err != nil {
 		return err
 	}
 
@@ -405,18 +413,33 @@ func (a *Application) collectTemplateInputs(ctx context.Context, template *tpl.T
 			return err
 		}
 
+		normalized, err := normalizeTemplateInputValue(input, value)
+		if err != nil {
+			return err
+		}
+
 		if input.Identifier && input.EffectiveType() != "identifier" {
-			if err := util.ValidateIdentifier(value); err != nil {
+			if err := util.ValidateIdentifier(normalized); err != nil {
 				return err
 			}
 		}
 
-		values[input.Name] = value
+		values[input.Name] = normalized
 	}
 	return nil
 }
 
 func (a *Application) previewAndConfirm(ctx context.Context, plan *tpl.ExecutionPlan) (bool, error) {
+	a.printPlanPreview(plan, a.dryRun)
+
+	confirmed, err := a.confirm(ctx, "Confirm execution?", true)
+	if err != nil {
+		return false, err
+	}
+	return confirmed, nil
+}
+
+func (a *Application) printPlanPreview(plan *tpl.ExecutionPlan, dryRun bool) {
 	a.prompt.Printf("Template: %s (%s)\n", plan.TemplateName, plan.Layer)
 	a.prompt.Printf("Source: %s\n", plan.Source)
 	a.prompt.Println("Execution Plan")
@@ -427,15 +450,9 @@ func (a *Application) previewAndConfirm(ctx context.Context, plan *tpl.Execution
 	for index, action := range plan.Actions {
 		a.prompt.Printf("  %d. %s\n", index+1, action.SQL)
 	}
-	if a.dryRun {
+	if dryRun {
 		a.prompt.Println("Dry-run mode is enabled. SQL will be rendered but not executed.")
 	}
-
-	confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-	if err != nil {
-		return false, err
-	}
-	return confirmed, nil
 }
 
 func filterDroppableDatabases(input []string) []string {
@@ -465,10 +482,4 @@ func redactTemplateValues(template *tpl.Template, values map[string]string) map[
 	}
 
 	return redacted
-}
-
-func (a *Application) reportDryRun(plan *tpl.ExecutionPlan) {
-	for _, action := range plan.Actions {
-		a.prompt.Printf("[DRY-RUN] %s\n", action.Description)
-	}
 }

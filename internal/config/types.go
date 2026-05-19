@@ -19,6 +19,7 @@ type SSHConfig struct {
 	Port        int    `json:"port"`
 	User        string `json:"user"`
 	PrivateKey  string `json:"private_key"`
+	Password    string `json:"password,omitempty"`
 	PasswordEnv string `json:"password_env,omitempty"`
 }
 
@@ -110,8 +111,8 @@ func (c *ConnectionConfig) Validate() error {
 		if strings.TrimSpace(c.SSH.User) == "" {
 			return fmt.Errorf("ssh.user is required")
 		}
-		if strings.TrimSpace(c.SSH.PrivateKey) == "" && strings.TrimSpace(c.SSH.PasswordEnv) == "" {
-			return fmt.Errorf("ssh.private_key or ssh.password_env is required")
+		if strings.TrimSpace(c.SSH.PrivateKey) == "" && strings.TrimSpace(c.SSH.PasswordEnv) == "" && strings.TrimSpace(c.SSH.Password) == "" {
+			return fmt.Errorf("ssh.private_key or ssh.password_env or ssh.password is required")
 		}
 	}
 	return nil

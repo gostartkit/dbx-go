@@ -55,45 +55,114 @@ func (t sqlTransaction) Rollback() error {
 	return t.tx.Rollback()
 }
 
-func (a *Application) executePlan(ctx context.Context, plan *tpl.ExecutionPlan, runner transactionStarter) error {
+func (a *Application) executePlan(ctx context.Context, plan *tpl.ExecutionPlan, runner transactionStarter) (*PlanExecutionResult, error) {
+	result := &PlanExecutionResult{
+		OK:          true,
+		Template:    plan.TemplateName,
+		Layer:       plan.Layer,
+		Source:      plan.Source,
+		Transaction: plan.Transaction,
+		Actions:     make([]ActionResult, 0, len(plan.Actions)),
+	}
+
 	if plan.Transaction {
 		tx, err := runner.BeginTx(ctx, nil)
 		if err != nil {
-			return util.WrapLayer("sql execution", "begin transaction", err)
+			result.OK = false
+			return result, util.WrapLayer("sql execution", "begin transaction", err)
 		}
 
 		for _, action := range plan.Actions {
 			if _, err := tx.ExecContext(ctx, action.SQL); err != nil {
-				a.prompt.Printf("[FAIL] %s\n", action.Description)
+				result.OK = false
+				result.Actions = append(result.Actions, ActionResult{
+					Description: action.Description,
+					SQL:         action.SQL,
+					Status:      ActionStatusFailed,
+				})
 				if rollbackErr := tx.Rollback(); rollbackErr == nil {
-					a.prompt.Println("Rolled back transaction.")
+					result.RolledBack = true
 				}
-				return util.WrapLayer("sql execution", "execute statement", err)
+				return result, util.WrapLayer("sql execution", "execute statement", err)
 			}
-			a.prompt.Printf("[OK] %s\n", action.Description)
+			result.Actions = append(result.Actions, ActionResult{
+				Description: action.Description,
+				SQL:         action.SQL,
+				Status:      ActionStatusOK,
+			})
 		}
 
 		if err := tx.Commit(); err != nil {
-			return util.WrapLayer("sql execution", "commit transaction", err)
+			result.OK = false
+			return result, util.WrapLayer("sql execution", "commit transaction", err)
 		}
-		a.prompt.Println("Committed transaction.")
-		return nil
+		result.Committed = true
+		return result, nil
 	}
 
 	for _, action := range plan.Actions {
 		if _, err := runner.ExecContext(ctx, action.SQL); err != nil {
-			a.prompt.Printf("[FAIL] %s\n", action.Description)
-			return util.WrapLayer("sql execution", "execute statement", err)
+			result.OK = false
+			result.Actions = append(result.Actions, ActionResult{
+				Description: action.Description,
+				SQL:         action.SQL,
+				Status:      ActionStatusFailed,
+			})
+			return result, util.WrapLayer("sql execution", "execute statement", err)
 		}
-		a.prompt.Printf("[OK] %s\n", action.Description)
+		result.Actions = append(result.Actions, ActionResult{
+			Description: action.Description,
+			SQL:         action.SQL,
+			Status:      ActionStatusOK,
+		})
 	}
-	return nil
+	return result, nil
 }
 
-func (a *Application) runPlan(ctx context.Context, plan *tpl.ExecutionPlan, runner transactionStarter, dryRun bool) error {
+func (a *Application) runPlan(ctx context.Context, plan *tpl.ExecutionPlan, runner transactionStarter, dryRun bool) (*PlanExecutionResult, error) {
+	result := &PlanExecutionResult{
+		OK:          true,
+		Template:    plan.TemplateName,
+		Layer:       plan.Layer,
+		Source:      plan.Source,
+		Transaction: plan.Transaction,
+		DryRun:      dryRun,
+		Actions:     make([]ActionResult, 0, len(plan.Actions)),
+	}
+
 	if dryRun {
-		a.reportDryRun(plan)
-		return nil
+		for _, action := range plan.Actions {
+			result.Actions = append(result.Actions, ActionResult{
+				Description: action.Description,
+				SQL:         action.SQL,
+				Status:      ActionStatusDryRun,
+			})
+		}
+		return result, nil
 	}
 	return a.executePlan(ctx, plan, runner)
+}
+
+func (a *Application) printPlanResult(result *PlanExecutionResult) {
+	if result == nil {
+		return
+	}
+
+	for _, action := range result.Actions {
+		switch action.Status {
+		case ActionStatusDryRun:
+			a.prompt.Printf("[DRY-RUN] %s\n", action.Description)
+		case ActionStatusFailed:
+			a.prompt.Printf("[FAIL] %s\n", action.Description)
+		default:
+			a.prompt.Printf("[OK] %s\n", action.Description)
+		}
+	}
+
+	if result.RolledBack {
+		a.prompt.Println("Rolled back transaction.")
+	}
+	if result.Committed {
+		a.prompt.Println("Committed transaction.")
+	}
 }

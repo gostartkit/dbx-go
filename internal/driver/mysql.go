@@ -213,9 +213,12 @@ func sshAuthMethods(cfg *config.SSHConfig) ([]ssh.AuthMethod, error) {
 		}
 		methods = append(methods, ssh.Password(password))
 	}
+	if strings.TrimSpace(cfg.Password) != "" {
+		methods = append(methods, ssh.Password(cfg.Password))
+	}
 
 	if len(methods) == 0 {
-		return nil, fmt.Errorf("SSH auth requires private_key or password_env")
+		return nil, fmt.Errorf("SSH auth requires private_key or password_env or password")
 	}
 
 	return methods, nil
