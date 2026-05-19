@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
-	"pkg.gostartkit.com/dbx/internal/connect"
 	"pkg.gostartkit.com/dbx/internal/repl"
 	tpl "pkg.gostartkit.com/dbx/internal/template"
 	"pkg.gostartkit.com/dbx/internal/ui"
@@ -15,12 +15,13 @@ import (
 
 type Options struct {
 	ConfigDir string
+	Connector connectorClient
 }
 
 type Application struct {
 	prompt             *ui.Prompt
 	store              *config.Store
-	connector          *connect.Connector
+	connector          connectorClient
 	templates          *tpl.Service
 	session            *Session
 	history            []string
@@ -55,12 +56,16 @@ func NewWithOptions(in io.Reader, out io.Writer, _ io.Writer, opts Options) (*Ap
 	application := &Application{
 		prompt:    ui.NewPrompt(in, out),
 		store:     store,
-		connector: connect.NewConnector(),
+		connector: defaultConnector(),
 		templates: tpl.NewService(store),
 		session:   &Session{},
 		history:   history,
 	}
+	if opts.Connector != nil {
+		application.connector = opts.Connector
+	}
 	application.prompt.SetCompleter(application.completeInput)
+	application.prompt.SetHistory(history)
 
 	if loadErr := application.loadReconnectCandidate(); loadErr != nil {
 		application.prompt.Printf("Warning: %v\n", loadErr)
@@ -161,10 +166,19 @@ func (a *Application) maybeReconnect(ctx context.Context) error {
 }
 
 func (a *Application) recordHistory(line string) error {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil
+	}
+	if len(a.history) > 0 && a.history[len(a.history)-1] == line {
+		a.prompt.AppendHistory(line)
+		return nil
+	}
 	if err := a.store.AppendHistory(line); err != nil {
 		return util.WrapLayer("config", "persist history", err)
 	}
 	a.history = append(a.history, line)
+	a.prompt.AppendHistory(line)
 	if len(a.history) > 1000 {
 		a.history = append([]string(nil), a.history[len(a.history)-1000:]...)
 	}

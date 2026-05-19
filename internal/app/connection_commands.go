@@ -382,11 +382,14 @@ func (a *Application) testSaveAndMaybeConnect(ctx context.Context, cfg *config.C
 	if err != nil {
 		return err
 	}
+	var testErr error
 	if testConnection {
 		if err := a.testConnection(ctx, cfg); err != nil {
-			return err
+			testErr = err
+			a.printConnectionTestFailure(cfg.Name, err)
+		} else {
+			a.prompt.Println("Connection successful.")
 		}
-		a.prompt.Println("Connection successful.")
 	}
 
 	if !alreadySaved {
@@ -402,7 +405,12 @@ func (a *Application) testSaveAndMaybeConnect(ctx context.Context, cfg *config.C
 		if err := a.store.SaveConnection(cfg); err != nil {
 			return util.WrapLayer("config", "save connection "+cfg.Name, err)
 		}
-		a.prompt.Printf("Saved: %s\n", a.store.ConnectionConfigPath(cfg.Name))
+		a.printSavedConnection(cfg.Name)
+	}
+
+	if testErr != nil {
+		a.printConnectionEditHint(cfg.Name)
+		return nil
 	}
 
 	connectNow, err := a.confirm(ctx, "Connect now?", true)
@@ -413,6 +421,22 @@ func (a *Application) testSaveAndMaybeConnect(ctx context.Context, cfg *config.C
 		return nil
 	}
 	return a.connectWithConfig(ctx, cfg, true)
+}
+
+func (a *Application) printConnectionTestFailure(name string, err error) {
+	a.prompt.Println("Connection test failed:")
+	a.prompt.Printf("  %v\n", err)
+}
+
+func (a *Application) printSavedConnection(name string) {
+	a.prompt.Println("Saved connection:")
+	a.prompt.Printf("  %s\n", a.store.ConnectionConfigPath(name))
+}
+
+func (a *Application) printConnectionEditHint(name string) {
+	a.prompt.Println()
+	a.prompt.Println("You can update it with:")
+	a.prompt.Printf("  connection edit %s\n", name)
 }
 
 func (a *Application) testConnection(ctx context.Context, cfg *config.ConnectionConfig) error {

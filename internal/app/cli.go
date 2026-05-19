@@ -23,9 +23,14 @@ type cliBuilder struct {
 	out     io.Writer
 	err     io.Writer
 	globals *cliGlobals
+	options Options
 }
 
 func NewCommandApp(in io.Reader, out io.Writer, err io.Writer) *cmd.App {
+	return newCommandAppWithOptions(in, out, err, Options{})
+}
+
+func newCommandAppWithOptions(in io.Reader, out io.Writer, err io.Writer, options Options) *cmd.App {
 	globals := &cliGlobals{
 		Format: "text",
 	}
@@ -35,6 +40,7 @@ func NewCommandApp(in io.Reader, out io.Writer, err io.Writer) *cmd.App {
 		out:     out,
 		err:     err,
 		globals: globals,
+		options: options,
 	}
 
 	cli := cmd.NewApp("dbx")
@@ -72,7 +78,7 @@ func (b *cliBuilder) setGlobalFlags(f *cmd.FlagSet) {
 }
 
 func (b *cliBuilder) runRoot(ctx context.Context, _ *cmd.Command, args []string) error {
-	application, err := NewWithOptions(b.in, b.out, b.err, Options{ConfigDir: b.globals.ConfigDir})
+	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
 	if err != nil {
 		return err
 	}
@@ -83,7 +89,7 @@ func (b *cliBuilder) runRoot(ctx context.Context, _ *cmd.Command, args []string)
 }
 
 func (b *cliBuilder) withApplication(ctx context.Context, fn func(application *Application) error) error {
-	application, err := NewWithOptions(b.in, b.out, b.err, Options{ConfigDir: b.globals.ConfigDir})
+	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
 	if err != nil {
 		return err
 	}
@@ -91,6 +97,12 @@ func (b *cliBuilder) withApplication(ctx context.Context, fn func(application *A
 
 	application.dryRun = b.globals.DryRun
 	return fn(application)
+}
+
+func (b *cliBuilder) applicationOptions() Options {
+	options := b.options
+	options.ConfigDir = b.globals.ConfigDir
+	return options
 }
 
 func (b *cliBuilder) writeOutput(value any, text func() error) error {

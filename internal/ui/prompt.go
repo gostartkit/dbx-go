@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -23,6 +24,7 @@ type Prompt struct {
 	out       io.Writer
 	inFile    *os.File
 	completer Completer
+	history   *HistoryNavigator
 }
 
 func NewPrompt(in io.Reader, out io.Writer) *Prompt {
@@ -40,6 +42,17 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 
 func (p *Prompt) SetCompleter(completer Completer) {
 	p.completer = completer
+}
+
+func (p *Prompt) SetHistory(entries []string) {
+	p.history = NewHistoryNavigator(entries)
+}
+
+func (p *Prompt) AppendHistory(entry string) bool {
+	if p.history == nil {
+		p.history = NewHistoryNavigator(nil)
+	}
+	return p.history.Add(entry)
 }
 
 func (p *Prompt) Println(args ...any) {
@@ -151,9 +164,15 @@ func (p *Prompt) Confirm(label string, defaultYes bool) (bool, error) {
 }
 
 func (p *Prompt) readPromptInteractive(label string) (string, error) {
+	state, err := term.MakeRaw(int(p.inFile.Fd()))
+	if err != nil {
+		return "", err
+	}
+	defer term.Restore(int(p.inFile.Fd()), state)
+
 	fmt.Fprint(p.out, label)
 
-	var builder strings.Builder
+	current := ""
 	for {
 		b, err := p.reader.ReadByte()
 		if err != nil {
@@ -163,34 +182,49 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 		switch b {
 		case '\n', '\r':
 			fmt.Fprintln(p.out)
-			return strings.TrimSpace(builder.String()), nil
+			if p.history != nil {
+				p.history.Reset()
+			}
+			return strings.TrimSpace(current), nil
+		case 3:
+			if p.history != nil {
+				p.history.Reset()
+			}
+			return "", context.Canceled
 		case '\t':
-			completion := p.completer(builder.String())
-			p.applyCompletion(label, &builder, completion)
+			completion := p.completer(current)
+			current = p.applyCompletion(current, completion)
+			p.redrawLine(label, current)
 		case 127, 8:
-			current := builder.String()
 			if current == "" {
 				continue
 			}
 			runes := []rune(current)
-			builder.Reset()
-			builder.WriteString(string(runes[:len(runes)-1]))
-			fmt.Fprint(p.out, "\b \b")
+			current = string(runes[:len(runes)-1])
+			p.redrawLine(label, current)
+		case 27:
+			updated, handled, escErr := p.handleEscapeSequence(current)
+			if escErr != nil {
+				return "", escErr
+			}
+			if handled {
+				current = updated
+				p.redrawLine(label, current)
+			}
 		default:
-			builder.WriteByte(b)
+			current += string(b)
 			fmt.Fprintf(p.out, "%c", b)
 		}
 	}
 }
 
-func (p *Prompt) applyCompletion(label string, builder *strings.Builder, completion Completion) {
+func (p *Prompt) applyCompletion(current string, completion Completion) string {
 	if len(completion.Candidates) == 0 {
-		return
+		return current
 	}
 
 	common := longestCommonPrefix(completion.Candidates)
 	if len(completion.Candidates) == 1 || (completion.Prefix != "" && len(common) > len(completion.Prefix)) {
-		current := builder.String()
 		prefixLen := len(completion.Prefix)
 		if prefixLen > len(current) {
 			prefixLen = len(current)
@@ -206,18 +240,50 @@ func (p *Prompt) applyCompletion(label string, builder *strings.Builder, complet
 		if len(completion.Candidates) == 1 {
 			updated += " "
 		}
-
-		builder.Reset()
-		builder.WriteString(updated)
-		fmt.Fprintf(p.out, "\r\033[K%s%s", label, updated)
-		return
+		return updated
 	}
 
 	fmt.Fprintln(p.out)
 	for _, candidate := range completion.Candidates {
 		fmt.Fprintln(p.out, candidate)
 	}
-	fmt.Fprintf(p.out, "%s%s", label, builder.String())
+	return current
+}
+
+func (p *Prompt) handleEscapeSequence(current string) (string, bool, error) {
+	first, err := p.reader.ReadByte()
+	if err != nil {
+		return current, false, err
+	}
+	if first != '[' {
+		return current, false, nil
+	}
+
+	second, err := p.reader.ReadByte()
+	if err != nil {
+		return current, false, err
+	}
+
+	switch second {
+	case 'A':
+		if p.history == nil {
+			return current, false, nil
+		}
+		return p.history.Up(current), true, nil
+	case 'B':
+		if p.history == nil {
+			return current, false, nil
+		}
+		return p.history.Down(current), true, nil
+	case 'C', 'D':
+		return current, false, nil
+	default:
+		return current, false, nil
+	}
+}
+
+func (p *Prompt) redrawLine(label string, current string) {
+	fmt.Fprintf(p.out, "\r\033[2K%s%s", label, current)
 }
 
 func longestCommonPrefix(values []string) string {

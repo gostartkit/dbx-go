@@ -123,7 +123,7 @@ Global CLI flags:
 
 ## REPL Ergonomics
 
-TAB completion is intentionally lightweight. It does not implement full readline-style editing, but it does support command and saved-connection completion:
+TAB completion is intentionally lightweight. It does not implement full readline-style editing, but it does support command and saved-connection completion. Up and Down arrows navigate persisted command history in the interactive REPL.
 
 ```text
 dbx> conn<TAB>
@@ -477,6 +477,8 @@ dbx connection create prod \
   --connect-timeout 10 \
   --query-timeout 30
 ```
+
+If you add `--test` and the connection test fails, `dbx` still saves the config and prints a warning so you can fix it later with `connection edit <name>`.
 
 Edit only the fields you want to change:
 

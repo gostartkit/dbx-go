@@ -176,32 +176,45 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 					return util.WrapLayer("config", "create connection", fmt.Errorf("connection %q already exists; use --force to overwrite", cfg.Name))
 				}
 
-				if flags.test {
-					if err := application.testConnection(ctx, cfg); err != nil {
-						return err
-					}
-				}
 				if err := application.store.SaveConnection(cfg); err != nil {
 					return util.WrapLayer("config", "save connection "+cfg.Name, err)
 				}
-				if flags.connectNow {
+				var testErr error
+				if flags.test {
+					testErr = application.testConnection(ctx, cfg)
+				}
+				if flags.connectNow && testErr == nil {
 					if err := application.activateConnection(ctx, cfg, true); err != nil {
 						return err
 					}
 					defer application.session.Close()
 				}
 
-				result := &ConnectResult{
-					OK:         true,
-					Connection: cfg.Name,
-					Message:    application.store.ConnectionConfigPath(cfg.Name),
+				result := &ConnectionCreateResult{
+					OK:          true,
+					Connection:  cfg.Name,
+					Saved:       true,
+					EditCommand: "connection edit " + cfg.Name,
+					Path:        application.store.ConnectionConfigPath(cfg.Name),
+				}
+				if flags.test {
+					ok := testErr == nil
+					result.TestOK = &ok
+				}
+				if testErr != nil {
+					result.Warning = "connection test failed"
+					fmt.Fprintln(b.err, "Connection test failed:")
+					fmt.Fprintf(b.err, "  %v\n", testErr)
 				}
 				return b.writeOutput(result, func() error {
-					if flags.test {
+					if testErr == nil && flags.test {
 						fmt.Fprintln(b.out, "Connection successful.")
 					}
-					fmt.Fprintf(b.out, "Saved: %s\n", application.store.ConnectionConfigPath(cfg.Name))
-					if flags.connectNow {
+					application.printSavedConnection(cfg.Name)
+					if testErr != nil {
+						application.printConnectionEditHint(cfg.Name)
+					}
+					if flags.connectNow && testErr == nil {
 						fmt.Fprintf(b.out, "Connected to %s.\n", cfg.Name)
 					}
 					return nil

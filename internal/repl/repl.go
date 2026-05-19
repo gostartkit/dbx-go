@@ -54,6 +54,10 @@ func (r *REPL) Run(ctx context.Context) error {
 				r.prompt.Println()
 				return nil
 			}
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				r.prompt.Println()
+				return nil
+			}
 			return err
 		}
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,59 @@ func TestCLIConnectionCreateGeneratesConfig(t *testing.T) {
 	}
 }
 
+func TestCLIConnectionCreateSavesWhenTestFails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
+		ConfigDir: root,
+		Connector: failingConnector{openErr: errors.New("mysql error: ping database: ssh error: complete SSH handshake with 39.108.126.24:22: ssh: handshake failed")},
+	})
+
+	err := app.Run(context.Background(), []string{
+		"connection", "create", "prod",
+		"--mode", "direct",
+		"--host", "127.0.0.1",
+		"--port", "3306",
+		"--user", "root",
+		"--password", "secret123",
+		"--test",
+		"--format", "json",
+		"--config-dir", root,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	store := config.NewStore(root)
+	if !store.ConnectionExists("prod") {
+		t.Fatalf("expected saved connection after failed test")
+	}
+	if !strings.Contains(stderr.String(), "Connection test failed:") {
+		t.Fatalf("stderr missing warning: %q", stderr.String())
+	}
+
+	var result ConnectionCreateResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if !result.OK || !result.Saved {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if result.TestOK == nil || *result.TestOK {
+		t.Fatalf("expected test_ok false, got %+v", result.TestOK)
+	}
+	if result.Warning != "connection test failed" {
+		t.Fatalf("warning = %q", result.Warning)
+	}
+	if result.EditCommand != "connection edit prod" {
+		t.Fatalf("edit command = %q", result.EditCommand)
+	}
+	if strings.Contains(stdout.String(), "secret123") || strings.Contains(stderr.String(), "secret123") {
+		t.Fatalf("secret leaked in output")
+	}
+}
+
 func TestCLIConnectionEditPreservesUnspecifiedFields(t *testing.T) {
 	t.Parallel()
 
@@ -93,6 +147,94 @@ func TestCLIConnectionEditPreservesUnspecifiedFields(t *testing.T) {
 	}
 	if cfg.Timeout.QuerySeconds != 60 || cfg.Timeout.ConnectSeconds != 10 {
 		t.Fatalf("unexpected timeouts: %+v", cfg.Timeout)
+	}
+}
+
+func TestCLIConnectionCreateValidationFailureStillFails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	app, _, stderr := newCLIApp(t, "", root)
+
+	err := app.Run(context.Background(), []string{
+		"connection", "create", "prod",
+		"--mode", "direct",
+		"--user", "root",
+		"--config-dir", root,
+	})
+	if err == nil {
+		t.Fatalf("expected validation error")
+	}
+	if config.NewStore(root).ConnectionExists("prod") {
+		t.Fatalf("did not expect saved config on validation failure")
+	}
+	if app.ExitStatus() == 0 {
+		t.Fatalf("expected non-zero exit status")
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestCLIConnectionCreateWriteFailureStillFails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "prod"), []byte("not-a-directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, _, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{
+		"connection", "create", "prod",
+		"--mode", "direct",
+		"--host", "127.0.0.1",
+		"--port", "3306",
+		"--user", "root",
+		"--password", "secret123",
+		"--config-dir", root,
+	})
+	if err == nil {
+		t.Fatalf("expected write error")
+	}
+	if app.ExitStatus() == 0 {
+		t.Fatalf("expected non-zero exit status")
+	}
+	if strings.Contains(stderr.String(), "secret123") {
+		t.Fatalf("stderr leaked secret: %q", stderr.String())
+	}
+}
+
+func TestCLIConnectionCreateOverwriteProtectedWithoutForce(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, _, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{
+		"connection", "create", "prod",
+		"--mode", "direct",
+		"--host", "127.0.0.1",
+		"--port", "3306",
+		"--user", "root",
+		"--password", "secret123",
+		"--config-dir", root,
+	})
+	if err == nil {
+		t.Fatalf("expected overwrite protection error")
+	}
+	if app.ExitStatus() == 0 {
+		t.Fatalf("expected non-zero exit status")
+	}
+	if strings.Contains(stderr.String(), "secret123") {
+		t.Fatalf("stderr leaked secret: %q", stderr.String())
 	}
 }
 
@@ -292,10 +434,14 @@ func TestCLIHelpForMultiWordCommand(t *testing.T) {
 
 func newCLIApp(t *testing.T, stdin string, _ string) (*cmd.App, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
+	return newCLIAppWithOptions(t, stdin, Options{})
+}
 
+func newCLIAppWithOptions(t *testing.T, stdin string, options Options) (*cmd.App, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cli := NewCommandApp(strings.NewReader(stdin), &stdout, &stderr)
+	cli := newCommandAppWithOptions(strings.NewReader(stdin), &stdout, &stderr, options)
 	return cli, &stdout, &stderr
 }
 

@@ -59,6 +59,16 @@ type ConnectResult struct {
 	Message    string `json:"message,omitempty"`
 }
 
+type ConnectionCreateResult struct {
+	OK          bool   `json:"ok"`
+	Connection  string `json:"connection,omitempty"`
+	Saved       bool   `json:"saved"`
+	TestOK      *bool  `json:"test_ok,omitempty"`
+	Warning     string `json:"warning,omitempty"`
+	EditCommand string `json:"edit_command,omitempty"`
+	Path        string `json:"path,omitempty"`
+}
+
 type RedactedConnection struct {
 	Name           string               `json:"name"`
 	Driver         string               `json:"driver"`
