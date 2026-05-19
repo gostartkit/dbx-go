@@ -1,0 +1,14 @@
+{
+  "name": "drop_database_guarded",
+  "match": {
+    "command": "drop database",
+    "driver": "mysql"
+  },
+  "actions": [
+    {
+      "type": "sql",
+      "description": "Drop database `{{database}}` on production",
+      "sql": "DROP DATABASE IF EXISTS `{{database}}`"
+    }
+  ]
+}

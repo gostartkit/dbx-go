@@ -1,0 +1,114 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"pkg.gostartkit.com/dbx/internal/util"
+)
+
+type SSHConfig struct {
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	User        string `json:"user"`
+	PrivateKey  string `json:"private_key"`
+	PasswordEnv string `json:"password_env,omitempty"`
+}
+
+type ConnectionConfig struct {
+	Name        string     `json:"name"`
+	Driver      string     `json:"driver"`
+	Mode        string     `json:"mode"`
+	Host        string     `json:"host"`
+	Port        int        `json:"port"`
+	User        string     `json:"user"`
+	Password    string     `json:"password,omitempty"`
+	PasswordEnv string     `json:"password_env,omitempty"`
+	SSH         *SSHConfig `json:"ssh,omitempty"`
+}
+
+type SessionFile struct {
+	CurrentConnection string `json:"current_connection,omitempty"`
+}
+
+func (c *ConnectionConfig) ApplyDefaults() {
+	if c.Driver == "" {
+		c.Driver = "mysql"
+	}
+	if c.Port == 0 {
+		c.Port = 3306
+	}
+	if c.SSH != nil && c.SSH.Port == 0 {
+		c.SSH.Port = 22
+	}
+}
+
+func (c *ConnectionConfig) Validate() error {
+	if c == nil {
+		return fmt.Errorf("connection config is required")
+	}
+
+	c.ApplyDefaults()
+
+	if strings.TrimSpace(c.Name) == "" {
+		return fmt.Errorf("connection name is required")
+	}
+	if c.Driver != "mysql" {
+		return fmt.Errorf("unsupported driver %q", c.Driver)
+	}
+	if c.Mode != "direct" && c.Mode != "ssh" {
+		return fmt.Errorf("unsupported connection mode %q", c.Mode)
+	}
+	if strings.TrimSpace(c.Host) == "" {
+		return fmt.Errorf("host is required")
+	}
+	if c.Port <= 0 {
+		return fmt.Errorf("port must be greater than zero")
+	}
+	if strings.TrimSpace(c.User) == "" {
+		return fmt.Errorf("user is required")
+	}
+	if c.Mode == "ssh" {
+		if c.SSH == nil {
+			return fmt.Errorf("ssh settings are required for ssh mode")
+		}
+		if strings.TrimSpace(c.SSH.Host) == "" {
+			return fmt.Errorf("ssh.host is required")
+		}
+		if c.SSH.Port <= 0 {
+			return fmt.Errorf("ssh.port must be greater than zero")
+		}
+		if strings.TrimSpace(c.SSH.User) == "" {
+			return fmt.Errorf("ssh.user is required")
+		}
+		if strings.TrimSpace(c.SSH.PrivateKey) == "" && strings.TrimSpace(c.SSH.PasswordEnv) == "" {
+			return fmt.Errorf("ssh.private_key or ssh.password_env is required")
+		}
+	}
+	return nil
+}
+
+func (c *ConnectionConfig) Address() string {
+	c.ApplyDefaults()
+	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+func (c *ConnectionConfig) PasswordValue() (string, error) {
+	if c.PasswordEnv == "" {
+		return c.Password, nil
+	}
+
+	value := os.Getenv(c.PasswordEnv)
+	if value == "" {
+		return "", fmt.Errorf("environment variable %s is empty", c.PasswordEnv)
+	}
+	return value, nil
+}
+
+func (s *SSHConfig) PrivateKeyPath() (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("ssh settings are required")
+	}
+	return util.ExpandHome(s.PrivateKey)
+}

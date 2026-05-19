@@ -1,0 +1,9 @@
+{
+  "name": "dev",
+  "driver": "mysql",
+  "mode": "direct",
+  "host": "127.0.0.1",
+  "port": 3306,
+  "user": "root",
+  "password_env": "MYSQL_DEV_PASSWORD"
+}

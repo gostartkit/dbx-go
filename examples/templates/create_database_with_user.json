@@ -1,0 +1,31 @@
+{
+  "name": "create_database_with_user",
+  "match": {
+    "command": "create database",
+    "driver": "mysql"
+  },
+  "inputs": [
+    {
+      "name": "password",
+      "prompt": "New user password",
+      "secret": true
+    }
+  ],
+  "actions": [
+    {
+      "type": "sql",
+      "description": "Create database `{{database}}`",
+      "sql": "CREATE DATABASE IF NOT EXISTS `{{database}}` CHARACTER SET {{charset}} COLLATE {{collation}}"
+    },
+    {
+      "type": "sql",
+      "description": "Create user `{{database}}`",
+      "sql": "CREATE USER IF NOT EXISTS '{{database}}'@'%' IDENTIFIED BY '{{password}}'"
+    },
+    {
+      "type": "sql",
+      "description": "Grant privileges to `{{database}}`",
+      "sql": "GRANT ALL PRIVILEGES ON `{{database}}`.* TO '{{database}}'@'%'"
+    }
+  ]
+}
