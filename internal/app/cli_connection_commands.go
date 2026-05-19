@@ -193,6 +193,9 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 				}
 				meta.Connection = cfg.Name
 				meta.Mode = cfg.Mode
+				if err := b.requireCLIConfirmation("connection create"); err != nil {
+					return err
+				}
 				if application.store.ConnectionExists(cfg.Name) && !flags.force {
 					return util.WrapLayer("config", "create connection", fmt.Errorf("connection %q already exists; use --force to overwrite", cfg.Name))
 				}
@@ -289,6 +292,9 @@ func (b *cliBuilder) connectionEditCommand() *cmd.Command {
 					return util.WrapLayer("config", "load connection "+args[0], err)
 				}
 				meta.Mode = cfg.Mode
+				if err := b.requireCLIConfirmation("connection edit"); err != nil {
+					return err
+				}
 
 				if err := applyEditConnectionFlags(cfg, flags); err != nil {
 					return err
@@ -335,12 +341,8 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
 					meta.Mode = cfg.Mode
 				}
-				confirmed, err := b.confirm(ctx, application, fmt.Sprintf("Delete connection %q?", args[0]), false)
-				if err != nil {
+				if err := b.requireCLIConfirmation("connection delete"); err != nil {
 					return err
-				}
-				if !confirmed {
-					return nil
 				}
 				if err := application.deleteConnectionByName(args[0]); err != nil {
 					return err

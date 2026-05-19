@@ -24,6 +24,7 @@ func TestCLIConnectionCreateGeneratesConfig(t *testing.T) {
 
 	err := app.Run(context.Background(), []string{
 		"connection", "create", "prod",
+		"--yes",
 		"--mode", "ssh",
 		"--host", "10.0.1.20",
 		"--port", "3306",
@@ -69,6 +70,7 @@ func TestCLIConnectionCreateProxySSHGeneratesConfig(t *testing.T) {
 
 	err := app.Run(context.Background(), []string{
 		"connection", "create", "prod_proxy",
+		"--yes",
 		"--mode", "proxy-ssh",
 		"--host", "10.0.1.20",
 		"--port", "3306",
@@ -109,6 +111,7 @@ func TestCLIConnectionCreateProxyGeneratesConfig(t *testing.T) {
 
 	err := app.Run(context.Background(), []string{
 		"connection", "create", "prod_proxy",
+		"--yes",
 		"--mode", "proxy",
 		"--host", "10.0.1.20",
 		"--port", "3306",
@@ -148,6 +151,7 @@ func TestCLIConnectionCreateSavesWhenTestFails(t *testing.T) {
 
 	err := app.Run(context.Background(), []string{
 		"connection", "create", "prod",
+		"--yes",
 		"--mode", "direct",
 		"--host", "127.0.0.1",
 		"--port", "3306",
@@ -205,6 +209,7 @@ func TestCLIConnectionEditPreservesUnspecifiedFields(t *testing.T) {
 	app, _, stderr := newCLIApp(t, "", root)
 	err := app.Run(context.Background(), []string{
 		"connection", "edit", "prod",
+		"--yes",
 		"--host", "10.0.1.30",
 		"--query-timeout", "60",
 		"--config-dir", root,
@@ -313,6 +318,7 @@ func TestCLIConnectionCreateValidationFailureStillFails(t *testing.T) {
 
 	err := app.Run(context.Background(), []string{
 		"connection", "create", "prod",
+		"--yes",
 		"--mode", "direct",
 		"--user", "root",
 		"--config-dir", root,
@@ -342,6 +348,7 @@ func TestCLIConnectionCreateWriteFailureStillFails(t *testing.T) {
 	app, _, stderr := newCLIApp(t, "", root)
 	err := app.Run(context.Background(), []string{
 		"connection", "create", "prod",
+		"--yes",
 		"--mode", "direct",
 		"--host", "127.0.0.1",
 		"--port", "3306",
@@ -507,8 +514,8 @@ func TestCLIConnectionDeleteConfirmation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	app, _, stderr := newCLIApp(t, "y\n", root)
-	err := app.Run(context.Background(), []string{"connection", "delete", "prod", "--config-dir", root})
+	app, _, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"connection", "delete", "prod", "--yes", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -787,6 +794,41 @@ func TestCLIDropDatabaseAllowsHyphenName(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "`greenhn-dev`") {
 		t.Fatalf("stdout missing quoted database name: %q", stdout.String())
+	}
+}
+
+func TestCLIMutatingCommandRequiresYes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{
+		"--connection", "prod",
+		"--format", "json",
+		"--config-dir", root,
+		"drop", "database", "greenhn-dev",
+	})
+	if err == nil {
+		t.Fatalf("expected confirmation error")
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected handled json error, got stderr=%q", stderr.String())
+	}
+
+	var envelope ErrorEnvelope
+	if unmarshalErr := json.Unmarshal(stdout.Bytes(), &envelope); unmarshalErr != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", unmarshalErr, stdout.String())
+	}
+	if envelope.Error == nil || envelope.Error.Code != "CONFIRMATION_REQUIRED" {
+		t.Fatalf("unexpected error envelope: %+v", envelope)
 	}
 }
 

@@ -247,14 +247,8 @@ func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Applica
 		application.printPlanPreview(previewPlan, b.globals.DryRun)
 	}
 
-	if !b.globals.DryRun {
-		confirmed, err := b.confirm(ctx, application, "Confirm execution?", true)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			return nil
-		}
+	if err := b.requireCLIConfirmation("create database"); err != nil {
+		return err
 	}
 
 	var result *PlanExecutionResult
@@ -366,8 +360,8 @@ func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Applicati
 	if err := util.ValidateDatabaseName(name); err != nil {
 		return util.WrapLayer("validation", "validate database name", err)
 	}
-	if !b.globals.DryRun && !b.globals.Yes {
-		return util.WrapLayer("validation", "drop database", fmt.Errorf("--yes is required unless --dry-run is enabled"))
+	if err := b.requireCLIConfirmation("drop database"); err != nil {
+		return err
 	}
 
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)

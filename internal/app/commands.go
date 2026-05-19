@@ -110,18 +110,6 @@ func (a *Application) handleConnect(ctx context.Context) error {
 
 func (a *Application) handleConnections(ctx context.Context) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "connections"}, func(meta *auditMetadata) error {
-		a.prompt.Println("Execution Plan")
-		a.prompt.Printf("  1. Read connection configs from %s\n", a.store.RootDir)
-
-		confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			a.prompt.Println("Cancelled.")
-			return nil
-		}
-
 		connections, err := a.store.ListConnections()
 		if err != nil {
 			return util.WrapLayer("config", "list configured connections", err)
@@ -141,18 +129,6 @@ func (a *Application) handleConnections(ctx context.Context) error {
 
 func (a *Application) handleStatus(ctx context.Context) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "status", DryRun: a.dryRun}, func(meta *auditMetadata) error {
-		a.prompt.Println("Execution Plan")
-		a.prompt.Println("  1. Inspect the current session and ping the active database connection")
-
-		confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			a.prompt.Println("Cancelled.")
-			return nil
-		}
-
 		if a.session.Connection == nil {
 			a.prompt.Println("No active connection.")
 			return nil
@@ -267,7 +243,7 @@ func (a *Application) handleCreateDatabase(ctx context.Context) error {
 			return util.WrapLayer("template", "build redacted create database preview", err)
 		}
 
-		confirmed, err := a.previewAndConfirm(ctx, previewPlan)
+		confirmed, err := a.previewAndConfirm(ctx, "create database", previewPlan)
 		if err != nil {
 			return err
 		}
@@ -306,15 +282,8 @@ func (a *Application) handleListDatabases(ctx context.Context) error {
 			return util.WrapLayer("template", "build list databases execution plan", err)
 		}
 
-		confirmed, err := a.previewAndConfirm(ctx, plan)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			a.prompt.Println("Cancelled.")
-			return nil
-		}
 		if a.dryRun {
+			a.printPlanPreview(plan, true)
 			a.printPlanResult(&PlanExecutionResult{
 				OK:      true,
 				DryRun:  true,
@@ -391,7 +360,7 @@ func (a *Application) handleDropDatabase(ctx context.Context) error {
 			return util.WrapLayer("template", "build redacted drop database preview", err)
 		}
 
-		confirmed, err := a.previewAndConfirm(ctx, previewPlan)
+		confirmed, err := a.previewAndConfirm(ctx, "drop database", previewPlan)
 		if err != nil {
 			return err
 		}
@@ -487,14 +456,9 @@ func (a *Application) collectTemplateInputs(ctx context.Context, template *tpl.T
 	return nil
 }
 
-func (a *Application) previewAndConfirm(ctx context.Context, plan *tpl.ExecutionPlan) (bool, error) {
+func (a *Application) previewAndConfirm(ctx context.Context, command string, plan *tpl.ExecutionPlan) (bool, error) {
 	a.printPlanPreview(plan, a.dryRun)
-
-	confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-	if err != nil {
-		return false, err
-	}
-	return confirmed, nil
+	return a.confirmExecutionIfNeeded(ctx, command)
 }
 
 func (a *Application) printPlanPreview(plan *tpl.ExecutionPlan, dryRun bool) {

@@ -193,18 +193,6 @@ func (a *Application) handleConnectionShow(ctx context.Context, name string) err
 		}
 		meta.Mode = cfg.Mode
 
-		a.prompt.Println("Execution Plan")
-		a.prompt.Printf("  1. Read connection config from %s\n", a.store.ConnectionConfigPath(name))
-
-		confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			a.prompt.Println("Cancelled.")
-			return nil
-		}
-
 		a.prompt.Printf("Name: %s\n", cfg.Name)
 		a.prompt.Printf("Driver: %s\n", cfg.Driver)
 		a.prompt.Printf("Mode: %s\n", cfg.Mode)

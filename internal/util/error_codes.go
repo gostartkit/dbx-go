@@ -25,6 +25,8 @@ func DescribeError(err error) *ErrorInfo {
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return &ErrorInfo{Code: "CONFIG_NOT_FOUND", Message: "config not found", Layer: coalesceLayer(layer, "config")}
+	case layer == "validation" && strings.Contains(lowerRoot, "confirmation required"):
+		return &ErrorInfo{Code: "CONFIRMATION_REQUIRED", Message: "confirmation required: rerun with --yes", Layer: layer}
 	case layer == "validation":
 		return &ErrorInfo{Code: "VALIDATION_FAILED", Message: "validation failed", Layer: layer}
 	case layer == "config" && strings.Contains(lowerRoot, "unsupported version"):

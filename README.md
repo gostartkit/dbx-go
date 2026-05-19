@@ -187,6 +187,25 @@ dry off       -> dry-run off
 
 Use `help aliases` inside the REPL to display the alias list.
 
+## Confirmation Behavior
+
+Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `list databases`, `show databases`, and `show dbs`.
+
+Mutating commands require confirmation in the REPL unless dry-run is active. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
+
+Examples:
+
+```text
+dbx(prod)> status
+dbx(prod)> show databases
+dbx(prod)> connection test prod
+```
+
+```bash
+dbx --connection prod drop database greenhn-dev --yes
+dbx --connection prod drop database greenhn-dev --dry-run
+```
+
 Running `dbx` enters the interactive shell:
 
 ```bash
