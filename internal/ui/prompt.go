@@ -36,10 +36,17 @@ type Prompt struct {
 	rawActive bool
 	label     string
 	current   string
+	session   *CompletionSession
 }
 
 type rawModeWriter struct {
 	writer io.Writer
+}
+
+type CompletionSession struct {
+	BaseInput   string
+	Suggestions []Suggestion
+	Index       int
 }
 
 func NewPrompt(in io.Reader, out io.Writer) *Prompt {
@@ -192,10 +199,12 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 	p.rawActive = true
 	p.label = label
 	p.current = ""
+	p.resetCompletionSession()
 	defer func() {
 		p.rawActive = false
 		p.label = ""
 		p.current = ""
+		p.resetCompletionSession()
 	}()
 
 	fmt.Fprint(p.out, label)
@@ -214,17 +223,19 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 			if p.history != nil {
 				p.history.Reset()
 			}
+			p.resetCompletionSession()
 			return strings.TrimSpace(current), nil
 		case 3:
 			if p.history != nil {
 				p.history.Reset()
 			}
+			p.resetCompletionSession()
 			return "", context.Canceled
 		case '\t':
-			completion := p.completer(current)
-			current = p.applyCompletion(current, completion)
+			current = p.applyCompletion(current)
 			p.redrawCurrentLine(label, current)
 		case 127, 8:
+			p.resetCompletionSession()
 			if current == "" {
 				continue
 			}
@@ -232,6 +243,7 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 			current = string(runes[:len(runes)-1])
 			p.redrawCurrentLine(label, current)
 		case 27:
+			p.resetCompletionSession()
 			updated, handled, escErr := p.handleEscapeSequence(current)
 			if escErr != nil {
 				return "", escErr
@@ -241,43 +253,44 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 				p.redrawCurrentLine(label, current)
 			}
 		default:
+			p.resetCompletionSession()
 			current += string(b)
 			p.redrawCurrentLine(label, current)
 		}
 	}
 }
 
-func (p *Prompt) applyCompletion(current string, completion Completion) string {
-	candidates := completionValues(completion)
-	if len(candidates) == 0 {
+func (p *Prompt) applyCompletion(current string) string {
+	if p.completer == nil {
 		return current
 	}
 
-	common := longestCommonPrefix(candidates)
-	if len(candidates) == 1 || (completion.Prefix != "" && len(common) > len(completion.Prefix)) {
-		prefixLen := len(completion.Prefix)
-		if prefixLen > len(current) {
-			prefixLen = len(current)
-		}
-
-		base := current[:len(current)-prefixLen]
-		replacement := candidates[0]
-		if len(candidates) > 1 && len(common) > len(completion.Prefix) {
-			replacement = common
-		}
-
-		updated := base + replacement
-		if len(candidates) == 1 {
-			updated += " "
-		}
-		return updated
+	if p.session != nil && current != p.session.BaseInput && !containsSuggestionValue(p.session.Suggestions, current) {
+		p.resetCompletionSession()
 	}
 
-	p.PrintSystemOutput(func(w io.Writer) {
-		p.printSuggestionsTo(w, completion.Suggestions)
-		fmt.Fprintln(w)
-	})
-	return current
+	if p.session != nil && len(p.session.Suggestions) > 0 {
+		selected := p.session.current()
+		p.session.advance()
+		return selected.Value
+	}
+
+	completion := p.completer(current)
+	candidates := completionValues(completion)
+	if len(candidates) == 0 {
+		p.resetCompletionSession()
+		return current
+	}
+
+	if len(candidates) == 1 {
+		p.resetCompletionSession()
+		return candidates[0]
+	}
+
+	p.session = newCompletionSession(current, completion.Suggestions)
+	selected := p.session.current()
+	p.session.advance()
+	return selected.Value
 }
 
 func (p *Prompt) handleEscapeSequence(current string) (string, bool, error) {
@@ -357,27 +370,14 @@ func (p *Prompt) writeNewline() {
 	fmt.Fprint(p.out, "\n")
 }
 
-func longestCommonPrefix(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
-
-	prefix := values[0]
-	for _, value := range values[1:] {
-		for !strings.HasPrefix(value, prefix) {
-			if prefix == "" {
-				return ""
-			}
-			prefix = prefix[:len(prefix)-1]
-		}
-	}
-	return prefix
-}
-
 func (p *Prompt) redrawCurrentLine(label string, current string) {
 	p.label = label
 	p.current = current
 	p.redrawLine(label, current, "")
+}
+
+func (p *Prompt) resetCompletionSession() {
+	p.session = nil
 }
 
 func completionValues(completion Completion) []string {
@@ -386,6 +386,54 @@ func completionValues(completion Completion) []string {
 		values = append(values, suggestion.Value)
 	}
 	return values
+}
+
+func newCompletionSession(baseInput string, suggestions []Suggestion) *CompletionSession {
+	if len(suggestions) == 0 {
+		return nil
+	}
+	cloned := make([]Suggestion, 0, len(suggestions))
+	seen := make(map[string]struct{}, len(suggestions))
+	for _, suggestion := range suggestions {
+		if _, ok := seen[suggestion.Value]; ok {
+			continue
+		}
+		seen[suggestion.Value] = struct{}{}
+		cloned = append(cloned, suggestion)
+	}
+	if len(cloned) == 0 {
+		return nil
+	}
+	return &CompletionSession{
+		BaseInput:   baseInput,
+		Suggestions: cloned,
+	}
+}
+
+func (s *CompletionSession) current() Suggestion {
+	if s == nil || len(s.Suggestions) == 0 {
+		return Suggestion{}
+	}
+	if s.Index < 0 || s.Index >= len(s.Suggestions) {
+		s.Index = 0
+	}
+	return s.Suggestions[s.Index]
+}
+
+func (s *CompletionSession) advance() {
+	if s == nil || len(s.Suggestions) == 0 {
+		return
+	}
+	s.Index = (s.Index + 1) % len(s.Suggestions)
+}
+
+func containsSuggestionValue(suggestions []Suggestion, current string) bool {
+	for _, suggestion := range suggestions {
+		if suggestion.Value == current {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Prompt) printSuggestions(suggestions []Suggestion) {

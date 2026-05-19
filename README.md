@@ -151,7 +151,7 @@ Global CLI flags:
 
 ## REPL Ergonomics
 
-TAB completion is intentionally lightweight, but it is now operationally context-aware. It does not implement full readline-style editing, but it does understand command position, saved connections, current database context, and lightweight inline hints. Up and Down arrows navigate persisted command history in the interactive REPL.
+TAB completion is intentionally lightweight, but it is now operationally context-aware. It does not implement full readline-style editing, but it does understand command position, saved connections, current database context, and operational objects such as tables and MySQL users. Press `TAB` repeatedly to cycle through matching suggestions. Up and Down arrows navigate persisted command history in the interactive REPL.
 
 ```text
 dbx> conn<TAB>
