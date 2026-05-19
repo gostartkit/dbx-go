@@ -20,8 +20,15 @@ func (a *Application) handleConnectByName(ctx context.Context, name string) erro
 
 	a.prompt.Println("Execution Plan")
 	a.prompt.Printf("  1. Open %s MySQL connection %q to %s\n", cfg.Mode, cfg.Name, cfg.Address())
-	if cfg.Mode == "ssh" && cfg.SSH != nil {
-		a.prompt.Printf("  2. Tunnel through SSH bastion %s:%d as %s\n", cfg.SSH.Host, cfg.SSH.Port, cfg.SSH.User)
+	if cfg.Mode == "proxy-ssh" && cfg.Proxy != nil {
+		a.prompt.Printf("  2. Reach SSH through SOCKS5 proxy %s\n", config.RedactProxyURL(cfg.Proxy.URL))
+	}
+	if cfg.UsesSSH() && cfg.SSH != nil {
+		step := 2
+		if cfg.Mode == "proxy-ssh" {
+			step = 3
+		}
+		a.prompt.Printf("  %d. Tunnel through SSH bastion %s:%d as %s\n", step, cfg.SSH.Host, cfg.SSH.Port, cfg.SSH.User)
 	}
 
 	confirmed, err := a.confirm(ctx, "Confirm execution?", true)
@@ -193,7 +200,13 @@ func (a *Application) handleConnectionShow(ctx context.Context, name string) err
 		a.prompt.Println("  not configured")
 	}
 
-	if cfg.Mode == "ssh" && cfg.SSH != nil {
+	if cfg.Proxy != nil && strings.TrimSpace(cfg.Proxy.URL) != "" {
+		a.prompt.Println()
+		a.prompt.Println("Proxy:")
+		a.prompt.Printf("  url: %s\n", config.RedactProxyURL(cfg.Proxy.URL))
+	}
+
+	if cfg.UsesSSH() && cfg.SSH != nil {
 		a.prompt.Println()
 		a.prompt.Println("SSH:")
 		a.prompt.Printf("  host: %s:%d\n", cfg.SSH.Host, cfg.SSH.Port)
@@ -215,7 +228,7 @@ func (a *Application) promptConnectionConfig(ctx context.Context, cfg *config.Co
 	cfg.Driver = "mysql"
 	cfg.ApplyDefaults()
 
-	mode, err := a.choose(ctx, "Connection mode", []string{"direct", "ssh"}, cfg.Mode)
+	mode, err := a.choose(ctx, "Connection mode", []string{"direct", "ssh", "proxy-ssh"}, cfg.Mode)
 	if err != nil {
 		return err
 	}
@@ -254,7 +267,17 @@ func (a *Application) promptConnectionConfig(ctx context.Context, cfg *config.Co
 	cfg.Timeout.ConnectSeconds = connectTimeout
 	cfg.Timeout.QuerySeconds = queryTimeout
 
-	if cfg.Mode == "ssh" {
+	if cfg.Mode == "proxy-ssh" {
+		proxyURL, err := a.askProxyURL(ctx, cfg.Proxy)
+		if err != nil {
+			return err
+		}
+		cfg.Proxy = &config.ProxyConfig{URL: proxyURL}
+	} else {
+		cfg.Proxy = nil
+	}
+
+	if cfg.UsesSSH() {
 		if cfg.SSH == nil {
 			cfg.SSH = &config.SSHConfig{}
 		}
@@ -288,6 +311,24 @@ func (a *Application) promptConnectionConfig(ctx context.Context, cfg *config.Co
 		return util.WrapLayer("validation", "validate connection config", err)
 	}
 	return nil
+}
+
+func (a *Application) askProxyURL(ctx context.Context, proxyCfg *config.ProxyConfig) (string, error) {
+	if proxyCfg != nil && strings.TrimSpace(proxyCfg.URL) != "" {
+		redacted := config.RedactProxyURL(proxyCfg.URL)
+		if redacted != proxyCfg.URL {
+			value, err := a.ask(ctx, "Proxy URL (leave blank to keep current)", "")
+			if err != nil {
+				return "", err
+			}
+			if strings.TrimSpace(value) == "" {
+				return proxyCfg.URL, nil
+			}
+			return strings.TrimSpace(value), nil
+		}
+		return a.ask(ctx, "Proxy URL", redacted)
+	}
+	return a.ask(ctx, "Proxy URL", "")
 }
 
 func (a *Application) promptPasswordHandling(ctx context.Context, cfg *config.ConnectionConfig) error {

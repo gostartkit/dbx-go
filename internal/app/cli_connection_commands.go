@@ -18,6 +18,7 @@ type connectionCreateFlags struct {
 	user           string
 	passwordEnv    string
 	password       string
+	proxyURL       string
 	sshHost        string
 	sshPort        int
 	sshUser        string
@@ -39,6 +40,7 @@ type connectionEditFlags struct {
 	user           optionalString
 	passwordEnv    optionalString
 	password       optionalString
+	proxyURL       optionalString
 	sshHost        optionalString
 	sshPort        optionalInt
 	sshUser        optionalString
@@ -104,6 +106,10 @@ func (b *cliBuilder) connectionsCommand() *cmd.Command {
 					}
 					fmt.Fprintln(b.out, "Configured connections:")
 					for _, connection := range result.Connections {
+						if connection.ViaProxy != "" && connection.ViaSSH != "" {
+							fmt.Fprintf(b.out, "  - %s (%s %s %s via %s -> %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaProxy, connection.ViaSSH)
+							continue
+						}
 						if connection.ViaSSH != "" {
 							fmt.Fprintf(b.out, "  - %s (%s %s %s via %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaSSH)
 							continue
@@ -144,12 +150,13 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 			f.StringVar(&flags.driver, "driver", "mysql", "database driver", "")
 			f.SetEnum("driver", "mysql")
 			f.StringVar(&flags.mode, "mode", "direct", "connection mode", "")
-			f.SetEnum("mode", "direct", "ssh")
+			f.SetEnum("mode", "direct", "ssh", "proxy-ssh")
 			f.StringVar(&flags.host, "host", "", "database host", "")
 			f.IntVar(&flags.port, "port", 3306, "database port", "")
 			f.StringVar(&flags.user, "user", "", "database user", "")
 			f.StringVar(&flags.passwordEnv, "password-env", "", "database password environment variable", "")
 			f.StringVar(&flags.password, "password", "", "database password", "")
+			f.StringVar(&flags.proxyURL, "proxy-url", "", "SOCKS5 proxy URL for proxy-ssh mode", "")
 			f.StringVar(&flags.sshHost, "ssh-host", "", "SSH host", "")
 			f.IntVar(&flags.sshPort, "ssh-port", 22, "SSH port", "")
 			f.StringVar(&flags.sshUser, "ssh-user", "", "SSH user", "")
@@ -239,13 +246,14 @@ func (b *cliBuilder) connectionEditCommand() *cmd.Command {
 			}
 			bindOptionalStringFlag(f, &flags.mode, "mode", "connection mode")
 			if flag, ok := f.Lookup("mode"); ok {
-				flag.Enum = []string{"direct", "ssh"}
+				flag.Enum = []string{"direct", "ssh", "proxy-ssh"}
 			}
 			bindOptionalStringFlag(f, &flags.host, "host", "database host")
 			bindOptionalIntFlag(f, &flags.port, "port", "database port")
 			bindOptionalStringFlag(f, &flags.user, "user", "database user")
 			bindOptionalStringFlag(f, &flags.passwordEnv, "password-env", "database password environment variable")
 			bindOptionalStringFlag(f, &flags.password, "password", "database password")
+			bindOptionalStringFlag(f, &flags.proxyURL, "proxy-url", "SOCKS5 proxy URL for proxy-ssh mode")
 			bindOptionalStringFlag(f, &flags.sshHost, "ssh-host", "SSH host")
 			bindOptionalIntFlag(f, &flags.sshPort, "ssh-port", "SSH port")
 			bindOptionalStringFlag(f, &flags.sshUser, "ssh-user", "SSH user")
@@ -363,6 +371,11 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 					default:
 						fmt.Fprintln(b.out, "  not configured")
 					}
+					if result.Proxy != nil {
+						fmt.Fprintln(b.out)
+						fmt.Fprintln(b.out, "Proxy:")
+						fmt.Fprintf(b.out, "  url: %s\n", result.Proxy.URL)
+					}
 					if result.SSH != nil {
 						fmt.Fprintln(b.out)
 						fmt.Fprintln(b.out, "SSH:")
@@ -406,7 +419,12 @@ func buildCreateConnectionConfig(name string, flags *connectionCreateFlags) (*co
 	if strings.TrimSpace(cfg.Password) != "" {
 		cfg.PasswordEnv = ""
 	}
-	if cfg.Mode == "ssh" {
+	if strings.TrimSpace(flags.proxyURL) != "" {
+		cfg.Proxy = &config.ProxyConfig{
+			URL: strings.TrimSpace(flags.proxyURL),
+		}
+	}
+	if cfg.UsesSSH() {
 		cfg.SSH = &config.SSHConfig{
 			Host:        strings.TrimSpace(flags.sshHost),
 			Port:        flags.sshPort,
@@ -432,9 +450,16 @@ func applyEditConnectionFlags(cfg *config.ConnectionConfig, flags *connectionEdi
 	if flags.mode.Set {
 		cfg.Mode = flags.mode.Value
 		if cfg.Mode == "direct" {
+			cfg.Proxy = nil
 			cfg.SSH = nil
 		}
-		if cfg.Mode == "ssh" && cfg.SSH == nil {
+		if cfg.Mode == "ssh" {
+			cfg.Proxy = nil
+		}
+		if cfg.Mode == "proxy-ssh" && cfg.Proxy == nil {
+			cfg.Proxy = &config.ProxyConfig{}
+		}
+		if cfg.UsesSSH() && cfg.SSH == nil {
 			cfg.SSH = &config.SSHConfig{}
 		}
 	}
@@ -457,6 +482,12 @@ func applyEditConnectionFlags(cfg *config.ConnectionConfig, flags *connectionEdi
 		cfg.PasswordEnv = ""
 		cfg.PasswordPrompt = false
 	}
+	if flags.proxyURL.Set {
+		if cfg.Proxy == nil {
+			cfg.Proxy = &config.ProxyConfig{}
+		}
+		cfg.Proxy.URL = flags.proxyURL.Value
+	}
 	if flags.connectTimeout.Set || flags.queryTimeout.Set {
 		cfg.ApplyDefaults()
 	}
@@ -467,7 +498,7 @@ func applyEditConnectionFlags(cfg *config.ConnectionConfig, flags *connectionEdi
 		cfg.Timeout.QuerySeconds = flags.queryTimeout.Value
 	}
 
-	if cfg.Mode == "ssh" {
+	if cfg.UsesSSH() {
 		if cfg.SSH == nil {
 			cfg.SSH = &config.SSHConfig{}
 		}

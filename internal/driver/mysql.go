@@ -17,6 +17,7 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
+	xproxy "golang.org/x/net/proxy"
 
 	"pkg.gostartkit.com/dbx/internal/config"
 	"pkg.gostartkit.com/dbx/internal/util"
@@ -44,7 +45,7 @@ func OpenMySQL(ctx context.Context, cfg *config.ConnectionConfig) (*sql.DB, erro
 		"charset": "utf8mb4",
 	}
 
-	if cfg.Mode == "ssh" {
+	if cfg.UsesSSH() {
 		dsn.Net, err = registerSSHDialer(cfg)
 		if err != nil {
 			return nil, util.WrapLayer("ssh", "prepare SSH tunnel", err)
@@ -138,8 +139,16 @@ func sshDialerID(cfg *config.ConnectionConfig) string {
 		cfg.SSH.User,
 		cfg.SSH.PrivateKey,
 		cfg.SSH.PasswordEnv,
+		proxyURLForHash(cfg),
 	}, "|")))
 	return hex.EncodeToString(sum[:8])
+}
+
+func proxyURLForHash(cfg *config.ConnectionConfig) string {
+	if cfg == nil || cfg.Proxy == nil {
+		return ""
+	}
+	return cfg.Proxy.URL
 }
 
 func openSSHTunnel(ctx context.Context, cfg *config.ConnectionConfig, targetAddr string) (net.Conn, error) {
@@ -161,9 +170,9 @@ func openSSHTunnel(ctx context.Context, cfg *config.ConnectionConfig, targetAddr
 	}
 
 	sshAddr := fmt.Sprintf("%s:%d", cfg.SSH.Host, cfg.SSH.Port)
-	baseConn, err := (&net.Dialer{Timeout: cfg.ConnectTimeout()}).DialContext(ctx, "tcp", sshAddr)
+	baseConn, err := dialSSHBaseConn(ctx, cfg, sshAddr)
 	if err != nil {
-		return nil, util.WrapLayer("ssh", "dial SSH server "+sshAddr, err)
+		return nil, err
 	}
 
 	clientConn, chans, reqs, err := ssh.NewClientConn(baseConn, sshAddr, clientConfig)
@@ -183,6 +192,87 @@ func openSSHTunnel(ctx context.Context, cfg *config.ConnectionConfig, targetAddr
 		Conn:   conn,
 		client: client,
 	}, nil
+}
+
+type proxyDialSettings struct {
+	Address     string
+	Auth        *xproxy.Auth
+	RedactedURL string
+}
+
+func dialSSHBaseConn(ctx context.Context, cfg *config.ConnectionConfig, sshAddr string) (net.Conn, error) {
+	if cfg.Mode != "proxy-ssh" {
+		conn, err := (&net.Dialer{Timeout: cfg.ConnectTimeout()}).DialContext(ctx, "tcp", sshAddr)
+		if err != nil {
+			return nil, util.WrapLayer("ssh", "dial SSH server "+sshAddr, err)
+		}
+		return conn, nil
+	}
+
+	settings, err := proxyDialerSettings(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	dialer, err := xproxy.SOCKS5("tcp", settings.Address, settings.Auth, xproxy.Direct)
+	if err != nil {
+		return nil, util.WrapLayer("proxy", "create SOCKS5 dialer for "+settings.RedactedURL, err)
+	}
+
+	conn, err := dialProxyWithContext(ctx, dialer, "tcp", sshAddr)
+	if err != nil {
+		return nil, util.WrapLayer("proxy", "dial "+settings.RedactedURL, err)
+	}
+	return conn, nil
+}
+
+func proxyDialerSettings(cfg *config.ConnectionConfig) (*proxyDialSettings, error) {
+	if cfg == nil || cfg.Proxy == nil {
+		return nil, util.WrapLayer("config", "read proxy settings", fmt.Errorf("proxy settings are required"))
+	}
+
+	parsed, err := config.ParseProxyURL(cfg.Proxy.URL)
+	if err != nil {
+		return nil, util.WrapLayer("validation", "parse proxy URL", err)
+	}
+
+	settings := &proxyDialSettings{
+		Address:     parsed.Address,
+		RedactedURL: config.RedactProxyURL(cfg.Proxy.URL),
+	}
+	if parsed.Username != "" {
+		settings.Auth = &xproxy.Auth{
+			User:     parsed.Username,
+			Password: parsed.Password,
+		}
+	}
+	return settings, nil
+}
+
+func dialProxyWithContext(ctx context.Context, dialer xproxy.Dialer, network string, address string) (net.Conn, error) {
+	type dialResult struct {
+		conn net.Conn
+		err  error
+	}
+
+	resultCh := make(chan dialResult, 1)
+	go func() {
+		conn, err := dialer.Dial(network, address)
+		select {
+		case resultCh <- dialResult{conn: conn, err: err}:
+		case <-ctx.Done():
+			if conn != nil {
+				conn.Close()
+			}
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case result := <-resultCh:
+		return result.conn, result.err
+	}
 }
 
 func sshAuthMethods(cfg *config.SSHConfig) ([]ssh.AuthMethod, error) {

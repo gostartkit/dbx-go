@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"pkg.gostartkit.com/dbx/internal/config"
@@ -47,5 +48,25 @@ func TestFormatConnectionSummary(t *testing.T) {
 	})
 	if ssh == "" || ssh == direct {
 		t.Fatalf("ssh summary = %q", ssh)
+	}
+
+	proxySSH := formatConnectionSummary(config.ConnectionConfig{
+		Name:   "prodp",
+		Driver: "mysql",
+		Mode:   "proxy-ssh",
+		Host:   "10.0.1.20",
+		Port:   3306,
+		Proxy: &config.ProxyConfig{
+			URL: "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+		},
+		SSH: &config.SSHConfig{
+			Host: "bastion.example.com",
+		},
+	})
+	if proxySSH == "" || proxySSH == ssh {
+		t.Fatalf("proxy ssh summary = %q", proxySSH)
+	}
+	if got, want := proxySSH, "socks5://proxy_user:***@127.0.0.1:1080"; !strings.Contains(got, want) {
+		t.Fatalf("proxy ssh summary = %q, want redacted proxy %q", got, want)
 	}
 }

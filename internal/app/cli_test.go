@@ -59,6 +59,46 @@ func TestCLIConnectionCreateGeneratesConfig(t *testing.T) {
 	}
 }
 
+func TestCLIConnectionCreateProxySSHGeneratesConfig(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	app, stdout, stderr := newCLIApp(t, "", root)
+
+	err := app.Run(context.Background(), []string{
+		"connection", "create", "prod_proxy",
+		"--mode", "proxy-ssh",
+		"--host", "10.0.1.20",
+		"--port", "3306",
+		"--user", "root",
+		"--password-env", "MYSQL_PROD_PASSWORD",
+		"--proxy-url", "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+		"--ssh-host", "bastion.example.com",
+		"--ssh-port", "22",
+		"--ssh-user", "ubuntu",
+		"--ssh-private-key", "~/.ssh/id_rsa",
+		"--config-dir", root,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	store := config.NewStore(root)
+	cfg, err := store.LoadConnection("prod_proxy")
+	if err != nil {
+		t.Fatalf("LoadConnection returned error: %v", err)
+	}
+	if cfg.Mode != "proxy-ssh" || cfg.Proxy == nil || cfg.Proxy.URL != "socks5://proxy_user:proxy_password@127.0.0.1:1080" {
+		t.Fatalf("unexpected proxy config: %+v", cfg)
+	}
+	if cfg.SSH == nil || cfg.SSH.Host != "bastion.example.com" {
+		t.Fatalf("unexpected ssh config: %+v", cfg.SSH)
+	}
+	if !strings.Contains(stdout.String(), filepath.Join(root, "prod_proxy", "config.json")) {
+		t.Fatalf("stdout missing saved path: %q", stdout.String())
+	}
+}
+
 func TestCLIConnectionCreateSavesWhenTestFails(t *testing.T) {
 	t.Parallel()
 
@@ -360,6 +400,10 @@ func TestCLIConnectionShowJSONRedactsSecrets(t *testing.T) {
 	cfg := sampleConnection("prod")
 	cfg.Password = "super-secret"
 	cfg.PasswordEnv = ""
+	cfg.Mode = "proxy-ssh"
+	cfg.Proxy = &config.ProxyConfig{
+		URL: "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+	}
 	cfg.SSH = &config.SSHConfig{
 		Host:       "bastion.example.com",
 		Port:       22,
@@ -376,7 +420,7 @@ func TestCLIConnectionShowJSONRedactsSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
-	if strings.Contains(stdout.String(), "super-secret") || strings.Contains(stdout.String(), "ssh-secret") {
+	if strings.Contains(stdout.String(), "super-secret") || strings.Contains(stdout.String(), "ssh-secret") || strings.Contains(stdout.String(), "proxy_password") {
 		t.Fatalf("json output leaked secrets: %s", stdout.String())
 	}
 
@@ -389,6 +433,9 @@ func TestCLIConnectionShowJSONRedactsSecrets(t *testing.T) {
 	}
 	if result.SSH == nil || result.SSH.PasswordMode != "saved" {
 		t.Fatalf("unexpected ssh redaction: %+v", result.SSH)
+	}
+	if result.Proxy == nil || result.Proxy.URL != "socks5://proxy_user:***@127.0.0.1:1080" {
+		t.Fatalf("unexpected proxy redaction: %+v", result.Proxy)
 	}
 }
 

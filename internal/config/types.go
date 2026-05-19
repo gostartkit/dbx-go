@@ -23,6 +23,10 @@ type SSHConfig struct {
 	PasswordEnv string `json:"password_env,omitempty"`
 }
 
+type ProxyConfig struct {
+	URL string `json:"url"`
+}
+
 type TimeoutConfig struct {
 	ConnectSeconds int `json:"connect_seconds,omitempty"`
 	QuerySeconds   int `json:"query_seconds,omitempty"`
@@ -38,6 +42,7 @@ type ConnectionConfig struct {
 	Password       string         `json:"password,omitempty"`
 	PasswordEnv    string         `json:"password_env,omitempty"`
 	PasswordPrompt bool           `json:"password_prompt,omitempty"`
+	Proxy          *ProxyConfig   `json:"proxy,omitempty"`
 	SSH            *SSHConfig     `json:"ssh,omitempty"`
 	Timeout        *TimeoutConfig `json:"timeout,omitempty"`
 }
@@ -80,7 +85,7 @@ func (c *ConnectionConfig) Validate() error {
 	if c.Driver != "mysql" {
 		return fmt.Errorf("unsupported driver %q", c.Driver)
 	}
-	if c.Mode != "direct" && c.Mode != "ssh" {
+	if c.Mode != "direct" && c.Mode != "ssh" && c.Mode != "proxy-ssh" {
 		return fmt.Errorf("unsupported connection mode %q", c.Mode)
 	}
 	if strings.TrimSpace(c.Host) == "" {
@@ -98,9 +103,23 @@ func (c *ConnectionConfig) Validate() error {
 	if c.Timeout.QuerySeconds <= 0 {
 		return fmt.Errorf("timeout.query_seconds must be greater than zero")
 	}
-	if c.Mode == "ssh" {
+	if c.Mode == "direct" && c.Proxy != nil && strings.TrimSpace(c.Proxy.URL) != "" {
+		return fmt.Errorf("proxy settings are not supported for direct mode")
+	}
+	if c.Mode == "ssh" && c.Proxy != nil && strings.TrimSpace(c.Proxy.URL) != "" {
+		return fmt.Errorf("proxy settings are only supported for proxy-ssh mode")
+	}
+	if c.Mode == "proxy-ssh" {
+		if c.Proxy == nil || strings.TrimSpace(c.Proxy.URL) == "" {
+			return fmt.Errorf("proxy.url is required for proxy-ssh mode")
+		}
+		if _, err := ParseProxyURL(c.Proxy.URL); err != nil {
+			return fmt.Errorf("proxy.url is invalid: %w", err)
+		}
+	}
+	if c.Mode == "ssh" || c.Mode == "proxy-ssh" {
 		if c.SSH == nil {
-			return fmt.Errorf("ssh settings are required for ssh mode")
+			return fmt.Errorf("ssh settings are required for %s mode", c.Mode)
 		}
 		if strings.TrimSpace(c.SSH.Host) == "" {
 			return fmt.Errorf("ssh.host is required")
@@ -131,6 +150,10 @@ func (c *ConnectionConfig) ConnectTimeout() time.Duration {
 func (c *ConnectionConfig) QueryTimeout() time.Duration {
 	c.ApplyDefaults()
 	return time.Duration(c.Timeout.QuerySeconds) * time.Second
+}
+
+func (c *ConnectionConfig) UsesSSH() bool {
+	return c != nil && (c.Mode == "ssh" || c.Mode == "proxy-ssh")
 }
 
 func (c *ConnectionConfig) PasswordValue() (string, error) {

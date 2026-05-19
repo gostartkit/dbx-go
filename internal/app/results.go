@@ -35,11 +35,12 @@ type PlanExecutionResult struct {
 }
 
 type ConnectionSummary struct {
-	Name    string `json:"name"`
-	Driver  string `json:"driver"`
-	Mode    string `json:"mode"`
-	Address string `json:"address"`
-	ViaSSH  string `json:"via_ssh,omitempty"`
+	Name     string `json:"name"`
+	Driver   string `json:"driver"`
+	Mode     string `json:"mode"`
+	Address  string `json:"address"`
+	ViaProxy string `json:"via_proxy,omitempty"`
+	ViaSSH   string `json:"via_ssh,omitempty"`
 }
 
 type ConnectionsResult struct {
@@ -79,6 +80,7 @@ type RedactedConnection struct {
 	ConnectTimeout int                  `json:"connect_timeout_seconds"`
 	QueryTimeout   int                  `json:"query_timeout_seconds"`
 	Password       RedactedPassword     `json:"password"`
+	Proxy          *RedactedProxyConfig `json:"proxy,omitempty"`
 	SSH            *RedactedSSHSettings `json:"ssh,omitempty"`
 }
 
@@ -95,6 +97,10 @@ type RedactedSSHSettings struct {
 	PrivateKey   string `json:"private_key,omitempty"`
 	PasswordEnv  string `json:"password_env,omitempty"`
 	PasswordMode string `json:"password_mode,omitempty"`
+}
+
+type RedactedProxyConfig struct {
+	URL string `json:"url"`
 }
 
 type StatusResult struct {
@@ -116,6 +122,17 @@ func summarizeConnection(cfg config.ConnectionConfig) ConnectionSummary {
 		Driver:  cfg.Driver,
 		Mode:    cfg.Mode,
 		Address: cfg.Address(),
+	}
+	if cfg.Mode == "ssh" && cfg.SSH != nil {
+		summary.ViaSSH = cfg.SSH.Host
+	}
+	if cfg.Mode == "proxy-ssh" {
+		if cfg.Proxy != nil {
+			summary.ViaProxy = config.RedactProxyURL(cfg.Proxy.URL)
+		}
+		if cfg.SSH != nil {
+			summary.ViaSSH = cfg.SSH.Host
+		}
 	}
 	if cfg.Mode == "ssh" && cfg.SSH != nil {
 		summary.ViaSSH = cfg.SSH.Host
@@ -156,6 +173,11 @@ func redactConnection(cfg *config.ConnectionConfig) *RedactedConnection {
 			sshSettings.PasswordMode = "saved"
 		}
 		result.SSH = sshSettings
+	}
+	if cfg.Proxy != nil && strings.TrimSpace(cfg.Proxy.URL) != "" {
+		result.Proxy = &RedactedProxyConfig{
+			URL: config.RedactProxyURL(cfg.Proxy.URL),
+		}
 	}
 
 	return result

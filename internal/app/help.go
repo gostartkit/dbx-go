@@ -60,6 +60,7 @@ Create a new saved connection.
 
 This command:
   - creates ~/.config/dbx/{name}/config.json
+  - supports direct, ssh, and proxy-ssh modes
   - optionally tests the connection
   - optionally connects immediately
 

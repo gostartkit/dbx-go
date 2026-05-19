@@ -40,12 +40,15 @@ func TestSaveLoadAndDeleteConnection(t *testing.T) {
 	cfg := &ConnectionConfig{
 		Name:           "prod",
 		Driver:         "mysql",
-		Mode:           "ssh",
+		Mode:           "proxy-ssh",
 		Host:           "10.0.1.20",
 		Port:           3306,
 		User:           "root",
 		PasswordEnv:    "MYSQL_PROD_PASSWORD",
 		PasswordPrompt: false,
+		Proxy: &ProxyConfig{
+			URL: "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+		},
 		SSH: &SSHConfig{
 			Host:       "bastion.example.com",
 			Port:       22,
@@ -65,6 +68,9 @@ func TestSaveLoadAndDeleteConnection(t *testing.T) {
 
 	if loaded.Name != cfg.Name || loaded.PasswordEnv != cfg.PasswordEnv {
 		t.Fatalf("loaded config = %#v", loaded)
+	}
+	if loaded.Proxy == nil || loaded.Proxy.URL != cfg.Proxy.URL {
+		t.Fatalf("loaded proxy config = %#v", loaded.Proxy)
 	}
 	if loaded.SSH == nil || loaded.SSH.Host != cfg.SSH.Host {
 		t.Fatalf("loaded SSH config = %#v", loaded.SSH)

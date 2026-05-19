@@ -1,6 +1,6 @@
 # dbx
 
-`dbx` is a REPL-first MySQL database CLI focused on guided operations instead of raw SQL. It connects directly or through native SSH, resolves templates from builtin/global/connection layers, and keeps the user flow centered on safe prompts, previews, and confirmations.
+`dbx` is a REPL-first MySQL database CLI focused on guided operations instead of raw SQL. It connects directly, through native SSH, or through a SOCKS5 proxy feeding native SSH, resolves templates from builtin/global/connection layers, and keeps the user flow centered on safe prompts, previews, and confirmations.
 
 ## Goals
 
@@ -16,7 +16,7 @@
 - Interactive `dbx>` prompt
 - Lightweight TAB completion for commands and saved connection names
 - Explicit command aliases without changing canonical help output
-- Direct and SSH MySQL connections
+- Direct, SSH, and proxy-SSH MySQL connections
 - Hidden password input
 - `known_hosts` SSH host verification
 - Configurable connect and query timeouts
@@ -230,6 +230,29 @@ SSH MySQL example:
 }
 ```
 
+Proxy -> SSH -> MySQL example:
+
+```json
+{
+  "name": "prod-proxy",
+  "driver": "mysql",
+  "mode": "proxy-ssh",
+  "host": "10.0.1.20",
+  "port": 3306,
+  "user": "root",
+  "password_env": "MYSQL_PROD_PASSWORD",
+  "proxy": {
+    "url": "socks5://proxy_user:proxy_password@127.0.0.1:1080"
+  },
+  "ssh": {
+    "host": "bastion.example.com",
+    "port": 22,
+    "user": "ubuntu",
+    "private_key": "~/.ssh/id_rsa"
+  }
+}
+```
+
 ## Template Precedence
 
 Templates resolve in this order:
@@ -380,6 +403,7 @@ dbx> connection create
 Connection name: prod
   1. direct
   2. ssh
+  3. proxy-ssh
 Connection mode [direct]: ssh
 Database host: 10.0.1.20
 Database port [3306]:
@@ -404,6 +428,8 @@ Save connection? [y/n] [y]:
 Saved: ~/.config/dbx/prod/config.json
 Connect now? [y/n] [y]:
 ```
+
+If you choose `proxy-ssh`, `dbx` asks for `Proxy URL` before the SSH prompts and stores it under `proxy.url`.
 
 Connection inspection:
 
@@ -476,6 +502,22 @@ dbx connection create prod \
   --ssh-private-key ~/.ssh/id_rsa \
   --connect-timeout 10 \
   --query-timeout 30
+```
+
+Create a saved proxy -> SSH connection:
+
+```bash
+dbx connection create prod-proxy \
+  --mode proxy-ssh \
+  --host 10.0.1.20 \
+  --port 3306 \
+  --user root \
+  --password-env MYSQL_PROD_PASSWORD \
+  --proxy-url socks5://proxy_user:proxy_password@127.0.0.1:1080 \
+  --ssh-host bastion.example.com \
+  --ssh-port 22 \
+  --ssh-user ubuntu \
+  --ssh-private-key ~/.ssh/id_rsa
 ```
 
 If you add `--test` and the connection test fails, `dbx` still saves the config and prints a warning so you can fix it later with `connection edit <name>`.
@@ -611,6 +653,7 @@ dbx --config-dir "$PWD/.dbx" --connection ci --dry-run --format json create data
 - Secret template values are redacted from previews.
 - `type: "secret"` and legacy `secret: true` inputs are both redacted.
 - SSH access is native through Go SSH libraries, not `exec.Command("ssh")`.
+- Proxy passwords in `proxy.url` are redacted in user-facing output and JSON summaries.
 - SSH host verification uses `known_hosts`.
 - `DBX_KNOWN_HOSTS` can point to alternate `known_hosts` files if needed.
 
@@ -628,8 +671,9 @@ make release
 ## Known Limitations
 
 - MySQL is the only supported database in the MVP.
-- REPL history is persisted, but arrow-key navigation is intentionally not implemented.
+- Proxy support is limited to SOCKS5 URLs such as `socks5://127.0.0.1:1080`.
 - TAB completion is lightweight and does not provide full shell-style line editing.
+- REPL history supports persisted Up/Down navigation, but not reverse search or advanced readline behavior.
 - Dry-run is session-scoped and not persisted.
 - A saved connection that uses `password_prompt` still needs an interactive terminal when a command must actually open the database.
 - SSH verification expects a prepared `known_hosts` file.

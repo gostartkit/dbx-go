@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/go-sql-driver/mysql v1.10.0
 	golang.org/x/crypto v0.51.0
+	golang.org/x/net v0.53.0
 	golang.org/x/term v0.43.0
 	pkg.gostartkit.com/cmd v0.1.9
 )
