@@ -70,6 +70,30 @@ type ConnectionCreateResult struct {
 	Path        string `json:"path,omitempty"`
 }
 
+type DiagnosticStep struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+type DiagnosticResult struct {
+	OK         bool             `json:"ok"`
+	Connection string           `json:"connection"`
+	Steps      []DiagnosticStep `json:"steps"`
+}
+
+type DoctorCheck struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Suggestion string `json:"suggestion,omitempty"`
+}
+
+type DoctorResult struct {
+	OK         bool          `json:"ok"`
+	Connection string        `json:"connection"`
+	Checks     []DoctorCheck `json:"checks"`
+}
+
 type RedactedConnection struct {
 	Name           string               `json:"name"`
 	Driver         string               `json:"driver"`
@@ -123,19 +147,18 @@ func summarizeConnection(cfg config.ConnectionConfig) ConnectionSummary {
 		Mode:    cfg.Mode,
 		Address: cfg.Address(),
 	}
+	if cfg.Mode == "proxy" || cfg.Mode == "proxy-ssh" {
+		if cfg.Proxy != nil {
+			summary.ViaProxy = config.RedactProxyURL(cfg.Proxy.URL)
+		}
+	}
 	if cfg.Mode == "ssh" && cfg.SSH != nil {
 		summary.ViaSSH = cfg.SSH.Host
 	}
 	if cfg.Mode == "proxy-ssh" {
-		if cfg.Proxy != nil {
-			summary.ViaProxy = config.RedactProxyURL(cfg.Proxy.URL)
-		}
 		if cfg.SSH != nil {
 			summary.ViaSSH = cfg.SSH.Host
 		}
-	}
-	if cfg.Mode == "ssh" && cfg.SSH != nil {
-		summary.ViaSSH = cfg.SSH.Host
 	}
 	return summary
 }

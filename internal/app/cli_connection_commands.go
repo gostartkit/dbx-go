@@ -110,6 +110,10 @@ func (b *cliBuilder) connectionsCommand() *cmd.Command {
 							fmt.Fprintf(b.out, "  - %s (%s %s %s via %s -> %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaProxy, connection.ViaSSH)
 							continue
 						}
+						if connection.ViaProxy != "" {
+							fmt.Fprintf(b.out, "  - %s (%s %s %s via %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaProxy)
+							continue
+						}
 						if connection.ViaSSH != "" {
 							fmt.Fprintf(b.out, "  - %s (%s %s %s via %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaSSH)
 							continue
@@ -131,9 +135,11 @@ func (b *cliBuilder) connectionGroupCommand() *cmd.Command {
 		Long:      helpEntries["connection"].body,
 		SubCommands: []*cmd.Command{
 			b.connectionCreateCommand(),
+			b.connectionDoctorCommand(),
 			b.connectionEditCommand(),
 			b.connectionDeleteCommand(),
 			b.connectionShowCommand(),
+			b.connectionTestCommand(),
 		},
 	}
 }
@@ -150,13 +156,13 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 			f.StringVar(&flags.driver, "driver", "mysql", "database driver", "")
 			f.SetEnum("driver", "mysql")
 			f.StringVar(&flags.mode, "mode", "direct", "connection mode", "")
-			f.SetEnum("mode", "direct", "ssh", "proxy-ssh")
+			f.SetEnum("mode", "direct", "ssh", "proxy", "proxy-ssh")
 			f.StringVar(&flags.host, "host", "", "database host", "")
 			f.IntVar(&flags.port, "port", 3306, "database port", "")
 			f.StringVar(&flags.user, "user", "", "database user", "")
 			f.StringVar(&flags.passwordEnv, "password-env", "", "database password environment variable", "")
 			f.StringVar(&flags.password, "password", "", "database password", "")
-			f.StringVar(&flags.proxyURL, "proxy-url", "", "SOCKS5 proxy URL for proxy-ssh mode", "")
+			f.StringVar(&flags.proxyURL, "proxy-url", "", "SOCKS5 proxy URL for proxy or proxy-ssh mode", "")
 			f.StringVar(&flags.sshHost, "ssh-host", "", "SSH host", "")
 			f.IntVar(&flags.sshPort, "ssh-port", 22, "SSH port", "")
 			f.StringVar(&flags.sshUser, "ssh-user", "", "SSH user", "")
@@ -246,14 +252,14 @@ func (b *cliBuilder) connectionEditCommand() *cmd.Command {
 			}
 			bindOptionalStringFlag(f, &flags.mode, "mode", "connection mode")
 			if flag, ok := f.Lookup("mode"); ok {
-				flag.Enum = []string{"direct", "ssh", "proxy-ssh"}
+				flag.Enum = []string{"direct", "ssh", "proxy", "proxy-ssh"}
 			}
 			bindOptionalStringFlag(f, &flags.host, "host", "database host")
 			bindOptionalIntFlag(f, &flags.port, "port", "database port")
 			bindOptionalStringFlag(f, &flags.user, "user", "database user")
 			bindOptionalStringFlag(f, &flags.passwordEnv, "password-env", "database password environment variable")
 			bindOptionalStringFlag(f, &flags.password, "password", "database password")
-			bindOptionalStringFlag(f, &flags.proxyURL, "proxy-url", "SOCKS5 proxy URL for proxy-ssh mode")
+			bindOptionalStringFlag(f, &flags.proxyURL, "proxy-url", "SOCKS5 proxy URL for proxy or proxy-ssh mode")
 			bindOptionalStringFlag(f, &flags.sshHost, "ssh-host", "SSH host")
 			bindOptionalIntFlag(f, &flags.sshPort, "ssh-port", "SSH port")
 			bindOptionalStringFlag(f, &flags.sshUser, "ssh-user", "SSH user")
@@ -397,6 +403,74 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 	}
 }
 
+func (b *cliBuilder) connectionTestCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:        "test",
+		UsageLine:   "dbx connection test <name>",
+		Short:       "Test a saved connection",
+		Long:        helpEntries["connection test"].body,
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) != 1 {
+				return util.WrapLayer("validation", "connection test", fmt.Errorf("usage: dbx connection test <name>"))
+			}
+
+			return b.withApplication(ctx, func(application *Application) error {
+				cfg, err := application.store.LoadConnection(args[0])
+				if err != nil {
+					return util.WrapLayer("config", "load connection "+args[0], err)
+				}
+
+				result, diagErr := application.diagnoseConnection(ctx, cfg)
+				if writeErr := b.writeOutput(result, func() error {
+					application.printDiagnosticResult(result)
+					if diagErr == nil {
+						fmt.Fprintln(b.out, "Connection successful.")
+						return nil
+					}
+					fmt.Fprintln(b.err, diagErr.Error())
+					return nil
+				}); writeErr != nil {
+					return writeErr
+				}
+				if diagErr != nil {
+					return diagErr
+				}
+				return nil
+			})
+		},
+	}
+}
+
+func (b *cliBuilder) connectionDoctorCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:        "doctor",
+		UsageLine:   "dbx connection doctor <name>",
+		Short:       "Inspect a saved connection statically",
+		Long:        helpEntries["connection doctor"].body,
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) != 1 {
+				return util.WrapLayer("validation", "connection doctor", fmt.Errorf("usage: dbx connection doctor <name>"))
+			}
+
+			return b.withApplication(ctx, func(application *Application) error {
+				result, doctorErr := application.doctorConnection(args[0])
+				if writeErr := b.writeOutput(result, func() error {
+					application.printDoctorResult(result)
+					return nil
+				}); writeErr != nil {
+					return writeErr
+				}
+				if doctorErr != nil {
+					return doctorErr
+				}
+				return nil
+			})
+		},
+	}
+}
+
 func buildCreateConnectionConfig(name string, flags *connectionCreateFlags) (*config.ConnectionConfig, error) {
 	if err := util.ValidateIdentifier(name); err != nil {
 		return nil, util.WrapLayer("validation", "validate connection name", err)
@@ -424,7 +498,7 @@ func buildCreateConnectionConfig(name string, flags *connectionCreateFlags) (*co
 			URL: strings.TrimSpace(flags.proxyURL),
 		}
 	}
-	if cfg.UsesSSH() {
+	if cfg.UsesSSH() || createFlagsIncludeSSH(flags) {
 		cfg.SSH = &config.SSHConfig{
 			Host:        strings.TrimSpace(flags.sshHost),
 			Port:        flags.sshPort,
@@ -455,6 +529,12 @@ func applyEditConnectionFlags(cfg *config.ConnectionConfig, flags *connectionEdi
 		}
 		if cfg.Mode == "ssh" {
 			cfg.Proxy = nil
+		}
+		if cfg.Mode == "proxy" {
+			cfg.SSH = nil
+		}
+		if cfg.Mode == "proxy" && cfg.Proxy == nil {
+			cfg.Proxy = &config.ProxyConfig{}
 		}
 		if cfg.Mode == "proxy-ssh" && cfg.Proxy == nil {
 			cfg.Proxy = &config.ProxyConfig{}
@@ -529,9 +609,29 @@ func applyEditConnectionFlags(cfg *config.ConnectionConfig, flags *connectionEdi
 			cfg.SSH.PasswordEnv = ""
 		}
 	}
+	if cfg.Mode == "proxy" && editFlagsIncludeSSH(flags) {
+		return util.WrapLayer("validation", "validate connection config", fmt.Errorf("ssh settings are not supported for proxy mode"))
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return util.WrapLayer("validation", "validate connection config", err)
 	}
 	return nil
+}
+
+func createFlagsIncludeSSH(flags *connectionCreateFlags) bool {
+	return strings.TrimSpace(flags.sshHost) != "" ||
+		strings.TrimSpace(flags.sshUser) != "" ||
+		strings.TrimSpace(flags.sshPasswordEnv) != "" ||
+		strings.TrimSpace(flags.sshPassword) != "" ||
+		strings.TrimSpace(flags.sshPrivateKey) != ""
+}
+
+func editFlagsIncludeSSH(flags *connectionEditFlags) bool {
+	return flags.sshHost.Set ||
+		flags.sshPort.Set ||
+		flags.sshUser.Set ||
+		flags.sshPasswordEnv.Set ||
+		flags.sshPassword.Set ||
+		flags.sshPrivateKey.Set
 }

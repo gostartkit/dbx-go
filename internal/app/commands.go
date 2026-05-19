@@ -28,12 +28,20 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleConnectByName(ctx, fields[1])
 	case line == "connection create":
 		return false, a.handleConnectionCreate(ctx)
+	case len(fields) == 2 && fields[0] == "connection" && fields[1] == "doctor":
+		return false, a.handleConnectionDoctor(ctx, "")
+	case len(fields) == 2 && fields[0] == "connection" && fields[1] == "test":
+		return false, a.handleConnectionTest(ctx, "")
+	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "doctor":
+		return false, a.handleConnectionDoctor(ctx, fields[2])
 	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "edit":
 		return false, a.handleConnectionEdit(ctx, fields[2])
 	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "delete":
 		return false, a.handleConnectionDelete(ctx, fields[2])
 	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "show":
 		return false, a.handleConnectionShow(ctx, fields[2])
+	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "test":
+		return false, a.handleConnectionTest(ctx, fields[2])
 	case len(fields) >= 1 && fields[0] == "help":
 		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(line, "help")))
 	}

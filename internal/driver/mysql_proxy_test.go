@@ -12,7 +12,7 @@ func TestProxyDialerSettings(t *testing.T) {
 
 	cfg := &config.ConnectionConfig{
 		Name: "prod_proxy",
-		Mode: "proxy-ssh",
+		Mode: "proxy",
 		Proxy: &config.ProxyConfig{
 			URL: "socks5://proxy_user:proxy_password@127.0.0.1:1080",
 		},
@@ -38,7 +38,7 @@ func TestProxyDialerSettingsRejectsUnsupportedScheme(t *testing.T) {
 
 	cfg := &config.ConnectionConfig{
 		Name: "prod_proxy",
-		Mode: "proxy-ssh",
+		Mode: "proxy",
 		Proxy: &config.ProxyConfig{
 			URL: "http://127.0.0.1:1080",
 		},
@@ -50,5 +50,36 @@ func TestProxyDialerSettingsRejectsUnsupportedScheme(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported proxy scheme: http") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestProxyDialerIDDiffersByMode(t *testing.T) {
+	t.Parallel()
+
+	proxyCfg := &config.ConnectionConfig{
+		Name:   "prod_proxy",
+		Driver: "mysql",
+		Mode:   "proxy",
+		Host:   "10.0.1.20",
+		Port:   3306,
+		User:   "root",
+		Proxy:  &config.ProxyConfig{URL: "socks5://127.0.0.1:1080"},
+	}
+	proxySSHCfg := &config.ConnectionConfig{
+		Name:   "prod_proxy",
+		Driver: "mysql",
+		Mode:   "proxy-ssh",
+		Host:   "10.0.1.20",
+		Port:   3306,
+		User:   "root",
+		Proxy:  &config.ProxyConfig{URL: "socks5://127.0.0.1:1080"},
+		SSH:    &config.SSHConfig{Host: "bastion.example.com", Port: 22, User: "ubuntu", PrivateKey: "~/.ssh/id_rsa"},
+	}
+
+	if got := proxyDialerID(proxyCfg); got == "" {
+		t.Fatalf("proxyDialerID should not be empty")
+	}
+	if proxyDialerID(proxyCfg) == proxyDialerID(proxySSHCfg) {
+		t.Fatalf("proxy dialer ids should differ by mode")
 	}
 }

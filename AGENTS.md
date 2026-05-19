@@ -1,79 +1,72 @@
-````markdown
 # AGENTS.md
 
 ## Project Overview
 
-`dbx` is an interactive database command line tool written in Go.
+`dbx` is a REPL-first MySQL database CLI written in Go.
 
-Goals:
+Current product direction:
 
-- No SQL required from users
-- Interactive REPL-first experience
-- SSH-native database access
-- Template-based database operations
-- Global and connection-level templates
+- Guided operations instead of raw SQL from users
+- Interactive REPL as the primary entrypoint
+- One-shot CLI commands as secondary automation surfaces
+- Native SSH support
+- SOCKS5 proxy support
+- Template-driven database operations
 - Minimal third-party dependencies
 - Classic Go project layout
-- Use `pkg.gostartkit.com/cmd` as the CLI framework
+- `pkg.gostartkit.com/cmd` for non-interactive CLI registration
 
----
+## Core Principles
 
-# Core Principles
-
-## 1. REPL First
-
-The primary entrypoint is interactive mode.
+### 1. REPL First
 
 Preferred usage:
 
 ```bash
 dbx
-````
+```
 
-Enter:
+This enters:
 
 ```text
 dbx>
 ```
 
-NOT:
+One-shot CLI commands such as `dbx connection show prod` and `dbx create database appdb` are supported, but the product should stay optimized for the interactive flow first.
 
-```bash
-dbx create database xxx
-```
+### 2. No SQL From Users
 
-One-shot CLI commands are secondary.
+Users should not provide unrestricted SQL.
 
----
+`dbx` is responsible for:
 
-## 2. No SQL From Users
+- collecting parameters
+- validating identifiers and typed inputs
+- generating SQL
+- previewing execution plans
+- executing safely
 
-Users should not write SQL directly.
-
-dbx is responsible for:
-
-* collecting parameters
-* validating inputs
-* generating SQL
-* executing SQL safely
-
-Example:
+Examples:
 
 ```text
-/create database
+create database
+drop database
 ```
 
-NOT:
+Not:
 
 ```sql
 CREATE DATABASE ...
+DROP DATABASE ...
 ```
 
----
+### 3. Native Transport Support
 
-## 3. Native SSH Support
+SSH must use Go libraries, not shelling out:
 
-SSH must be implemented using Go SSH libraries.
+```go
+golang.org/x/crypto/ssh
+```
 
 Forbidden:
 
@@ -81,27 +74,36 @@ Forbidden:
 exec.Command("ssh")
 ```
 
-Required:
+SOCKS5 proxy support must use:
 
 ```go
-golang.org/x/crypto/ssh
+golang.org/x/net/proxy
 ```
 
-Database connections must work over native SSH connections.
+Supported connection paths today:
 
----
+```text
+direct    -> db
+ssh       -> ssh -> db
+proxy     -> proxy -> db
+proxy-ssh -> proxy -> ssh -> db
+```
 
-## 4. Minimal Dependencies
+Only SOCKS5 is supported. Do not add HTTP CONNECT or proxy chains unless explicitly requested in future scope.
+
+### 4. Minimal Dependencies
 
 Allowed dependencies:
 
 ```text
 pkg.gostartkit.com/cmd
-database drivers
+github.com/go-sql-driver/mysql
 golang.org/x/crypto/ssh
+golang.org/x/net/proxy
+golang.org/x/term
 ```
 
-Avoid:
+Avoid introducing:
 
 ```text
 cobra
@@ -114,20 +116,17 @@ xorm
 tablewriter
 ```
 
-Prefer Go standard library whenever possible.
+Prefer the standard library whenever practical.
 
----
+## Project Layout
 
-# Project Layout
-
-Must use classic Go project structure.
+Use the classic Go structure already present in the repository:
 
 ```text
 dbx/
 ├── cmd/
 │   └── dbx/
 │       └── main.go
-│
 ├── internal/
 │   ├── app/
 │   ├── repl/
@@ -137,52 +136,71 @@ dbx/
 │   ├── driver/
 │   ├── ui/
 │   └── util/
-│
 ├── examples/
-│
-├── go.mod
-└── README.md
+├── AGENTS.md
+├── README.md
+└── go.mod
 ```
 
----
+Keep files and functions small. Prefer extending the current packages over introducing new architectural layers unless there is a clear need.
 
-# REPL Design
+## REPL Design
 
-REPL is the core entrypoint.
+Commands no longer use a `/` prefix.
 
-Supported commands:
+`/` is reserved only for command discovery.
+
+Current REPL commands:
 
 ```text
 /
-/help
-/connect
-/connections
-/status
-/create database
-/list databases
-/drop database
-/exit
+help
+help <command>
+help aliases
+
+connect
+connect <name>
+connections
+
+connection create
+connection edit <name>
+connection delete <name>
+connection show <name>
+connection test [name]
+connection doctor [name]
+
+create database
+list databases
+drop database
+
+status
+dry-run on
+dry-run off
+exit
 ```
 
-Typing:
+### REPL Input UX
 
-```text
-/
-```
+Current interactive behavior includes:
 
-must display all available commands.
+- lightweight TAB completion
+- persisted history
+- Up/Down history navigation
+- hidden password input when stdin is a terminal
+- graceful Ctrl+C handling
 
----
+Do not replace the existing lightweight prompt approach with a readline-style framework.
 
-# Interactive UX Rules
+## Interactive UX Rules
 
-Commands must:
+Interactive commands should:
 
-* ask parameters step-by-step
-* provide default values
-* provide selectable options
-* preview execution plans
-* ask for confirmation before execution
+- ask step-by-step
+- provide defaults
+- provide constrained choices where possible
+- preview execution plans
+- confirm before execution
+- redact secrets in previews and output
 
 Example:
 
@@ -193,22 +211,58 @@ Collation:
 Confirm execution?
 ```
 
----
+## Non-Interactive CLI
 
-# Configuration Directory
+`dbx` without arguments enters the REPL.
 
-All configuration must be stored under:
+`dbx <command> ...` runs non-interactive mode through `pkg.gostartkit.com/cmd`.
+
+Current non-interactive command families include:
+
+```text
+dbx connect <name>
+dbx connections
+
+dbx connection create <name> [flags]
+dbx connection edit <name> [flags]
+dbx connection delete <name> [flags]
+dbx connection show <name>
+dbx connection test <name>
+dbx connection doctor <name>
+
+dbx create database <name> [flags]
+dbx list databases [flags]
+dbx drop database <name> [flags]
+
+dbx status
+dbx help
+dbx help <command>
+```
+
+Global CLI flags currently supported:
+
+```text
+--connection <name>
+--config-dir <path>
+--dry-run
+--yes
+--format text|json
+```
+
+## Configuration Directory
+
+All user state lives under:
 
 ```text
 ~/.config/dbx/
 ```
 
-Structure:
+Current layout:
 
 ```text
 ~/.config/dbx/
+  history
   session.json
-
   templates/
 
   dev/
@@ -220,67 +274,53 @@ Structure:
     templates/
 ```
 
----
-
-# Connection Configuration
-
-Each connection has its own directory.
-
-Example:
+Connection configs are stored at:
 
 ```text
-~/.config/dbx/prod/config.json
+~/.config/dbx/{connection}/config.json
 ```
 
-Example config:
+## Connection Configuration
+
+Current config fields may include:
 
 ```json
 {
-  "name": "prod",
+  "name": "prod-proxy",
   "driver": "mysql",
-  "mode": "ssh",
-
+  "mode": "proxy-ssh",
   "host": "10.0.1.20",
   "port": 3306,
-
   "user": "root",
   "password_env": "MYSQL_PROD_PASSWORD",
-
+  "proxy": {
+    "url": "socks5://proxy_user:proxy_password@127.0.0.1:1080"
+  },
   "ssh": {
     "host": "bastion.example.com",
     "port": 22,
     "user": "ubuntu",
     "private_key": "~/.ssh/id_rsa"
+  },
+  "timeout": {
+    "connect_seconds": 10,
+    "query_seconds": 30
   }
 }
 ```
 
----
+Validation rules must stay strict and mode-specific:
 
-# Connection Modes
+- `direct` rejects proxy and SSH config
+- `ssh` requires SSH config and rejects proxy config
+- `proxy` requires proxy config and rejects SSH config
+- `proxy-ssh` requires both proxy and SSH config
 
-Supported in MVP:
+Secrets must never be printed raw. Proxy URLs must redact inline proxy passwords in all user-facing output.
 
-```text
-direct
-ssh
-```
+## Template System
 
-Deferred:
-
-```text
-proxy
-jump host
-proxy chain
-```
-
----
-
-# Template System
-
-Three template layers are supported.
-
-Priority:
+Three layers exist:
 
 ```text
 connection template
@@ -295,50 +335,14 @@ Directories:
 ~/.config/dbx/{connection}/templates/
 ```
 
-Example template:
+Current template features include:
 
-```json
-{
-  "name": "create_database_with_user",
+- typed inputs: `string`, `secret`, `select`, `confirm`, `identifier`, `int`
+- transaction flag support
+- dry-run execution
+- secret redaction in previews
 
-  "match": {
-    "command": "create database",
-    "driver": "mysql"
-  },
-
-  "inputs": [
-    {
-      "name": "password",
-      "prompt": "New user password",
-      "secret": true
-    }
-  ],
-
-  "actions": [
-    {
-      "type": "sql",
-      "description": "Create database",
-      "sql": "CREATE DATABASE IF NOT EXISTS `{{database}}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-    },
-    {
-      "type": "sql",
-      "description": "Create user",
-      "sql": "CREATE USER IF NOT EXISTS '{{database}}'@'%' IDENTIFIED BY '{{password}}'"
-    },
-    {
-      "type": "sql",
-      "description": "Grant privileges",
-      "sql": "GRANT ALL PRIVILEGES ON `{{database}}`.* TO '{{database}}'@'%'"
-    }
-  ]
-}
-```
-
----
-
-# Template Variables
-
-Built-in variables:
+Built-in variables include:
 
 ```text
 {{database}}
@@ -347,18 +351,9 @@ Built-in variables:
 {{connection.user}}
 ```
 
-User-provided variables:
+## SQL Safety Rules
 
-```text
-{{password}}
-{{username}}
-```
-
----
-
-# SQL Safety Rules
-
-Users must never provide raw unrestricted SQL.
+Users must never provide unrestricted SQL.
 
 Identifiers must match:
 
@@ -366,106 +361,81 @@ Identifiers must match:
 [a-zA-Z_][a-zA-Z0-9_]*
 ```
 
-Forbidden:
+All identifiers must be validated before SQL rendering.
+
+## Diagnostics
+
+Two different connection diagnostics exist today:
+
+- `connection test`: live connectivity test
+- `connection doctor`: static configuration inspection
+
+`connection test` checks layers in order depending on mode:
 
 ```text
-drop database xxx; rm -rf /
+direct    -> config, mysql
+ssh       -> config, ssh, mysql
+proxy     -> config, proxy, mysql
+proxy-ssh -> config, proxy, ssh, mysql
 ```
 
-All identifiers must be validated before rendering SQL.
+`connection doctor` must stay static:
 
----
+- no network calls
+- no live proxy dialing
+- no live SSH dialing
+- no live MySQL connection
 
-# Driver Strategy
+Static checks may inspect files, environment variables, plain `known_hosts` entries, and config structure.
 
-MVP only supports:
+## UI Rules
 
-```text
-mysql
-```
+Do not introduce readline-style libraries.
 
-Future expansion:
-
-```text
-postgres
-sqlite
-```
-
-Do not over-engineer dialect abstractions initially.
-
----
-
-# UI Rules
-
-Do not use readline-like libraries.
-
-Use standard library:
+Continue using the lightweight prompt approach built on:
 
 ```go
 bufio.Reader
 fmt.Print
+golang.org/x/term
 ```
 
-Implement lightweight UI helpers:
+Keep prompt helpers simple and explicit:
 
-* Ask
-* Choose
-* Confirm
-* AskPassword
+- `Ask`
+- `Choose`
+- `Confirm`
+- `AskPassword`
 
----
+## Session State
 
-# Session State
+The REPL maintains in-process session state and persists the selected connection name in `session.json`.
 
-REPL must maintain session state.
+The active session concept includes:
 
-```go
-type Session struct {
-    Connection *config.ConnectConfig
-    DB         *sql.DB
-}
-```
+- selected connection config
+- active `*sql.DB` when connected
+- session-scoped dry-run mode
+- reconnect candidate on startup
 
----
+## Driver Strategy
 
-# SSH Requirements
+MVP remains MySQL-only.
 
-SSH must use:
+Do not introduce generic dialect abstractions prematurely.
 
-```go
-golang.org/x/crypto/ssh
-```
+If transport behavior changes, prefer extending the current MySQL driver integration and registered dialers rather than inventing a large cross-driver abstraction.
 
-Forbidden:
-
-```go
-exec.Command("ssh")
-```
-
-Preferred approach:
-
-```go
-mysql.RegisterDialContext(...)
-```
-
-Database connections should work through native SSH dialers.
-
----
-
-# Coding Style
+## Coding Style
 
 Requirements:
 
-* small files
-* small functions
-* explicit error handling
-* no panic
-* no hidden side effects
-* composition over abstraction-heavy designs
-
----
-
-# Error Handling
+- small files
+- small functions
+- explicit error handling
+- no panic
+- no hidden side effects
+- composition over abstraction-heavy designs
 
 Preferred:
 
@@ -481,11 +451,34 @@ Forbidden:
 panic(err)
 ```
 
----
+## Error Handling
 
-# Logging
+Preserve layered errors where possible.
 
-Do not introduce logging frameworks initially.
+Current layer names in user-facing flows include:
+
+```text
+config
+validation
+proxy
+ssh
+mysql
+template
+sql execution
+shutdown
+```
+
+Keep secrets out of:
+
+- error strings
+- previews
+- JSON output
+- connection summaries
+- logs
+
+## Logging
+
+Do not add logging frameworks.
 
 Allowed:
 
@@ -494,53 +487,57 @@ fmt.Println
 log.Printf
 ```
 
----
+## Current Scope
 
-# MVP Scope
-
-Must implement:
+Current implemented scope includes:
 
 ```text
 REPL
+non-interactive CLI
 connection management
+direct MySQL
 SSH MySQL
-/create database
-/list databases
-/drop database
+proxy MySQL
+proxy-SSH MySQL
+connection test
+connection doctor
+create/list/drop database
 template system
 global templates
 connection templates
+dry-run
+history persistence
+lightweight completion
+graceful shutdown
+README / packaging basics
 ```
 
-Must NOT implement in MVP:
+Still out of scope:
 
 ```text
+new database drivers
 ORM
 migration system
-complex query builders
 AI SQL
 schema diff
 proxy chain
-autocomplete
+HTTP proxy mode
+plugin system
+full readline/TUI framework
+web UI
 ```
 
----
+## Future Extensions
 
-# Future Extensions
-
-Future commands may include:
+Possible future commands may include:
 
 ```text
-/list tables
-/create table
-/table desc
-/query
-/template run
-/history
-/schema sync
+list tables
+create table
+table desc
+template run
+history export
+schema inspection
 ```
 
-Current architecture must support future expansion cleanly.
-
-```
-```
+Keep the current architecture easy to extend, but do not over-engineer for hypothetical future features.

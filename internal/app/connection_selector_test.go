@@ -50,6 +50,23 @@ func TestFormatConnectionSummary(t *testing.T) {
 		t.Fatalf("ssh summary = %q", ssh)
 	}
 
+	proxy := formatConnectionSummary(config.ConnectionConfig{
+		Name:   "prox",
+		Driver: "mysql",
+		Mode:   "proxy",
+		Host:   "10.0.1.20",
+		Port:   3306,
+		Proxy: &config.ProxyConfig{
+			URL: "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+		},
+	})
+	if proxy == "" || proxy == direct {
+		t.Fatalf("proxy summary = %q", proxy)
+	}
+	if got, want := proxy, "socks5://proxy_user:***@127.0.0.1:1080"; !strings.Contains(got, want) {
+		t.Fatalf("proxy summary = %q, want redacted proxy %q", got, want)
+	}
+
 	proxySSH := formatConnectionSummary(config.ConnectionConfig{
 		Name:   "prodp",
 		Driver: "mysql",

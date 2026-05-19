@@ -45,6 +45,12 @@ func OpenMySQL(ctx context.Context, cfg *config.ConnectionConfig) (*sql.DB, erro
 		"charset": "utf8mb4",
 	}
 
+	if cfg.Mode == "proxy" {
+		dsn.Net, err = registerProxyDialer(cfg)
+		if err != nil {
+			return nil, util.WrapLayer("proxy", "prepare proxy dialer", err)
+		}
+	}
 	if cfg.UsesSSH() {
 		dsn.Net, err = registerSSHDialer(cfg)
 		if err != nil {
@@ -126,6 +132,19 @@ func registerSSHDialer(cfg *config.ConnectionConfig) (string, error) {
 	return network, nil
 }
 
+func registerProxyDialer(cfg *config.ConnectionConfig) (string, error) {
+	network := "dbx+proxy+" + proxyDialerID(cfg)
+	if _, loaded := registeredDialers.LoadOrStore(network, struct{}{}); loaded {
+		return network, nil
+	}
+
+	mysql.RegisterDialContext(network, func(ctx context.Context, addr string) (net.Conn, error) {
+		return openProxyConn(ctx, cfg, addr)
+	})
+
+	return network, nil
+}
+
 func sshDialerID(cfg *config.ConnectionConfig) string {
 	sum := sha1.Sum([]byte(strings.Join([]string{
 		cfg.Name,
@@ -149,6 +168,19 @@ func proxyURLForHash(cfg *config.ConnectionConfig) string {
 		return ""
 	}
 	return cfg.Proxy.URL
+}
+
+func proxyDialerID(cfg *config.ConnectionConfig) string {
+	sum := sha1.Sum([]byte(strings.Join([]string{
+		cfg.Name,
+		cfg.Host,
+		fmt.Sprintf("%d", cfg.Port),
+		cfg.Mode,
+		cfg.User,
+		cfg.Driver,
+		proxyURLForHash(cfg),
+	}, "|")))
+	return hex.EncodeToString(sum[:8])
 }
 
 func openSSHTunnel(ctx context.Context, cfg *config.ConnectionConfig, targetAddr string) (net.Conn, error) {
@@ -192,6 +224,24 @@ func openSSHTunnel(ctx context.Context, cfg *config.ConnectionConfig, targetAddr
 		Conn:   conn,
 		client: client,
 	}, nil
+}
+
+func openProxyConn(ctx context.Context, cfg *config.ConnectionConfig, targetAddr string) (net.Conn, error) {
+	settings, err := proxyDialerSettings(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	dialer, err := xproxy.SOCKS5("tcp", settings.Address, settings.Auth, xproxy.Direct)
+	if err != nil {
+		return nil, util.WrapLayer("proxy", "create SOCKS5 dialer for "+settings.RedactedURL, err)
+	}
+
+	conn, err := dialProxyWithContext(ctx, dialer, "tcp", targetAddr)
+	if err != nil {
+		return nil, util.WrapLayer("proxy", "dial "+settings.RedactedURL, err)
+	}
+	return conn, nil
 }
 
 type proxyDialSettings struct {

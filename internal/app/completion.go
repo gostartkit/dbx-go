@@ -11,9 +11,11 @@ var topLevelCommands = []string{
 	"connect",
 	"connections",
 	"connection create",
+	"connection doctor",
 	"connection edit",
 	"connection delete",
 	"connection show",
+	"connection test",
 	"create database",
 	"list databases",
 	"drop database",
@@ -49,19 +51,19 @@ func calculateCompletion(line string, savedConnections []string) ui.Completion {
 	case "connection":
 		switch len(fields) {
 		case 1:
-			return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"create", "edit", "delete", "show"}, prefix)}
+			return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"create", "doctor", "edit", "delete", "show", "test"}, prefix)}
 		case 2:
-			if trailingSpace && slices.Contains([]string{"edit", "delete", "show"}, fields[1]) {
+			if trailingSpace && slices.Contains([]string{"doctor", "edit", "delete", "show", "test"}, fields[1]) {
 				return ui.Completion{Prefix: "", Candidates: filterByPrefix(sortedStrings(savedConnections), "")}
 			}
 			if !trailingSpace && len(fields) == 2 {
-				if slices.Contains([]string{"edit", "delete", "show"}, fields[1]) {
-					return ui.Completion{Prefix: fields[1], Candidates: filterByPrefix([]string{"edit", "delete", "show"}, fields[1])}
+				if slices.Contains([]string{"doctor", "edit", "delete", "show", "test"}, fields[1]) {
+					return ui.Completion{Prefix: fields[1], Candidates: filterByPrefix([]string{"doctor", "edit", "delete", "show", "test"}, fields[1])}
 				}
-				return ui.Completion{Prefix: fields[1], Candidates: filterByPrefix([]string{"create", "edit", "delete", "show"}, fields[1])}
+				return ui.Completion{Prefix: fields[1], Candidates: filterByPrefix([]string{"create", "doctor", "edit", "delete", "show", "test"}, fields[1])}
 			}
 		case 3:
-			if slices.Contains([]string{"edit", "delete", "show"}, fields[1]) {
+			if slices.Contains([]string{"doctor", "edit", "delete", "show", "test"}, fields[1]) {
 				return ui.Completion{Prefix: prefix, Candidates: filterByPrefix(sortedStrings(savedConnections), prefix)}
 			}
 		}
@@ -85,9 +87,11 @@ func calculateCompletion(line string, savedConnections []string) ui.Completion {
 			"connections",
 			"connection",
 			"connection create",
+			"connection doctor",
 			"connection edit",
 			"connection delete",
 			"connection show",
+			"connection test",
 			"create database",
 			"list databases",
 			"drop database",

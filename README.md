@@ -1,6 +1,6 @@
 # dbx
 
-`dbx` is a REPL-first MySQL database CLI focused on guided operations instead of raw SQL. It connects directly, through native SSH, or through a SOCKS5 proxy feeding native SSH, resolves templates from builtin/global/connection layers, and keeps the user flow centered on safe prompts, previews, and confirmations.
+`dbx` is a REPL-first MySQL database CLI focused on guided operations instead of raw SQL. It connects directly, through native SSH, through a SOCKS5 proxy to MySQL, or through a SOCKS5 proxy feeding native SSH, resolves templates from builtin/global/connection layers, and keeps the user flow centered on safe prompts, previews, and confirmations.
 
 ## Goals
 
@@ -80,6 +80,8 @@ connection create
 connection edit <name>
 connection delete <name>
 connection show <name>
+connection test [name]
+connection doctor [name]
 status
 create database
 list databases
@@ -101,6 +103,8 @@ dbx connection create <name> [flags]
 dbx connection edit <name> [flags]
 dbx connection delete <name> [flags]
 dbx connection show <name>
+dbx connection test <name>
+dbx connection doctor <name>
 
 dbx create database <name> [flags]
 dbx list databases [flags]
@@ -130,15 +134,19 @@ dbx> conn<TAB>
 connect
 connections
 connection create
+connection doctor
 connection edit
 connection delete
 connection show
+connection test
 
 dbx> connection <TAB>
 create
+doctor
 edit
 delete
 show
+test
 
 dbx> connect <TAB>
 dev
@@ -157,6 +165,8 @@ ls db         -> list databases
 show dbs      -> list databases
 create db     -> create database
 drop db       -> drop database
+test conn     -> connection test
+doctor conn   -> connection doctor
 dry on        -> dry-run on
 dry off       -> dry-run off
 ```
@@ -249,6 +259,23 @@ Proxy -> SSH -> MySQL example:
     "port": 22,
     "user": "ubuntu",
     "private_key": "~/.ssh/id_rsa"
+  }
+}
+```
+
+Proxy -> MySQL example:
+
+```json
+{
+  "name": "prod-proxy",
+  "driver": "mysql",
+  "mode": "proxy",
+  "host": "10.0.1.20",
+  "port": 3306,
+  "user": "root",
+  "password_env": "MYSQL_PROD_PASSWORD",
+  "proxy": {
+    "url": "socks5://proxy_user:proxy_password@127.0.0.1:1080"
   }
 }
 ```
@@ -403,7 +430,8 @@ dbx> connection create
 Connection name: prod
   1. direct
   2. ssh
-  3. proxy-ssh
+  3. proxy
+  4. proxy-ssh
 Connection mode [direct]: ssh
 Database host: 10.0.1.20
 Database port [3306]:
@@ -429,7 +457,7 @@ Saved: ~/.config/dbx/prod/config.json
 Connect now? [y/n] [y]:
 ```
 
-If you choose `proxy-ssh`, `dbx` asks for `Proxy URL` before the SSH prompts and stores it under `proxy.url`.
+If you choose `proxy` or `proxy-ssh`, `dbx` asks for `Proxy URL` and stores it under `proxy.url`. `proxy` mode does not prompt for SSH settings.
 
 Connection inspection:
 
@@ -449,6 +477,41 @@ SSH:
   host: bastion.example.com:22
   user: ubuntu
   private_key: ~/.ssh/id_rsa
+```
+
+Connection diagnostics:
+
+```text
+dbx> connection test prod-proxy
+[OK] config
+[OK] proxy
+[OK] mysql
+Connection successful.
+```
+
+Proxy -> SSH diagnostics:
+
+```text
+dbx> connection test prod-bastion
+[OK] config
+[OK] proxy
+[OK] ssh
+[OK] mysql
+Connection successful.
+```
+
+Static connection doctor:
+
+```text
+dbx> connection doctor prod-proxy
+Connection doctor: prod-proxy
+
+[OK] config file exists
+[OK] config JSON can be parsed
+[OK] mode proxy
+[OK] proxy scheme socks5
+[WARN] proxy URL contains inline password
+       suggestion: avoid saving inline proxy passwords in config
 ```
 
 Connection editing and deletion:
@@ -520,6 +583,18 @@ dbx connection create prod-proxy \
   --ssh-private-key ~/.ssh/id_rsa
 ```
 
+Create a saved proxy -> MySQL connection:
+
+```bash
+dbx connection create prod-proxy \
+  --mode proxy \
+  --host 10.0.1.20 \
+  --port 3306 \
+  --user root \
+  --password-env MYSQL_PROD_PASSWORD \
+  --proxy-url socks5://proxy_user:proxy_password@127.0.0.1:1080
+```
+
 If you add `--test` and the connection test fails, `dbx` still saves the config and prints a warning so you can fix it later with `connection edit <name>`.
 
 Edit only the fields you want to change:
@@ -541,6 +616,45 @@ Show a connection in JSON with secrets redacted:
 
 ```bash
 dbx connection show prod --format json
+```
+
+Test a saved connection and inspect machine-readable steps:
+
+```bash
+dbx connection test prod-proxy --format json
+```
+
+Example JSON:
+
+```json
+{
+  "ok": true,
+  "connection": "prod-proxy",
+  "steps": [
+    {"name": "config", "status": "ok"},
+    {"name": "proxy", "status": "ok"},
+    {"name": "mysql", "status": "ok"}
+  ]
+}
+```
+
+Doctor a saved connection without opening the network path:
+
+```bash
+dbx connection doctor prod-proxy --format json
+```
+
+Example JSON:
+
+```json
+{
+  "ok": true,
+  "connection": "prod-proxy",
+  "checks": [
+    {"name": "config file exists", "status": "ok"},
+    {"name": "proxy URL contains inline password", "status": "warn", "suggestion": "avoid saving inline proxy passwords in config"}
+  ]
+}
 ```
 
 Create a database from a saved connection:
@@ -604,6 +718,8 @@ dbx status --connection prod --format json
 
 For CI and shell scripts, prefer `--format json`, `--yes`, and `--dry-run` where appropriate.
 
+`connection doctor` is static and does not open proxy, SSH, or MySQL connections. `connection test` is live and verifies the actual connection path.
+
 ## Installation
 
 Build locally:
@@ -642,7 +758,20 @@ dbx --config-dir "$PWD/.dbx" connection create ci \
   --user root \
   --password-env MYSQL_CI_PASSWORD
 
+dbx --config-dir "$PWD/.dbx" connection doctor ci
+dbx --config-dir "$PWD/.dbx" connection test ci
+
 dbx --config-dir "$PWD/.dbx" --connection ci --dry-run --format json create database ci_demo
+```
+
+## Troubleshooting Flow
+
+```text
+connection doctor prod
+connection show prod
+connection edit prod
+connection test prod
+connect prod
 ```
 
 ## Security Notes
@@ -656,6 +785,7 @@ dbx --config-dir "$PWD/.dbx" --connection ci --dry-run --format json create data
 - Proxy passwords in `proxy.url` are redacted in user-facing output and JSON summaries.
 - SSH host verification uses `known_hosts`.
 - `DBX_KNOWN_HOSTS` can point to alternate `known_hosts` files if needed.
+- `connection doctor` only performs static `known_hosts` checks against plain host entries; it does not verify hashed entries or make network calls.
 
 ## Developer Workflow
 
@@ -672,6 +802,7 @@ make release
 
 - MySQL is the only supported database in the MVP.
 - Proxy support is limited to SOCKS5 URLs such as `socks5://127.0.0.1:1080`.
+- `connection test` reports the first failing layer and stops there; it is a diagnostic command, not a deep network debugger.
 - TAB completion is lightweight and does not provide full shell-style line editing.
 - REPL history supports persisted Up/Down navigation, but not reverse search or advanced readline behavior.
 - Dry-run is session-scoped and not persisted.

@@ -20,12 +20,16 @@ func (a *Application) handleConnectByName(ctx context.Context, name string) erro
 
 	a.prompt.Println("Execution Plan")
 	a.prompt.Printf("  1. Open %s MySQL connection %q to %s\n", cfg.Mode, cfg.Name, cfg.Address())
-	if cfg.Mode == "proxy-ssh" && cfg.Proxy != nil {
-		a.prompt.Printf("  2. Reach SSH through SOCKS5 proxy %s\n", config.RedactProxyURL(cfg.Proxy.URL))
+	if cfg.UsesProxy() && cfg.Proxy != nil {
+		if cfg.Mode == "proxy" {
+			a.prompt.Printf("  2. Reach MySQL through SOCKS5 proxy %s\n", config.RedactProxyURL(cfg.Proxy.URL))
+		} else {
+			a.prompt.Printf("  2. Reach SSH through SOCKS5 proxy %s\n", config.RedactProxyURL(cfg.Proxy.URL))
+		}
 	}
 	if cfg.UsesSSH() && cfg.SSH != nil {
 		step := 2
-		if cfg.Mode == "proxy-ssh" {
+		if cfg.UsesProxy() {
 			step = 3
 		}
 		a.prompt.Printf("  %d. Tunnel through SSH bastion %s:%d as %s\n", step, cfg.SSH.Host, cfg.SSH.Port, cfg.SSH.User)
@@ -228,7 +232,7 @@ func (a *Application) promptConnectionConfig(ctx context.Context, cfg *config.Co
 	cfg.Driver = "mysql"
 	cfg.ApplyDefaults()
 
-	mode, err := a.choose(ctx, "Connection mode", []string{"direct", "ssh", "proxy-ssh"}, cfg.Mode)
+	mode, err := a.choose(ctx, "Connection mode", []string{"direct", "ssh", "proxy", "proxy-ssh"}, cfg.Mode)
 	if err != nil {
 		return err
 	}
@@ -267,7 +271,7 @@ func (a *Application) promptConnectionConfig(ctx context.Context, cfg *config.Co
 	cfg.Timeout.ConnectSeconds = connectTimeout
 	cfg.Timeout.QuerySeconds = queryTimeout
 
-	if cfg.Mode == "proxy-ssh" {
+	if cfg.UsesProxy() {
 		proxyURL, err := a.askProxyURL(ctx, cfg.Proxy)
 		if err != nil {
 			return err
@@ -553,6 +557,10 @@ func cloneConnectionConfig(cfg *config.ConnectionConfig) *config.ConnectionConfi
 		return nil
 	}
 	cloned := *cfg
+	if cfg.Proxy != nil {
+		proxyCopy := *cfg.Proxy
+		cloned.Proxy = &proxyCopy
+	}
 	if cfg.SSH != nil {
 		sshCopy := *cfg.SSH
 		cloned.SSH = &sshCopy

@@ -12,6 +12,7 @@ import (
 
 	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/config"
+	"pkg.gostartkit.com/dbx/internal/util"
 )
 
 func TestCLIConnectionCreateGeneratesConfig(t *testing.T) {
@@ -93,6 +94,42 @@ func TestCLIConnectionCreateProxySSHGeneratesConfig(t *testing.T) {
 	}
 	if cfg.SSH == nil || cfg.SSH.Host != "bastion.example.com" {
 		t.Fatalf("unexpected ssh config: %+v", cfg.SSH)
+	}
+	if !strings.Contains(stdout.String(), filepath.Join(root, "prod_proxy", "config.json")) {
+		t.Fatalf("stdout missing saved path: %q", stdout.String())
+	}
+}
+
+func TestCLIConnectionCreateProxyGeneratesConfig(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	app, stdout, stderr := newCLIApp(t, "", root)
+
+	err := app.Run(context.Background(), []string{
+		"connection", "create", "prod_proxy",
+		"--mode", "proxy",
+		"--host", "10.0.1.20",
+		"--port", "3306",
+		"--user", "root",
+		"--password-env", "MYSQL_PROD_PASSWORD",
+		"--proxy-url", "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+		"--config-dir", root,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	store := config.NewStore(root)
+	cfg, err := store.LoadConnection("prod_proxy")
+	if err != nil {
+		t.Fatalf("LoadConnection returned error: %v", err)
+	}
+	if cfg.Mode != "proxy" || cfg.Proxy == nil || cfg.Proxy.URL != "socks5://proxy_user:proxy_password@127.0.0.1:1080" {
+		t.Fatalf("unexpected proxy config: %+v", cfg)
+	}
+	if cfg.SSH != nil {
+		t.Fatalf("proxy mode should not save ssh config: %+v", cfg.SSH)
 	}
 	if !strings.Contains(stdout.String(), filepath.Join(root, "prod_proxy", "config.json")) {
 		t.Fatalf("stdout missing saved path: %q", stdout.String())
@@ -190,6 +227,35 @@ func TestCLIConnectionEditPreservesUnspecifiedFields(t *testing.T) {
 	}
 }
 
+func TestCLIConnectionTestParsesName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	connector := &diagnosticConnector{}
+	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
+		ConfigDir: root,
+		Connector: connector,
+	})
+	err := app.Run(context.Background(), []string{"connection", "test", "prod", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if connector.openCalls != 1 || connector.lastName != "prod" {
+		t.Fatalf("unexpected connector usage: calls=%d name=%q", connector.openCalls, connector.lastName)
+	}
+	if !strings.Contains(stdout.String(), "[OK] mysql") {
+		t.Fatalf("stdout missing diagnostic output: %q", stdout.String())
+	}
+}
+
 func TestCLIConnectionCreateValidationFailureStillFails(t *testing.T) {
 	t.Parallel()
 
@@ -275,6 +341,105 @@ func TestCLIConnectionCreateOverwriteProtectedWithoutForce(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "secret123") {
 		t.Fatalf("stderr leaked secret: %q", stderr.String())
+	}
+}
+
+func TestCLIConnectionTestJSONFailureNonZero(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := sampleConnection("prod_proxy")
+	cfg.Mode = "proxy-ssh"
+	cfg.Proxy = &config.ProxyConfig{
+		URL: "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+	}
+	cfg.SSH = &config.SSHConfig{
+		Host:       "bastion.example.com",
+		Port:       22,
+		User:       "ubuntu",
+		PrivateKey: "~/.ssh/id_rsa",
+	}
+	if err := store.SaveConnection(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	connector := &diagnosticConnector{
+		openErr: util.WrapLayer("proxy", "dial socks5://proxy_user:***@127.0.0.1:1080", errors.New("connection refused")),
+	}
+	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
+		ConfigDir: root,
+		Connector: connector,
+	})
+	err := app.Run(context.Background(), []string{"connection", "test", "prod_proxy", "--format", "json", "--config-dir", root})
+	if err == nil {
+		t.Fatalf("expected failure exit status")
+	}
+	if app.ExitStatus() == 0 {
+		t.Fatalf("expected non-zero exit status")
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected json mode to keep stderr empty, got %q", stderr.String())
+	}
+
+	var result DiagnosticResult
+	if unmarshalErr := json.Unmarshal(stdout.Bytes(), &result); unmarshalErr != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", unmarshalErr, stdout.String())
+	}
+	if result.OK {
+		t.Fatalf("expected failed diagnostic result: %+v", result)
+	}
+	if len(result.Steps) != 2 {
+		t.Fatalf("unexpected steps: %+v", result.Steps)
+	}
+	if result.Steps[1].Name != "proxy" || result.Steps[1].Status != "fail" {
+		t.Fatalf("unexpected failed step: %+v", result.Steps[1])
+	}
+	if result.Steps[1].Error != "connection refused" {
+		t.Fatalf("unexpected json error: %+v", result.Steps[1])
+	}
+	if strings.Contains(stdout.String(), "proxy_password") {
+		t.Fatalf("json output leaked proxy password: %s", stdout.String())
+	}
+}
+
+func TestCLIConnectionShowJSONRedactsProxyModeSecrets(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := sampleConnection("prod_proxy")
+	cfg.Mode = "proxy"
+	cfg.Proxy = &config.ProxyConfig{
+		URL: "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+	}
+	if err := store.SaveConnection(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"connection", "show", "prod_proxy", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "proxy_password") {
+		t.Fatalf("json output leaked proxy password: %s", stdout.String())
+	}
+
+	var result RedactedConnection
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v", err)
+	}
+	if result.Mode != "proxy" || result.Proxy == nil || result.Proxy.URL != "socks5://proxy_user:***@127.0.0.1:1080" {
+		t.Fatalf("unexpected proxy redaction: %+v", result)
 	}
 }
 

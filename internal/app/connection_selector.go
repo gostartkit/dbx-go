@@ -29,6 +29,9 @@ func formatConnectionSummary(connection config.ConnectionConfig) string {
 	if connection.Mode == "proxy-ssh" && connection.Proxy != nil && connection.SSH != nil {
 		return fmt.Sprintf("%-8s %-5s %-9s %s via %s -> %s", connection.Name, connection.Driver, connection.Mode, connection.Address(), config.RedactProxyURL(connection.Proxy.URL), connection.SSH.Host)
 	}
+	if connection.Mode == "proxy" && connection.Proxy != nil {
+		return fmt.Sprintf("%-8s %-5s %-6s %s via %s", connection.Name, connection.Driver, connection.Mode, connection.Address(), config.RedactProxyURL(connection.Proxy.URL))
+	}
 	if connection.Mode == "ssh" && connection.SSH != nil {
 		return fmt.Sprintf("%-8s %-5s %-6s %s via %s", connection.Name, connection.Driver, connection.Mode, connection.Address(), connection.SSH.Host)
 	}

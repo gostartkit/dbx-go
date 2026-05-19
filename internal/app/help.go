@@ -27,6 +27,8 @@ connection create     Create a new saved connection
 connection edit <name> Edit a saved connection
 connection delete <name> Delete a saved connection
 connection show <name> Show a saved connection
+connection test [name] Test a saved connection
+connection doctor [name] Inspect a saved connection statically
 
 create database       Create a database from a template
 list databases        List databases on the active connection
@@ -47,11 +49,15 @@ Subcommands:
   connection edit <name>
   connection delete <name>
   connection show <name>
+  connection test [name]
+  connection doctor [name]
 
 Examples:
   connection create
   connection edit prod
-  connection show dev`),
+  connection show dev
+  connection test prod
+  connection doctor prod`),
 	},
 	"connection create": {
 		title: "connection create",
@@ -60,7 +66,7 @@ Create a new saved connection.
 
 This command:
   - creates ~/.config/dbx/{name}/config.json
-  - supports direct, ssh, and proxy-ssh modes
+  - supports direct, ssh, proxy, and proxy-ssh modes
   - optionally tests the connection
   - optionally connects immediately
 
@@ -103,6 +109,37 @@ Secrets are redacted in the output.
 
 Example:
   connection show prod`),
+	},
+	"connection test": {
+		title: "connection test",
+		body: strings.TrimSpace(`
+Test a saved connection and report which layer succeeds or fails.
+
+This command checks:
+  - config
+  - proxy when mode is proxy or proxy-ssh
+  - ssh when mode is ssh or proxy-ssh
+  - mysql
+
+Examples:
+  connection test
+  connection test prod`),
+	},
+	"connection doctor": {
+		title: "connection doctor",
+		body: strings.TrimSpace(`
+Inspect a saved connection statically without opening the network path.
+
+This command checks:
+  - config structure
+  - password source setup
+  - proxy URL shape for proxy and proxy-ssh
+  - SSH auth and private key files
+  - known_hosts file presence and plain host matches
+
+Examples:
+  connection doctor
+  connection doctor prod`),
 	},
 	"connect": {
 		title: "connect",
@@ -190,6 +227,8 @@ Supported aliases:
   show dbs -> list databases
   create db -> create database
   drop db   -> drop database
+  test conn -> connection test
+  doctor conn -> connection doctor
   dry on    -> dry-run on
   dry off   -> dry-run off`),
 	},

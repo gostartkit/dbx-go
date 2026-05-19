@@ -85,7 +85,7 @@ func (c *ConnectionConfig) Validate() error {
 	if c.Driver != "mysql" {
 		return fmt.Errorf("unsupported driver %q", c.Driver)
 	}
-	if c.Mode != "direct" && c.Mode != "ssh" && c.Mode != "proxy-ssh" {
+	if c.Mode != "direct" && c.Mode != "ssh" && c.Mode != "proxy" && c.Mode != "proxy-ssh" {
 		return fmt.Errorf("unsupported connection mode %q", c.Mode)
 	}
 	if strings.TrimSpace(c.Host) == "" {
@@ -107,15 +107,18 @@ func (c *ConnectionConfig) Validate() error {
 		return fmt.Errorf("proxy settings are not supported for direct mode")
 	}
 	if c.Mode == "ssh" && c.Proxy != nil && strings.TrimSpace(c.Proxy.URL) != "" {
-		return fmt.Errorf("proxy settings are only supported for proxy-ssh mode")
+		return fmt.Errorf("proxy settings are not supported for ssh mode")
 	}
-	if c.Mode == "proxy-ssh" {
+	if c.Mode == "proxy" || c.Mode == "proxy-ssh" {
 		if c.Proxy == nil || strings.TrimSpace(c.Proxy.URL) == "" {
-			return fmt.Errorf("proxy.url is required for proxy-ssh mode")
+			return fmt.Errorf("proxy.url is required for %s mode", c.Mode)
 		}
 		if _, err := ParseProxyURL(c.Proxy.URL); err != nil {
 			return fmt.Errorf("proxy.url is invalid: %w", err)
 		}
+	}
+	if c.Mode == "proxy" && c.SSH != nil {
+		return fmt.Errorf("ssh settings are not supported for proxy mode")
 	}
 	if c.Mode == "ssh" || c.Mode == "proxy-ssh" {
 		if c.SSH == nil {
@@ -154,6 +157,10 @@ func (c *ConnectionConfig) QueryTimeout() time.Duration {
 
 func (c *ConnectionConfig) UsesSSH() bool {
 	return c != nil && (c.Mode == "ssh" || c.Mode == "proxy-ssh")
+}
+
+func (c *ConnectionConfig) UsesProxy() bool {
+	return c != nil && (c.Mode == "proxy" || c.Mode == "proxy-ssh")
 }
 
 func (c *ConnectionConfig) PasswordValue() (string, error) {

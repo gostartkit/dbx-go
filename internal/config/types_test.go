@@ -32,6 +32,27 @@ func TestConnectionConfigValidateProxySSH(t *testing.T) {
 	}
 }
 
+func TestConnectionConfigValidateProxy(t *testing.T) {
+	t.Parallel()
+
+	cfg := &ConnectionConfig{
+		Name:        "prod_proxy",
+		Driver:      "mysql",
+		Mode:        "proxy",
+		Host:        "10.0.1.20",
+		Port:        3306,
+		User:        "root",
+		PasswordEnv: "MYSQL_PROD_PASSWORD",
+		Proxy: &ProxyConfig{
+			URL: "socks5://proxy_user:proxy_password@127.0.0.1:1080",
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+}
+
 func TestConnectionConfigValidateProxyRules(t *testing.T) {
 	t.Parallel()
 
@@ -40,6 +61,22 @@ func TestConnectionConfigValidateProxyRules(t *testing.T) {
 		cfg  *ConnectionConfig
 		want string
 	}{
+		{
+			name: "proxy requires proxy url",
+			cfg: &ConnectionConfig{
+				Name: "prod_proxy", Driver: "mysql", Mode: "proxy", Host: "10.0.1.20", Port: 3306, User: "root", PasswordEnv: "MYSQL_PROD_PASSWORD",
+			},
+			want: "proxy.url is required",
+		},
+		{
+			name: "proxy rejects ssh",
+			cfg: &ConnectionConfig{
+				Name: "prod_proxy", Driver: "mysql", Mode: "proxy", Host: "10.0.1.20", Port: 3306, User: "root", PasswordEnv: "MYSQL_PROD_PASSWORD",
+				Proxy: &ProxyConfig{URL: "socks5://127.0.0.1:1080"},
+				SSH:   &SSHConfig{Host: "bastion.example.com", Port: 22, User: "ubuntu", PrivateKey: "~/.ssh/id_rsa"},
+			},
+			want: "ssh settings are not supported for proxy mode",
+		},
 		{
 			name: "proxy ssh requires proxy url",
 			cfg: &ConnectionConfig{
@@ -55,6 +92,15 @@ func TestConnectionConfigValidateProxyRules(t *testing.T) {
 				Proxy: &ProxyConfig{URL: "socks5://127.0.0.1:1080"},
 			},
 			want: "ssh settings are required",
+		},
+		{
+			name: "ssh rejects proxy",
+			cfg: &ConnectionConfig{
+				Name: "prod_proxy", Driver: "mysql", Mode: "ssh", Host: "10.0.1.20", Port: 3306, User: "root", PasswordEnv: "MYSQL_PROD_PASSWORD",
+				Proxy: &ProxyConfig{URL: "socks5://127.0.0.1:1080"},
+				SSH:   &SSHConfig{Host: "bastion.example.com", Port: 22, User: "ubuntu", PrivateKey: "~/.ssh/id_rsa"},
+			},
+			want: "proxy settings are not supported for ssh mode",
 		},
 		{
 			name: "unsupported proxy scheme",
