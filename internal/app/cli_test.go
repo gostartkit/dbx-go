@@ -734,6 +734,62 @@ func TestCLIShowDBsAlias(t *testing.T) {
 	}
 }
 
+func TestCLICreateDatabaseAllowsHyphenName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{
+		"--connection", "prod",
+		"--dry-run",
+		"--format", "json",
+		"--config-dir", root,
+		"create", "database", "greenhn-dev",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "`greenhn-dev`") {
+		t.Fatalf("stdout missing quoted database name: %q", stdout.String())
+	}
+}
+
+func TestCLIDropDatabaseAllowsHyphenName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{
+		"--connection", "prod",
+		"--dry-run",
+		"--format", "json",
+		"--config-dir", root,
+		"drop", "database", "greenhn-dev",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "`greenhn-dev`") {
+		t.Fatalf("stdout missing quoted database name: %q", stdout.String())
+	}
+}
+
 func TestCLIHelpForMultiWordCommand(t *testing.T) {
 	t.Parallel()
 

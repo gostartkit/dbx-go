@@ -59,7 +59,7 @@ func (a *Application) setRuntimeDatabaseSelection(ctx context.Context, cfg *conf
 		return nil
 	}
 
-	if err := util.ValidateIdentifier(database); err != nil {
+	if err := util.ValidateDatabaseName(database); err != nil {
 		return util.WrapLayer("validation", "validate database name", err)
 	}
 

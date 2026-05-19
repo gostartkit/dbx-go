@@ -222,7 +222,7 @@ func (a *Application) handleCreateDatabase(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := util.ValidateIdentifier(databaseName); err != nil {
+		if err := util.ValidateDatabaseName(databaseName); err != nil {
 			return err
 		}
 
@@ -364,7 +364,7 @@ func (a *Application) handleDropDatabase(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := util.ValidateIdentifier(databaseName); err != nil {
+		if err := util.ValidateDatabaseName(databaseName); err != nil {
 			return err
 		}
 

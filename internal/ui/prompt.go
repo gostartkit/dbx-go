@@ -25,6 +25,7 @@ type Prompt struct {
 	inFile    *os.File
 	completer Completer
 	history   *HistoryNavigator
+	isTerm    func() bool
 }
 
 func NewPrompt(in io.Reader, out io.Writer) *Prompt {
@@ -37,6 +38,9 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 		reader: bufio.NewReader(in),
 		out:    out,
 		inFile: inFile,
+		isTerm: func() bool {
+			return inFile != nil && term.IsTerminal(int(inFile.Fd()))
+		},
 	}
 }
 
@@ -56,15 +60,17 @@ func (p *Prompt) AppendHistory(entry string) bool {
 }
 
 func (p *Prompt) Println(args ...any) {
+	p.clearCurrentLineForOutput()
 	fmt.Fprintln(p.out, args...)
 }
 
 func (p *Prompt) Printf(format string, args ...any) {
+	p.clearCurrentLineForOutput()
 	fmt.Fprintf(p.out, format, args...)
 }
 
 func (p *Prompt) ReadPrompt(label string) (string, error) {
-	if p.inFile != nil && term.IsTerminal(int(p.inFile.Fd())) && p.completer != nil {
+	if p.inFile != nil && p.isTerm != nil && p.isTerm() && p.completer != nil {
 		return p.readPromptInteractive(label)
 	}
 
@@ -91,7 +97,7 @@ func (p *Prompt) Ask(label, defaultValue string) (string, error) {
 
 func (p *Prompt) AskPassword(label string) (string, error) {
 	fmt.Fprintf(p.out, "%s: ", label)
-	if p.inFile != nil && term.IsTerminal(int(p.inFile.Fd())) {
+	if p.inFile != nil && p.isTerm != nil && p.isTerm() {
 		value, err := term.ReadPassword(int(p.inFile.Fd()))
 		fmt.Fprintln(p.out)
 		if err != nil {
@@ -284,6 +290,13 @@ func (p *Prompt) handleEscapeSequence(current string) (string, bool, error) {
 
 func (p *Prompt) redrawLine(label string, current string) {
 	fmt.Fprintf(p.out, "\r\033[2K%s%s", label, current)
+}
+
+func (p *Prompt) clearCurrentLineForOutput() {
+	if p.isTerm == nil || !p.isTerm() {
+		return
+	}
+	fmt.Fprint(p.out, "\r\033[2K")
 }
 
 func longestCommonPrefix(values []string) string {

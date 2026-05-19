@@ -69,11 +69,11 @@ func TestBuiltinMySQLSQLGeneration(t *testing.T) {
 			name:    "create database",
 			command: "create database",
 			values: map[string]string{
-				"database":  "appdb",
+				"database":  "greenhn-dev",
 				"charset":   "utf8mb4",
 				"collation": "utf8mb4_unicode_ci",
 			},
-			wantSQL: "CREATE DATABASE IF NOT EXISTS `appdb` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+			wantSQL: "CREATE DATABASE IF NOT EXISTS `greenhn-dev` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
 		},
 		{
 			name:    "list databases",
@@ -85,9 +85,9 @@ func TestBuiltinMySQLSQLGeneration(t *testing.T) {
 			name:    "drop database",
 			command: "drop database",
 			values: map[string]string{
-				"database": "appdb",
+				"database": "greenhn-dev",
 			},
-			wantSQL: "DROP DATABASE IF EXISTS `appdb`",
+			wantSQL: "DROP DATABASE IF EXISTS `greenhn-dev`",
 		},
 	}
 

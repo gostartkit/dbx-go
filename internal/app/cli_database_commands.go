@@ -204,7 +204,7 @@ func (b *cliBuilder) statusCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Application, name string, flags *createDatabaseFlags, meta *auditMetadata) error {
-	if err := util.ValidateIdentifier(name); err != nil {
+	if err := util.ValidateDatabaseName(name); err != nil {
 		return util.WrapLayer("validation", "validate database name", err)
 	}
 
@@ -363,7 +363,7 @@ func (b *cliBuilder) runListDatabases(ctx context.Context, application *Applicat
 }
 
 func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Application, name string, flags *planOnlyFlags, meta *auditMetadata) error {
-	if err := util.ValidateIdentifier(name); err != nil {
+	if err := util.ValidateDatabaseName(name); err != nil {
 		return util.WrapLayer("validation", "validate database name", err)
 	}
 	if !b.globals.DryRun && !b.globals.Yes {

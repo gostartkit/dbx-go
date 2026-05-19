@@ -201,16 +201,24 @@ Session-scoped database selection is REPL-only:
 dbx> connect prod
 Connected to prod.
 
-dbx(prod)> use app_prod
-Using database: app_prod
+dbx(prod)> use analytics_v2
+Using database: analytics_v2
 
-dbx(prod/app_prod)> status
+dbx(prod/analytics_v2)> status
 Connection: prod
-Database: app_prod
+Database: analytics_v2
 ...
 ```
 
 `use <database>` updates the active REPL session and persists the selected database in `session.json`. One-shot CLI commands stay stateless and instead accept `--database <name>` for a single invocation.
+
+Database names accept letters, numbers, `_`, and `-`. Examples:
+
+```text
+greenhn-dev
+prod-db
+analytics_v2
+```
 
 ## Configuration
 
@@ -439,7 +447,7 @@ dbx> dry-run on
 Dry-run mode is on.
 
 dbx> create database
-Database name: appdb
+Database name: greenhn-dev
   1. utf8mb4
   2. utf8
 Charset [utf8mb4]:
@@ -453,8 +461,8 @@ Execution Plan
   1. Create database
   2. Create user
 Rendered SQL
-  1. CREATE DATABASE IF NOT EXISTS `appdb` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
-  2. CREATE USER IF NOT EXISTS 'appdb'@'%' IDENTIFIED BY '***'
+  1. CREATE DATABASE IF NOT EXISTS `greenhn-dev` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  2. CREATE USER IF NOT EXISTS 'greenhn-dev'@'%' IDENTIFIED BY '***'
 Dry-run mode is enabled. SQL will be rendered but not executed.
 Confirm execution? [y/n] [y]:
 [DRY-RUN] Create database
@@ -842,10 +850,16 @@ dbx status --connection prod --format json
 Apply a database only for the current CLI call:
 
 ```bash
-dbx --connection prod --database app_prod status --format json
+dbx --connection prod --database analytics_v2 status --format json
 ```
 
 `use <database>` is not available as a standalone CLI command because CLI mode exits after each invocation.
+
+Validation errors render flush-left in both REPL and CLI output:
+
+```text
+Error: validation error: validate database name: invalid database name "greenhn dev"
+```
 
 For CI and shell scripts, prefer `--format json`, `--yes`, and `--dry-run` where appropriate.
 
