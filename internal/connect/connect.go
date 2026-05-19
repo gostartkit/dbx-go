@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"pkg.gostartkit.com/dbx/internal/config"
 	"pkg.gostartkit.com/dbx/internal/driver"
@@ -24,10 +25,23 @@ func (c *Connector) Open(ctx context.Context, cfg *config.ConnectionConfig) (*sq
 	}
 }
 
+func (c *Connector) Ping(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB) error {
+	switch cfg.Driver {
+	case "mysql":
+		pingCtx, cancel := context.WithTimeout(ctx, minDuration(cfg.QueryTimeout(), 5*time.Second))
+		defer cancel()
+		return driver.Ping(pingCtx, db)
+	default:
+		return fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
 func (c *Connector) ListDatabases(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB) ([]string, error) {
 	switch cfg.Driver {
 	case "mysql":
-		return driver.ListDatabases(ctx, db)
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.ListDatabases(queryCtx, db)
 	default:
 		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
 	}
@@ -36,17 +50,28 @@ func (c *Connector) ListDatabases(ctx context.Context, cfg *config.ConnectionCon
 func (c *Connector) QueryStrings(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, query string) ([]string, error) {
 	switch cfg.Driver {
 	case "mysql":
-		return driver.QueryStrings(ctx, db, query)
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.QueryStrings(queryCtx, db, query)
 	default:
 		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
 	}
 }
 
-func (c *Connector) ExecStatements(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, statements []string) error {
+func (c *Connector) ExecStatement(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, statement string) error {
 	switch cfg.Driver {
 	case "mysql":
-		return driver.ExecStatements(ctx, db, statements)
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.ExecStatement(queryCtx, db, statement)
 	default:
 		return fmt.Errorf("unsupported driver %q", cfg.Driver)
 	}
+}
+
+func minDuration(a time.Duration, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }

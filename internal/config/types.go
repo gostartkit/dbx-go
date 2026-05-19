@@ -4,8 +4,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"pkg.gostartkit.com/dbx/internal/util"
+)
+
+const (
+	defaultConnectTimeout = 10 * time.Second
+	defaultQueryTimeout   = 30 * time.Second
 )
 
 type SSHConfig struct {
@@ -16,16 +22,22 @@ type SSHConfig struct {
 	PasswordEnv string `json:"password_env,omitempty"`
 }
 
+type TimeoutConfig struct {
+	ConnectSeconds int `json:"connect_seconds,omitempty"`
+	QuerySeconds   int `json:"query_seconds,omitempty"`
+}
+
 type ConnectionConfig struct {
-	Name        string     `json:"name"`
-	Driver      string     `json:"driver"`
-	Mode        string     `json:"mode"`
-	Host        string     `json:"host"`
-	Port        int        `json:"port"`
-	User        string     `json:"user"`
-	Password    string     `json:"password,omitempty"`
-	PasswordEnv string     `json:"password_env,omitempty"`
-	SSH         *SSHConfig `json:"ssh,omitempty"`
+	Name        string         `json:"name"`
+	Driver      string         `json:"driver"`
+	Mode        string         `json:"mode"`
+	Host        string         `json:"host"`
+	Port        int            `json:"port"`
+	User        string         `json:"user"`
+	Password    string         `json:"password,omitempty"`
+	PasswordEnv string         `json:"password_env,omitempty"`
+	SSH         *SSHConfig     `json:"ssh,omitempty"`
+	Timeout     *TimeoutConfig `json:"timeout,omitempty"`
 }
 
 type SessionFile struct {
@@ -41,6 +53,15 @@ func (c *ConnectionConfig) ApplyDefaults() {
 	}
 	if c.SSH != nil && c.SSH.Port == 0 {
 		c.SSH.Port = 22
+	}
+	if c.Timeout == nil {
+		c.Timeout = &TimeoutConfig{}
+	}
+	if c.Timeout.ConnectSeconds <= 0 {
+		c.Timeout.ConnectSeconds = int(defaultConnectTimeout / time.Second)
+	}
+	if c.Timeout.QuerySeconds <= 0 {
+		c.Timeout.QuerySeconds = int(defaultQueryTimeout / time.Second)
 	}
 }
 
@@ -69,6 +90,12 @@ func (c *ConnectionConfig) Validate() error {
 	if strings.TrimSpace(c.User) == "" {
 		return fmt.Errorf("user is required")
 	}
+	if c.Timeout.ConnectSeconds <= 0 {
+		return fmt.Errorf("timeout.connect_seconds must be greater than zero")
+	}
+	if c.Timeout.QuerySeconds <= 0 {
+		return fmt.Errorf("timeout.query_seconds must be greater than zero")
+	}
 	if c.Mode == "ssh" {
 		if c.SSH == nil {
 			return fmt.Errorf("ssh settings are required for ssh mode")
@@ -92,6 +119,16 @@ func (c *ConnectionConfig) Validate() error {
 func (c *ConnectionConfig) Address() string {
 	c.ApplyDefaults()
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+func (c *ConnectionConfig) ConnectTimeout() time.Duration {
+	c.ApplyDefaults()
+	return time.Duration(c.Timeout.ConnectSeconds) * time.Second
+}
+
+func (c *ConnectionConfig) QueryTimeout() time.Duration {
+	c.ApplyDefaults()
+	return time.Duration(c.Timeout.QuerySeconds) * time.Second
 }
 
 func (c *ConnectionConfig) PasswordValue() (string, error) {

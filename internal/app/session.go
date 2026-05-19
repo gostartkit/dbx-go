@@ -20,3 +20,9 @@ func (s *Session) Close() error {
 	s.DB = nil
 	return err
 }
+
+func (s *Session) Reset() error {
+	err := s.Close()
+	s.Connection = nil
+	return err
+}

@@ -1,23 +1,68 @@
 # dbx
 
-`dbx` is an interactive REPL-first database CLI for MySQL with native SSH support.
+`dbx` is a REPL-first MySQL database CLI focused on guided operations instead of raw SQL. It connects directly or through native SSH, resolves templates from builtin/global/connection layers, and keeps the user flow centered on safe prompts, previews, and confirmations.
 
-The tool is designed around guided operations instead of raw SQL. Users start `dbx`, choose a configured connection, and run slash commands such as `/create database` or `/list databases`.
+## Goals
+
+- REPL-first UX
+- No raw SQL from users
+- Native SSH database access
+- Template-based operations
+- Minimal dependencies
+- MySQL-only MVP
 
 ## Features
 
-- REPL-first workflow
-- No raw SQL from users
-- Native SSH MySQL access with `golang.org/x/crypto/ssh`
-- MySQL support for the MVP
-- Template-based operations
-- Builtin, global, and connection-level template priority
-- Minimal dependencies
-- `pkg.gostartkit.com/cmd v0.1.9`
+- Interactive `dbx>` prompt
+- Direct and SSH MySQL connections
+- Hidden password input
+- `known_hosts` SSH host verification
+- Configurable connect and query timeouts
+- Session reconnect prompt
+- Session-scoped dry-run mode
+- Persisted command history without readline
+- Builtin, global, and connection-level templates
+
+## Architecture
+
+`dbx` is intentionally small and split by responsibility:
+
+- [cmd/dbx/main.go](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/cmd/dbx/main.go): process startup, signal-aware shutdown, CLI root
+- [internal/app/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/internal/app): REPL command handlers, session flow, reconnect, dry-run, reporting
+- [internal/repl/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/internal/repl): minimal REPL loop
+- [internal/config/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/internal/config): config loading, session file, history file, timeout defaults
+- [internal/connect/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/internal/connect): driver-facing timeout application
+- [internal/driver/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/internal/driver): MySQL and SSH transport implementation
+- [internal/template/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/internal/template): template resolution and rendering
+- [internal/ui/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/internal/ui): lightweight prompt helpers
+- [internal/util/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/internal/util): validation, path expansion, layered errors
+
+## Project Layout
+
+```text
+dbx/
+├── cmd/
+│   └── dbx/
+│       └── main.go
+├── internal/
+│   ├── app/
+│   ├── config/
+│   ├── connect/
+│   ├── driver/
+│   ├── repl/
+│   ├── template/
+│   ├── ui/
+│   └── util/
+├── examples/
+├── AGENTS.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── Makefile
+├── README.md
+└── go.mod
+```
 
 ## Commands
-
-Inside the REPL, `dbx` supports:
 
 ```text
 /
@@ -28,10 +73,12 @@ Inside the REPL, `dbx` supports:
 /create database
 /list databases
 /drop database
+/dry-run on
+/dry-run off
 /exit
 ```
 
-Running `dbx` starts the REPL directly:
+Running `dbx` enters the interactive shell:
 
 ```bash
 dbx
@@ -39,10 +86,11 @@ dbx
 
 ## Configuration
 
-All configuration lives under:
+All state lives under:
 
 ```text
 ~/.config/dbx/
+  history
   session.json
   templates/
   dev/
@@ -51,26 +99,6 @@ All configuration lives under:
   prod/
     config.json
     templates/
-```
-
-Example connection config:
-
-```json
-{
-  "name": "prod",
-  "driver": "mysql",
-  "mode": "ssh",
-  "host": "10.0.1.20",
-  "port": 3306,
-  "user": "root",
-  "password_env": "MYSQL_PROD_PASSWORD",
-  "ssh": {
-    "host": "bastion.example.com",
-    "port": 22,
-    "user": "ubuntu",
-    "private_key": "~/.ssh/id_rsa"
-  }
-}
 ```
 
 Direct MySQL example:
@@ -83,7 +111,11 @@ Direct MySQL example:
   "host": "127.0.0.1",
   "port": 3306,
   "user": "root",
-  "password_env": "MYSQL_DEV_PASSWORD"
+  "password_env": "MYSQL_DEV_PASSWORD",
+  "timeout": {
+    "connect_seconds": 10,
+    "query_seconds": 30
+  }
 }
 ```
 
@@ -98,6 +130,10 @@ SSH MySQL example:
   "port": 3306,
   "user": "root",
   "password_env": "MYSQL_PROD_PASSWORD",
+  "timeout": {
+    "connect_seconds": 10,
+    "query_seconds": 30
+  },
   "ssh": {
     "host": "bastion.example.com",
     "port": 22,
@@ -107,9 +143,9 @@ SSH MySQL example:
 }
 ```
 
-## Template Priority
+## Template Precedence
 
-Templates are resolved in this order:
+Templates resolve in this order:
 
 ```text
 connection template
@@ -117,7 +153,7 @@ connection template
 > builtin template
 ```
 
-Supported directories:
+Directories:
 
 ```text
 ~/.config/dbx/templates/
@@ -178,14 +214,19 @@ Connection template example:
 }
 ```
 
-Typical `/create database` flow:
+## Typical Flow
 
 ```text
-dbx> /connect
-  1. dev
-Connection name [dev]:
-Confirm execution? [y/n] [y]:
-Connected to dev.
+$ dbx
+Reconnect previous session "prod"? [y/n]: y
+Reconnected to prod.
+Available commands:
+  /                Show all commands
+  /help            Show all commands
+  ...
+
+dbx> /dry-run on
+Dry-run mode is on.
 
 dbx> /create database
 Database name: appdb
@@ -198,21 +239,52 @@ Collation [utf8mb4_unicode_ci]:
 New user password:
 Template: create_database_with_user (global)
 Source: ~/.config/dbx/templates/create_database_with_user.json
-Execution plan:
+Execution Plan
   1. Create database
-     CREATE DATABASE IF NOT EXISTS `appdb` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   2. Create user
-     CREATE USER IF NOT EXISTS 'appdb'@'%' IDENTIFIED BY '***'
+Rendered SQL
+  1. CREATE DATABASE IF NOT EXISTS `appdb` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  2. CREATE USER IF NOT EXISTS 'appdb'@'%' IDENTIFIED BY '***'
+Dry-run mode is enabled. SQL will be rendered but not executed.
 Confirm execution? [y/n] [y]:
+[DRY-RUN] Create database
+[DRY-RUN] Create user
 ```
 
-## Notes
+## Security Notes
 
-- `dbx` validates database identifiers with `[a-zA-Z_][a-zA-Z0-9_]*`.
-- SSH uses a native Go SSH client and does not shell out to `ssh`.
-- SSH host verification uses `known_hosts`. If `~/.ssh/known_hosts` is missing, `dbx` returns a first-run error telling you how to add the host key.
-- Secret prompts use hidden terminal input when stdin is a terminal.
+- User-facing workflows never require raw SQL input.
+- Database identifiers are validated against `[a-zA-Z_][a-zA-Z0-9_]*`.
+- Password prompts are hidden when stdin is a terminal.
+- Secret template values are redacted from previews.
+- SSH access is native through Go SSH libraries, not `exec.Command("ssh")`.
+- SSH host verification uses `known_hosts`.
+- `DBX_KNOWN_HOSTS` can point to alternate `known_hosts` files if needed.
+
+## Developer Workflow
+
+```bash
+make fmt
+make vet
+make test
+make build
+```
+
+## Known Limitations
+
+- MySQL is the only supported database in the MVP.
+- REPL history is persisted, but arrow-key navigation is intentionally not implemented.
+- Dry-run is session-scoped and not persisted.
+- SSH verification expects a prepared `known_hosts` file.
+- The CLI entrypoint is intentionally REPL-first; one-shot subcommands are not a focus.
+
+## Future Roadmap
+
+- More guided database operations within the same template-driven model
+- Better history ergonomics on top of the persisted history file
+- Additional safe introspection commands like table listing and schema description
+- Stronger SSH verification configuration options while keeping the default path simple
 
 ## Examples
 
-Sample configs and templates are available in [`examples/`](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/examples).
+Sample configs and templates are available in [examples/](/Users/sam/Dev/work/gostartkit/stub/golang/dbx/examples).

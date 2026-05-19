@@ -2,19 +2,26 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/app"
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	application, err := app.New(os.Stdin, os.Stdout, os.Stderr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	defer application.Close()
 
 	cli := cmd.NewApp("dbx")
 	cli.Short = "Interactive MySQL database REPL with native SSH support"
@@ -27,7 +34,10 @@ func main() {
 		},
 	}
 
-	if err := cli.Run(context.Background(), os.Args[1:]); err != nil {
+	if err := cli.Run(ctx, os.Args[1:]); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

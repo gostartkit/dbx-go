@@ -60,7 +60,7 @@ func OpenMySQL(ctx context.Context, cfg *config.ConnectionConfig) (*sql.DB, erro
 	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	pingCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout())
 	defer cancel()
 
 	if err := db.PingContext(pingCtx); err != nil {
@@ -73,6 +73,13 @@ func OpenMySQL(ctx context.Context, cfg *config.ConnectionConfig) (*sql.DB, erro
 
 func ListDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
 	return QueryStrings(ctx, db, "SHOW DATABASES")
+}
+
+func Ping(ctx context.Context, db *sql.DB) error {
+	if err := db.PingContext(ctx); err != nil {
+		return util.WrapLayer("mysql", "ping database", err)
+	}
+	return nil
 }
 
 func QueryStrings(ctx context.Context, db *sql.DB, query string) ([]string, error) {
@@ -98,11 +105,9 @@ func QueryStrings(ctx context.Context, db *sql.DB, query string) ([]string, erro
 	return values, nil
 }
 
-func ExecStatements(ctx context.Context, db *sql.DB, statements []string) error {
-	for index, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			return util.WrapLayer("sql execution", fmt.Sprintf("statement %d failed", index+1), err)
-		}
+func ExecStatement(ctx context.Context, db *sql.DB, statement string) error {
+	if _, err := db.ExecContext(ctx, statement); err != nil {
+		return util.WrapLayer("sql execution", "execute statement", err)
 	}
 	return nil
 }
@@ -152,11 +157,11 @@ func openSSHTunnel(ctx context.Context, cfg *config.ConnectionConfig, targetAddr
 		User:            cfg.SSH.User,
 		Auth:            authMethods,
 		HostKeyCallback: hostKeyCallback,
-		Timeout:         10 * time.Second,
+		Timeout:         cfg.ConnectTimeout(),
 	}
 
 	sshAddr := fmt.Sprintf("%s:%d", cfg.SSH.Host, cfg.SSH.Port)
-	baseConn, err := (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, "tcp", sshAddr)
+	baseConn, err := (&net.Dialer{Timeout: cfg.ConnectTimeout()}).DialContext(ctx, "tcp", sshAddr)
 	if err != nil {
 		return nil, util.WrapLayer("ssh", "dial SSH server "+sshAddr, err)
 	}

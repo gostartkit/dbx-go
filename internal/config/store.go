@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"sort"
 	"strings"
 )
+
+const historyLimit = 1000
 
 type Store struct {
 	RootDir string
@@ -34,6 +37,10 @@ func (s *Store) EnsureLayout() error {
 
 func (s *Store) SessionPath() string {
 	return filepath.Join(s.RootDir, "session.json")
+}
+
+func (s *Store) HistoryPath() string {
+	return filepath.Join(s.RootDir, "history")
 }
 
 func (s *Store) GlobalTemplatesDir() string {
@@ -94,6 +101,14 @@ func (s *Store) LoadConnection(name string) (*ConnectionConfig, error) {
 	return &cfg, nil
 }
 
+func (s *Store) ConnectionExists(name string) bool {
+	if strings.TrimSpace(name) == "" {
+		return false
+	}
+	info, err := os.Stat(s.ConnectionConfigPath(name))
+	return err == nil && !info.IsDir()
+}
+
 func (s *Store) ListConnections() ([]ConnectionConfig, error) {
 	entries, err := os.ReadDir(s.RootDir)
 	if err != nil {
@@ -120,6 +135,53 @@ func (s *Store) ListConnections() ([]ConnectionConfig, error) {
 		return connections[i].Name < connections[j].Name
 	})
 	return connections, nil
+}
+
+func (s *Store) LoadHistory() ([]string, error) {
+	file, err := os.Open(s.HistoryPath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	history := make([]string, 0)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		history = append(history, line)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if len(history) > historyLimit {
+		history = append([]string(nil), history[len(history)-historyLimit:]...)
+	}
+	return history, nil
+}
+
+func (s *Store) AppendHistory(command string) error {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return nil
+	}
+	if err := os.MkdirAll(s.RootDir, 0o755); err != nil {
+		return err
+	}
+
+	file, err := os.OpenFile(s.HistoryPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(command + "\n")
+	return err
 }
 
 func (s *Store) writeJSON(path string, value any) error {
