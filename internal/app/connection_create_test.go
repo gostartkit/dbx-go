@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"pkg.gostartkit.com/dbx/internal/config"
+	"pkg.gostartkit.com/dbx/internal/driver"
 )
 
 type failingConnector struct {
@@ -16,6 +17,10 @@ type failingConnector struct {
 }
 
 func (f failingConnector) Open(context.Context, *config.ConnectionConfig) (*sql.DB, error) {
+	return nil, f.openErr
+}
+
+func (f failingConnector) Diagnose(context.Context, *config.ConnectionConfig) (*driver.DiagnosticTrace, error) {
 	return nil, f.openErr
 }
 

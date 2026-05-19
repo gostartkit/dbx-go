@@ -13,9 +13,19 @@ import (
 )
 
 func (a *Application) handleConnectByName(ctx context.Context, name string) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "connect"}, func(meta *auditMetadata) error {
+		return a.connectByName(ctx, name, meta)
+	})
+}
+
+func (a *Application) connectByName(ctx context.Context, name string, meta *auditMetadata) error {
 	cfg, err := a.store.LoadConnection(name)
 	if err != nil {
 		return util.WrapLayer("config", "load connection "+name, err)
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
 	}
 
 	a.prompt.Println("Execution Plan")
@@ -48,98 +58,108 @@ func (a *Application) handleConnectByName(ctx context.Context, name string) erro
 }
 
 func (a *Application) handleConnectionCreate(ctx context.Context) error {
-	a.prompt.Println("Create Connection")
+	return a.auditCommand(ctx, auditMetadata{Command: "connection create"}, func(meta *auditMetadata) error {
+		a.prompt.Println("Create Connection")
 
-	name, err := a.ask(ctx, "Connection name", "")
-	if err != nil {
-		return err
-	}
-	if err := util.ValidateIdentifier(name); err != nil {
-		return util.WrapLayer("validation", "validate connection name", err)
-	}
-	if a.store.ConnectionExists(name) {
-		return util.WrapLayer("config", "create connection", fmt.Errorf("connection %q already exists", name))
-	}
+		name, err := a.ask(ctx, "Connection name", "")
+		if err != nil {
+			return err
+		}
+		if err := util.ValidateIdentifier(name); err != nil {
+			return util.WrapLayer("validation", "validate connection name", err)
+		}
+		if a.store.ConnectionExists(name) {
+			return util.WrapLayer("config", "create connection", fmt.Errorf("connection %q already exists", name))
+		}
 
-	cfg := &config.ConnectionConfig{
-		Name:   name,
-		Driver: "mysql",
-		Mode:   "direct",
-	}
-	if err := a.promptConnectionConfig(ctx, cfg, true); err != nil {
-		return err
-	}
-	if err := a.testSaveAndMaybeConnect(ctx, cfg, false); err != nil {
-		return err
-	}
-	return nil
+		cfg := &config.ConnectionConfig{
+			Name:   name,
+			Driver: "mysql",
+			Mode:   "direct",
+		}
+		if err := a.promptConnectionConfig(ctx, cfg, true); err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+		return a.testSaveAndMaybeConnect(ctx, cfg, false)
+	})
 }
 
 func (a *Application) handleConnectionEdit(ctx context.Context, name string) error {
-	cfg, err := a.store.LoadConnection(name)
-	if err != nil {
-		return util.WrapLayer("config", "load connection "+name, err)
-	}
+	return a.auditCommand(ctx, auditMetadata{Command: "connection edit", Connection: name}, func(meta *auditMetadata) error {
+		cfg, err := a.store.LoadConnection(name)
+		if err != nil {
+			return util.WrapLayer("config", "load connection "+name, err)
+		}
+		meta.Mode = cfg.Mode
 
-	a.prompt.Printf("Edit Connection: %s\n", name)
-	if err := a.promptConnectionConfig(ctx, cfg, false); err != nil {
-		return err
-	}
-
-	testConnection, err := a.confirm(ctx, "Test connection?", true)
-	if err != nil {
-		return err
-	}
-	if testConnection {
-		if err := a.testConnection(ctx, cfg); err != nil {
+		a.prompt.Printf("Edit Connection: %s\n", name)
+		if err := a.promptConnectionConfig(ctx, cfg, false); err != nil {
 			return err
 		}
-		a.prompt.Println("Connection successful.")
-	}
+		meta.Mode = cfg.Mode
 
-	saveChanges, err := a.confirm(ctx, "Save changes?", true)
-	if err != nil {
-		return err
-	}
-	if !saveChanges {
-		a.prompt.Println("Cancelled.")
-		return nil
-	}
+		testConnection, err := a.confirm(ctx, "Test connection?", true)
+		if err != nil {
+			return err
+		}
+		if testConnection {
+			if err := a.testConnection(ctx, cfg); err != nil {
+				return err
+			}
+			a.prompt.Println("Connection successful.")
+		}
 
-	if err := a.store.SaveConnection(cfg); err != nil {
-		return util.WrapLayer("config", "save connection "+cfg.Name, err)
-	}
-	a.prompt.Printf("Saved: %s\n", a.store.ConnectionConfigPath(cfg.Name))
+		saveChanges, err := a.confirm(ctx, "Save changes?", true)
+		if err != nil {
+			return err
+		}
+		if !saveChanges {
+			a.prompt.Println("Cancelled.")
+			return nil
+		}
 
-	connectNow, err := a.confirm(ctx, "Connect now?", true)
-	if err != nil {
-		return err
-	}
-	if !connectNow {
-		return nil
-	}
-	return a.connectWithConfig(ctx, cfg, true)
+		if err := a.store.SaveConnection(cfg); err != nil {
+			return util.WrapLayer("config", "save connection "+cfg.Name, err)
+		}
+		a.prompt.Printf("Saved: %s\n", a.store.ConnectionConfigPath(cfg.Name))
+
+		connectNow, err := a.confirm(ctx, "Connect now?", true)
+		if err != nil {
+			return err
+		}
+		if !connectNow {
+			return nil
+		}
+		return a.connectWithConfig(ctx, cfg, true)
+	})
 }
 
 func (a *Application) handleConnectionDelete(ctx context.Context, name string) error {
-	if !a.store.ConnectionExists(name) {
-		return util.WrapLayer("config", "delete connection "+name, os.ErrNotExist)
-	}
+	return a.auditCommand(ctx, auditMetadata{Command: "connection delete", Connection: name}, func(meta *auditMetadata) error {
+		if !a.store.ConnectionExists(name) {
+			return util.WrapLayer("config", "delete connection "+name, os.ErrNotExist)
+		}
+		if cfg, err := a.store.LoadConnection(name); err == nil {
+			meta.Mode = cfg.Mode
+		}
 
-	confirmed, err := a.confirm(ctx, fmt.Sprintf("Delete connection %q?", name), false)
-	if err != nil {
-		return err
-	}
-	if !confirmed {
-		a.prompt.Println("Cancelled.")
+		confirmed, err := a.confirm(ctx, fmt.Sprintf("Delete connection %q?", name), false)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			a.prompt.Println("Cancelled.")
+			return nil
+		}
+
+		if err := a.deleteConnectionByName(name); err != nil {
+			return err
+		}
+		a.prompt.Printf("Deleted connection %s.\n", name)
 		return nil
-	}
-
-	if err := a.deleteConnectionByName(name); err != nil {
-		return err
-	}
-	a.prompt.Printf("Deleted connection %s.\n", name)
-	return nil
+	})
 }
 
 func (a *Application) deleteConnectionByName(name string) error {
@@ -166,66 +186,69 @@ func (a *Application) deleteConnectionByName(name string) error {
 }
 
 func (a *Application) handleConnectionShow(ctx context.Context, name string) error {
-	cfg, err := a.store.LoadConnection(name)
-	if err != nil {
-		return util.WrapLayer("config", "load connection "+name, err)
-	}
+	return a.auditCommand(ctx, auditMetadata{Command: "connection show", Connection: name}, func(meta *auditMetadata) error {
+		cfg, err := a.store.LoadConnection(name)
+		if err != nil {
+			return util.WrapLayer("config", "load connection "+name, err)
+		}
+		meta.Mode = cfg.Mode
 
-	a.prompt.Println("Execution Plan")
-	a.prompt.Printf("  1. Read connection config from %s\n", a.store.ConnectionConfigPath(name))
+		a.prompt.Println("Execution Plan")
+		a.prompt.Printf("  1. Read connection config from %s\n", a.store.ConnectionConfigPath(name))
 
-	confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-	if err != nil {
-		return err
-	}
-	if !confirmed {
-		a.prompt.Println("Cancelled.")
+		confirmed, err := a.confirm(ctx, "Confirm execution?", true)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			a.prompt.Println("Cancelled.")
+			return nil
+		}
+
+		a.prompt.Printf("Name: %s\n", cfg.Name)
+		a.prompt.Printf("Driver: %s\n", cfg.Driver)
+		a.prompt.Printf("Mode: %s\n", cfg.Mode)
+		a.prompt.Println()
+		a.prompt.Printf("Host: %s\n", cfg.Address())
+		a.prompt.Printf("User: %s\n", cfg.User)
+		a.prompt.Printf("Connect timeout: %s\n", cfg.ConnectTimeout())
+		a.prompt.Printf("Query timeout: %s\n", cfg.QueryTimeout())
+		a.prompt.Println()
+		a.prompt.Println("Password:")
+		switch {
+		case cfg.PasswordPrompt:
+			a.prompt.Println("  prompt every time")
+		case strings.TrimSpace(cfg.PasswordEnv) != "":
+			a.prompt.Printf("  env: %s\n", cfg.PasswordEnv)
+		case strings.TrimSpace(cfg.Password) != "":
+			a.prompt.Println("  saved: [redacted]")
+		default:
+			a.prompt.Println("  not configured")
+		}
+
+		if cfg.Proxy != nil && strings.TrimSpace(cfg.Proxy.URL) != "" {
+			a.prompt.Println()
+			a.prompt.Println("Proxy:")
+			a.prompt.Printf("  url: %s\n", config.RedactProxyURL(cfg.Proxy.URL))
+		}
+
+		if cfg.UsesSSH() && cfg.SSH != nil {
+			a.prompt.Println()
+			a.prompt.Println("SSH:")
+			a.prompt.Printf("  host: %s:%d\n", cfg.SSH.Host, cfg.SSH.Port)
+			a.prompt.Printf("  user: %s\n", cfg.SSH.User)
+			if strings.TrimSpace(cfg.SSH.PrivateKey) != "" {
+				a.prompt.Printf("  private_key: %s\n", cfg.SSH.PrivateKey)
+			}
+			if strings.TrimSpace(cfg.SSH.PasswordEnv) != "" {
+				a.prompt.Printf("  password_env: %s\n", cfg.SSH.PasswordEnv)
+			} else if strings.TrimSpace(cfg.SSH.Password) != "" {
+				a.prompt.Println("  password: [redacted]")
+			}
+		}
+
 		return nil
-	}
-
-	a.prompt.Printf("Name: %s\n", cfg.Name)
-	a.prompt.Printf("Driver: %s\n", cfg.Driver)
-	a.prompt.Printf("Mode: %s\n", cfg.Mode)
-	a.prompt.Println()
-	a.prompt.Printf("Host: %s\n", cfg.Address())
-	a.prompt.Printf("User: %s\n", cfg.User)
-	a.prompt.Printf("Connect timeout: %s\n", cfg.ConnectTimeout())
-	a.prompt.Printf("Query timeout: %s\n", cfg.QueryTimeout())
-	a.prompt.Println()
-	a.prompt.Println("Password:")
-	switch {
-	case cfg.PasswordPrompt:
-		a.prompt.Println("  prompt every time")
-	case strings.TrimSpace(cfg.PasswordEnv) != "":
-		a.prompt.Printf("  env: %s\n", cfg.PasswordEnv)
-	case strings.TrimSpace(cfg.Password) != "":
-		a.prompt.Println("  saved: [redacted]")
-	default:
-		a.prompt.Println("  not configured")
-	}
-
-	if cfg.Proxy != nil && strings.TrimSpace(cfg.Proxy.URL) != "" {
-		a.prompt.Println()
-		a.prompt.Println("Proxy:")
-		a.prompt.Printf("  url: %s\n", config.RedactProxyURL(cfg.Proxy.URL))
-	}
-
-	if cfg.UsesSSH() && cfg.SSH != nil {
-		a.prompt.Println()
-		a.prompt.Println("SSH:")
-		a.prompt.Printf("  host: %s:%d\n", cfg.SSH.Host, cfg.SSH.Port)
-		a.prompt.Printf("  user: %s\n", cfg.SSH.User)
-		if strings.TrimSpace(cfg.SSH.PrivateKey) != "" {
-			a.prompt.Printf("  private_key: %s\n", cfg.SSH.PrivateKey)
-		}
-		if strings.TrimSpace(cfg.SSH.PasswordEnv) != "" {
-			a.prompt.Printf("  password_env: %s\n", cfg.SSH.PasswordEnv)
-		} else if strings.TrimSpace(cfg.SSH.Password) != "" {
-			a.prompt.Println("  password: [redacted]")
-		}
-	}
-
-	return nil
+	})
 }
 
 func (a *Application) promptConnectionConfig(ctx context.Context, cfg *config.ConnectionConfig, isCreate bool) error {
@@ -518,9 +541,10 @@ func (a *Application) activateConnection(ctx context.Context, cfg *config.Connec
 
 	a.session.Connection = cloneConnectionConfig(cfg)
 	a.session.DB = db
+	a.clearDatabaseSelection()
 
 	if persistSession {
-		if err := a.store.SaveSession(&config.SessionFile{CurrentConnection: cfg.Name}); err != nil {
+		if err := a.saveCurrentSession(); err != nil {
 			return util.WrapLayer("config", "save session", err)
 		}
 	}

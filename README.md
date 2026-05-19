@@ -16,13 +16,16 @@
 - Interactive `dbx>` prompt
 - Lightweight TAB completion for commands and saved connection names
 - Explicit command aliases without changing canonical help output
-- Direct, SSH, and proxy-SSH MySQL connections
+- Direct, proxy, SSH, and proxy-SSH MySQL connections
 - Hidden password input
 - `known_hosts` SSH host verification
 - Configurable connect and query timeouts
 - Session reconnect prompt
 - Session-scoped dry-run mode
 - Persisted command history without readline
+- Local JSONL audit log under `~/.config/dbx/logs/audit.jsonl`
+- Live `connection test` and static `connection doctor` diagnostics
+- Structured JSON error codes for non-interactive mode
 - Builtin, global, and connection-level templates
 
 ## Architecture
@@ -76,16 +79,18 @@ help aliases
 connect
 connect <name>
 connections
+audit log
 connection create
 connection edit <name>
 connection delete <name>
 connection show <name>
-connection test [name]
+connection test [name] [verbose]
 connection doctor [name]
 status
 create database
 list databases
 drop database
+use <database>
 dry-run on
 dry-run off
 exit
@@ -98,16 +103,19 @@ Non-interactive CLI commands:
 ```text
 dbx connect <name>
 dbx connections
+dbx audit log
 
 dbx connection create <name> [flags]
 dbx connection edit <name> [flags]
 dbx connection delete <name> [flags]
 dbx connection show <name>
-dbx connection test <name>
+dbx connection test <name> [--verbose]
 dbx connection doctor <name>
 
 dbx create database <name> [flags]
 dbx list databases [flags]
+dbx show databases [flags]
+dbx show dbs [flags]
 dbx drop database <name> [flags]
 
 dbx status
@@ -119,6 +127,7 @@ Global CLI flags:
 
 ```text
 --connection <name>
+--database <name>
 --config-dir <path>
 --dry-run
 --yes
@@ -127,7 +136,7 @@ Global CLI flags:
 
 ## REPL Ergonomics
 
-TAB completion is intentionally lightweight. It does not implement full readline-style editing, but it does support command and saved-connection completion. Up and Down arrows navigate persisted command history in the interactive REPL.
+TAB completion is intentionally lightweight. It does not implement full readline-style editing, but it does support command, saved-connection, and `use <database>` completion when the REPL is connected. Up and Down arrows navigate persisted command history in the interactive REPL.
 
 ```text
 dbx> conn<TAB>
@@ -151,6 +160,10 @@ test
 dbx> connect <TAB>
 dev
 prod
+
+dbx> use <TAB>
+app_demo
+app_prod
 ```
 
 Supported aliases stay intentionally small and explicit:
@@ -162,6 +175,7 @@ conn          -> connect
 cx            -> connect
 conns         -> connections
 ls db         -> list databases
+show databases -> list databases
 show dbs      -> list databases
 create db     -> create database
 drop db       -> drop database
@@ -181,6 +195,23 @@ dbx
 
 Any supported REPL operation can also run as a one-shot CLI command. This is useful for scripts, CI jobs, and release automation.
 
+Session-scoped database selection is REPL-only:
+
+```text
+dbx> connect prod
+Connected to prod.
+
+dbx(prod)> use app_prod
+Using database: app_prod
+
+dbx(prod/app_prod)> status
+Connection: prod
+Database: app_prod
+...
+```
+
+`use <database>` updates the active REPL session and persists the selected database in `session.json`. One-shot CLI commands stay stateless and instead accept `--database <name>` for a single invocation.
+
 ## Configuration
 
 All state lives under:
@@ -188,6 +219,8 @@ All state lives under:
 ```text
 ~/.config/dbx/
   history
+  logs/
+    audit.jsonl
   session.json
   templates/
   dev/
@@ -198,10 +231,20 @@ All state lives under:
     templates/
 ```
 
+`session.json` stores the last selected connection and, when set from the REPL, the last selected database:
+
+```json
+{
+  "connection": "prod",
+  "database": "app_prod"
+}
+```
+
 Direct MySQL example:
 
 ```json
 {
+  "version": 1,
   "name": "dev",
   "driver": "mysql",
   "mode": "direct",
@@ -220,6 +263,7 @@ SSH MySQL example:
 
 ```json
 {
+  "version": 1,
   "name": "prod",
   "driver": "mysql",
   "mode": "ssh",
@@ -244,6 +288,7 @@ Proxy -> SSH -> MySQL example:
 
 ```json
 {
+  "version": 1,
   "name": "prod-proxy",
   "driver": "mysql",
   "mode": "proxy-ssh",
@@ -267,6 +312,7 @@ Proxy -> MySQL example:
 
 ```json
 {
+  "version": 1,
   "name": "prod-proxy",
   "driver": "mysql",
   "mode": "proxy",
@@ -301,6 +347,7 @@ Global template example:
 
 ```json
 {
+  "version": 1,
   "name": "create_database_with_user",
   "transaction": true,
   "match": {
@@ -361,6 +408,7 @@ Connection template example:
 
 ```json
 {
+  "version": 1,
   "name": "drop_database_guarded",
   "match": {
     "command": "drop database",
@@ -500,6 +548,28 @@ dbx> connection test prod-bastion
 Connection successful.
 ```
 
+Verbose connection test:
+
+```text
+dbx> connection test prod-bastion verbose
+[OK] config
+     mode: proxy-ssh
+     driver: mysql
+     config_path: ~/.config/dbx/prod-bastion/config.json
+[OK] proxy
+     url: socks5://127.0.0.1:1080
+     target: bastion.example.com:22
+     duration: 81ms
+[OK] ssh
+     host: bastion.example.com:22
+     user: ubuntu
+     duration: 130ms
+[OK] mysql
+     target: 10.0.1.20:3306
+     ping: 45ms
+Connection successful.
+```
+
 Static connection doctor:
 
 ```text
@@ -542,8 +612,8 @@ Rendered SQL
   1. CREATE DATABASE IF NOT EXISTS `appdb` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   2. CREATE USER IF NOT EXISTS 'appdb'@'%' IDENTIFIED BY '***'
 Confirm execution? [y/n] [y]: y
-[OK] Create database
-[OK] Create user
+[OK] Create database (124ms)
+[OK] Create user (92ms)
 Committed transaction.
 Database appdb created.
 ```
@@ -638,6 +708,39 @@ Example JSON:
 }
 ```
 
+Verbose JSON diagnostics:
+
+```bash
+dbx connection test prod-proxy --verbose --format json
+```
+
+```json
+{
+  "ok": true,
+  "connection": "prod-proxy",
+  "steps": [
+    {
+      "name": "config",
+      "status": "ok",
+      "details": {
+        "driver": "mysql",
+        "mode": "proxy",
+        "config_path": "/Users/sam/.config/dbx/prod-proxy/config.json"
+      }
+    },
+    {
+      "name": "proxy",
+      "status": "ok",
+      "details": {
+        "url": "socks5://proxy_user:***@127.0.0.1:1080",
+        "target": "10.0.1.20:3306",
+        "duration_ms": 81
+      }
+    }
+  ]
+}
+```
+
 Doctor a saved connection without opening the network path:
 
 ```bash
@@ -655,6 +758,26 @@ Example JSON:
     {"name": "proxy URL contains inline password", "status": "warn", "suggestion": "avoid saving inline proxy passwords in config"}
   ]
 }
+```
+
+Structured JSON error output:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "SSH_AUTH_FAILED",
+    "message": "ssh authentication failed",
+    "layer": "ssh"
+  }
+}
+```
+
+Show recent audit entries:
+
+```bash
+dbx audit log
+dbx audit log --format json
 ```
 
 Create a database from a saved connection:
@@ -715,6 +838,14 @@ Inspect status using an explicit saved connection instead of the persisted sessi
 ```bash
 dbx status --connection prod --format json
 ```
+
+Apply a database only for the current CLI call:
+
+```bash
+dbx --connection prod --database app_prod status --format json
+```
+
+`use <database>` is not available as a standalone CLI command because CLI mode exits after each invocation.
 
 For CI and shell scripts, prefer `--format json`, `--yes`, and `--dry-run` where appropriate.
 
@@ -783,6 +914,8 @@ connect prod
 - `type: "secret"` and legacy `secret: true` inputs are both redacted.
 - SSH access is native through Go SSH libraries, not `exec.Command("ssh")`.
 - Proxy passwords in `proxy.url` are redacted in user-facing output and JSON summaries.
+- Verbose connection test output also redacts proxy passwords and never prints database or SSH passwords.
+- Audit log entries store command names, connection names, modes, dry-run state, success, and duration, but never passwords or secret template input values.
 - SSH host verification uses `known_hosts`.
 - `DBX_KNOWN_HOSTS` can point to alternate `known_hosts` files if needed.
 - `connection doctor` only performs static `known_hosts` checks against plain host entries; it does not verify hashed entries or make network calls.
@@ -802,6 +935,7 @@ make release
 
 - MySQL is the only supported database in the MVP.
 - Proxy support is limited to SOCKS5 URLs such as `socks5://127.0.0.1:1080`.
+- Connection configs and JSON templates use schema `version: 1`; missing versions are treated as version 1 for backward compatibility.
 - `connection test` reports the first failing layer and stops there; it is a diagnostic command, not a deep network debugger.
 - TAB completion is lightweight and does not provide full shell-style line editing.
 - REPL history supports persisted Up/Down navigation, but not reverse search or advanced readline behavior.

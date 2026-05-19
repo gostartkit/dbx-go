@@ -27,6 +27,9 @@ type Application struct {
 	history            []string
 	dryRun             bool
 	reconnectCandidate *config.ConnectionConfig
+	reconnectDatabase  string
+	completionDBs      []string
+	completionDBsConn  string
 }
 
 func New(in io.Reader, out io.Writer, _ io.Writer) (*Application, error) {
@@ -77,7 +80,7 @@ func NewWithOptions(in io.Reader, out io.Writer, _ io.Writer, opts Options) (*Ap
 func (a *Application) completeInput(line string) ui.Completion {
 	connections, err := a.store.ListConnections()
 	if err != nil {
-		return calculateCompletion(line, nil)
+		return calculateCompletion(line, nil, nil)
 	}
 
 	names := make([]string, 0, len(connections))
@@ -85,14 +88,14 @@ func (a *Application) completeInput(line string) ui.Completion {
 		names = append(names, connection.Name)
 	}
 
-	return calculateCompletion(line, names)
+	return calculateCompletion(line, names, a.currentCompletionDatabases())
 }
 
 func (a *Application) Run(ctx context.Context) error {
 	if err := a.maybeReconnect(ctx); err != nil {
 		return err
 	}
-	return repl.New(a.prompt, a.handleLine).Run(ctx)
+	return repl.New(a.prompt, a.promptLabel, a.handleLine).Run(ctx)
 }
 
 func (a *Application) Close() error {
@@ -120,6 +123,7 @@ func (a *Application) loadReconnectCandidate() error {
 	}
 
 	a.reconnectCandidate = cfg
+	a.reconnectDatabase = sessionFile.CurrentDatabase
 	return nil
 }
 
@@ -156,13 +160,67 @@ func (a *Application) maybeReconnect(ctx context.Context) error {
 
 	a.session.Connection = cloneConnectionConfig(a.reconnectCandidate)
 	a.session.DB = db
-	if err := a.store.SaveSession(&config.SessionFile{CurrentConnection: a.reconnectCandidate.Name}); err != nil {
+	a.session.Database = ""
+	if err := a.restoreSessionDatabase(ctx); err != nil {
+		a.prompt.Printf("Warning: %v\n", err)
+	}
+	if err := a.store.SaveSession(&config.SessionFile{CurrentConnection: a.reconnectCandidate.Name, CurrentDatabase: a.session.Database}); err != nil {
 		return util.WrapLayer("config", "save session", err)
 	}
 
 	a.prompt.Printf("Reconnected to %s.\n", a.reconnectCandidate.Name)
 	a.reconnectCandidate = nil
 	return nil
+}
+
+func (a *Application) promptLabel() string {
+	if a.session == nil || a.session.Connection == nil {
+		return "dbx> "
+	}
+	if strings.TrimSpace(a.session.Database) != "" {
+		return fmt.Sprintf("dbx(%s/%s)> ", a.session.Connection.Name, a.session.Database)
+	}
+	return fmt.Sprintf("dbx(%s)> ", a.session.Connection.Name)
+}
+
+func (a *Application) restoreSessionDatabase(ctx context.Context) error {
+	if a.session == nil || a.session.Connection == nil || a.session.DB == nil {
+		return nil
+	}
+	if strings.TrimSpace(a.reconnectDatabase) == "" {
+		return nil
+	}
+	databases, err := a.connector.ListDatabases(ctx, a.session.Connection, a.session.DB)
+	if err != nil {
+		a.reconnectDatabase = ""
+		return util.WrapLayer("mysql", "validate restored database selection", err)
+	}
+	for _, database := range databases {
+		if database == a.reconnectDatabase {
+			a.session.Database = database
+			a.reconnectDatabase = ""
+			return nil
+		}
+	}
+	stale := a.reconnectDatabase
+	a.reconnectDatabase = ""
+	return fmt.Errorf("database %q no longer exists; cleared previous database selection", stale)
+}
+
+func (a *Application) currentCompletionDatabases() []string {
+	if a.session == nil || a.session.Connection == nil || a.session.DB == nil {
+		return nil
+	}
+	if a.completionDBsConn == a.session.Connection.Name && len(a.completionDBs) > 0 {
+		return append([]string(nil), a.completionDBs...)
+	}
+	databases, err := a.connector.ListDatabases(context.Background(), a.session.Connection, a.session.DB)
+	if err != nil {
+		return nil
+	}
+	a.completionDBsConn = a.session.Connection.Name
+	a.completionDBs = append([]string(nil), databases...)
+	return append([]string(nil), a.completionDBs...)
 }
 
 func (a *Application) recordHistory(line string) error {

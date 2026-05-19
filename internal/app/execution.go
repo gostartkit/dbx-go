@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"database/sql"
+	"strconv"
+	"time"
 
 	tpl "pkg.gostartkit.com/dbx/internal/template"
 	"pkg.gostartkit.com/dbx/internal/util"
@@ -73,12 +75,14 @@ func (a *Application) executePlan(ctx context.Context, plan *tpl.ExecutionPlan, 
 		}
 
 		for _, action := range plan.Actions {
+			startedAt := time.Now()
 			if _, err := tx.ExecContext(ctx, action.SQL); err != nil {
 				result.OK = false
 				result.Actions = append(result.Actions, ActionResult{
 					Description: action.Description,
 					SQL:         action.SQL,
 					Status:      ActionStatusFailed,
+					DurationMS:  measuredMilliseconds(startedAt),
 				})
 				if rollbackErr := tx.Rollback(); rollbackErr == nil {
 					result.RolledBack = true
@@ -89,6 +93,7 @@ func (a *Application) executePlan(ctx context.Context, plan *tpl.ExecutionPlan, 
 				Description: action.Description,
 				SQL:         action.SQL,
 				Status:      ActionStatusOK,
+				DurationMS:  measuredMilliseconds(startedAt),
 			})
 		}
 
@@ -101,12 +106,14 @@ func (a *Application) executePlan(ctx context.Context, plan *tpl.ExecutionPlan, 
 	}
 
 	for _, action := range plan.Actions {
+		startedAt := time.Now()
 		if _, err := runner.ExecContext(ctx, action.SQL); err != nil {
 			result.OK = false
 			result.Actions = append(result.Actions, ActionResult{
 				Description: action.Description,
 				SQL:         action.SQL,
 				Status:      ActionStatusFailed,
+				DurationMS:  measuredMilliseconds(startedAt),
 			})
 			return result, util.WrapLayer("sql execution", "execute statement", err)
 		}
@@ -114,6 +121,7 @@ func (a *Application) executePlan(ctx context.Context, plan *tpl.ExecutionPlan, 
 			Description: action.Description,
 			SQL:         action.SQL,
 			Status:      ActionStatusOK,
+			DurationMS:  measuredMilliseconds(startedAt),
 		})
 	}
 	return result, nil
@@ -153,9 +161,9 @@ func (a *Application) printPlanResult(result *PlanExecutionResult) {
 		case ActionStatusDryRun:
 			a.prompt.Printf("[DRY-RUN] %s\n", action.Description)
 		case ActionStatusFailed:
-			a.prompt.Printf("[FAIL] %s\n", action.Description)
+			a.prompt.Printf("[FAIL] %s%s\n", action.Description, formatActionDuration(action.DurationMS))
 		default:
-			a.prompt.Printf("[OK] %s\n", action.Description)
+			a.prompt.Printf("[OK] %s%s\n", action.Description, formatActionDuration(action.DurationMS))
 		}
 	}
 
@@ -165,4 +173,19 @@ func (a *Application) printPlanResult(result *PlanExecutionResult) {
 	if result.Committed {
 		a.prompt.Println("Committed transaction.")
 	}
+}
+
+func measuredMilliseconds(startedAt time.Time) int64 {
+	duration := time.Since(startedAt).Milliseconds()
+	if duration <= 0 {
+		return 1
+	}
+	return duration
+}
+
+func formatActionDuration(durationMS int64) string {
+	if durationMS <= 0 {
+		return ""
+	}
+	return " (" + strconv.FormatInt(durationMS, 10) + "ms)"
 }

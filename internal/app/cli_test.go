@@ -12,6 +12,7 @@ import (
 
 	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/config"
+	"pkg.gostartkit.com/dbx/internal/driver"
 	"pkg.gostartkit.com/dbx/internal/util"
 )
 
@@ -256,6 +257,54 @@ func TestCLIConnectionTestParsesName(t *testing.T) {
 	}
 }
 
+func TestCLIConnectionTestVerboseJSONIncludesDetails(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	connector := &diagnosticConnector{
+		trace: &driver.DiagnosticTrace{
+			Steps: []driver.DiagnosticStep{
+				{
+					Name:   "mysql",
+					Status: "ok",
+					Details: map[string]any{
+						"target":      "127.0.0.1:3306",
+						"duration_ms": int64(42),
+					},
+				},
+			},
+		},
+	}
+	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
+		ConfigDir: root,
+		Connector: connector,
+	})
+
+	err := app.Run(context.Background(), []string{"connection", "test", "prod", "--verbose", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	var result DiagnosticResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if got := result.Steps[0].Details["config_path"]; got != filepath.Join(root, "prod", "config.json") {
+		t.Fatalf("missing config path details: %+v", result.Steps[0].Details)
+	}
+	if got := result.Steps[1].Details["duration_ms"]; got != float64(42) {
+		t.Fatalf("missing mysql details: %+v", result.Steps[1].Details)
+	}
+}
+
 func TestCLIConnectionCreateValidationFailureStillFails(t *testing.T) {
 	t.Parallel()
 
@@ -401,6 +450,9 @@ func TestCLIConnectionTestJSONFailureNonZero(t *testing.T) {
 	}
 	if result.Steps[1].Error != "connection refused" {
 		t.Fatalf("unexpected json error: %+v", result.Steps[1])
+	}
+	if result.Steps[1].Details != nil {
+		t.Fatalf("expected non-verbose json to omit details: %+v", result.Steps[1])
 	}
 	if strings.Contains(stdout.String(), "proxy_password") {
 		t.Fatalf("json output leaked proxy password: %s", stdout.String())
@@ -631,6 +683,57 @@ func TestCLIStatusParsesGlobalFlagsAfterCommand(t *testing.T) {
 	}
 }
 
+func TestCLIStatusIncludesDatabaseFlag(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
+		ConfigDir: root,
+		Connector: &databaseSelectionConnector{databases: []string{"app_prod", "app_demo"}},
+	})
+	err := app.Run(context.Background(), []string{"status", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	var result StatusResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v", err)
+	}
+	if result.Database != "app_prod" {
+		t.Fatalf("database = %q, want app_prod", result.Database)
+	}
+}
+
+func TestCLIShowDBsAlias(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"show", "dbs", "--connection", "prod", "--template", "builtin_list_databases", "--dry-run", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"command": "list databases"`) {
+		t.Fatalf("stdout missing canonical command: %q", stdout.String())
+	}
+}
+
 func TestCLIHelpForMultiWordCommand(t *testing.T) {
 	t.Parallel()
 
@@ -641,6 +744,28 @@ func TestCLIHelpForMultiWordCommand(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "Create a database from the resolved template.") {
 		t.Fatalf("help output missing expected text: %q", stdout.String())
+	}
+}
+
+func TestCLIJSONErrorIncludesCode(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{ConfigDir: root})
+	err := app.Run(context.Background(), []string{"connection", "show", "missing", "--format", "json", "--config-dir", root})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr for handled json error: %q", stderr.String())
+	}
+
+	var envelope ErrorEnvelope
+	if unmarshalErr := json.Unmarshal(stdout.Bytes(), &envelope); unmarshalErr != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", unmarshalErr, stdout.String())
+	}
+	if envelope.Error == nil || envelope.Error.Code != "CONFIG_NOT_FOUND" {
+		t.Fatalf("unexpected error envelope: %+v", envelope)
 	}
 }
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,8 +11,9 @@ import (
 )
 
 const (
-	defaultConnectTimeout = 10 * time.Second
-	defaultQueryTimeout   = 30 * time.Second
+	defaultConnectTimeout          = 10 * time.Second
+	defaultQueryTimeout            = 30 * time.Second
+	CurrentConnectionSchemaVersion = 1
 )
 
 type SSHConfig struct {
@@ -33,6 +35,7 @@ type TimeoutConfig struct {
 }
 
 type ConnectionConfig struct {
+	Version        int            `json:"version,omitempty"`
 	Name           string         `json:"name"`
 	Driver         string         `json:"driver"`
 	Mode           string         `json:"mode"`
@@ -48,10 +51,61 @@ type ConnectionConfig struct {
 }
 
 type SessionFile struct {
-	CurrentConnection string `json:"current_connection,omitempty"`
+	CurrentConnection string `json:"-"`
+	CurrentDatabase   string `json:"-"`
+}
+
+func (s *SessionFile) MarshalJSON() ([]byte, error) {
+	type sessionAlias struct {
+		Connection string `json:"connection,omitempty"`
+		Database   string `json:"database,omitempty"`
+	}
+	if s == nil {
+		s = &SessionFile{}
+	}
+	return json.Marshal(sessionAlias{
+		Connection: s.CurrentConnection,
+		Database:   s.CurrentDatabase,
+	})
+}
+
+func (s *SessionFile) UnmarshalJSON(data []byte) error {
+	type sessionAlias struct {
+		Connection       string `json:"connection,omitempty"`
+		Database         string `json:"database,omitempty"`
+		LegacyConnection string `json:"current_connection,omitempty"`
+		LegacyDatabase   string `json:"current_database,omitempty"`
+	}
+	var raw sessionAlias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	s.CurrentConnection = strings.TrimSpace(raw.Connection)
+	if s.CurrentConnection == "" {
+		s.CurrentConnection = strings.TrimSpace(raw.LegacyConnection)
+	}
+	s.CurrentDatabase = strings.TrimSpace(raw.Database)
+	if s.CurrentDatabase == "" {
+		s.CurrentDatabase = strings.TrimSpace(raw.LegacyDatabase)
+	}
+	return nil
+}
+
+func (c *ConnectionConfig) UnmarshalJSON(data []byte) error {
+	type rawConnectionConfig ConnectionConfig
+	var raw rawConnectionConfig
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*c = ConnectionConfig(raw)
+	c.ApplyDefaults()
+	return nil
 }
 
 func (c *ConnectionConfig) ApplyDefaults() {
+	if c.Version == 0 {
+		c.Version = CurrentConnectionSchemaVersion
+	}
 	if c.Driver == "" {
 		c.Driver = "mysql"
 	}
@@ -78,6 +132,10 @@ func (c *ConnectionConfig) Validate() error {
 	}
 
 	c.ApplyDefaults()
+
+	if c.Version != CurrentConnectionSchemaVersion {
+		return fmt.Errorf("unsupported version %d", c.Version)
+	}
 
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("connection name is required")

@@ -4,7 +4,14 @@ import (
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
+	"pkg.gostartkit.com/dbx/internal/util"
 )
+
+type ErrorResult struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Layer   string `json:"layer,omitempty"`
+}
 
 type ActionStatus string
 
@@ -18,10 +25,12 @@ type ActionResult struct {
 	Description string       `json:"description"`
 	SQL         string       `json:"sql,omitempty"`
 	Status      ActionStatus `json:"status"`
+	DurationMS  int64        `json:"duration_ms,omitempty"`
 }
 
 type PlanExecutionResult struct {
 	OK          bool           `json:"ok"`
+	Error       *ErrorResult   `json:"error,omitempty"`
 	Connection  string         `json:"connection,omitempty"`
 	Command     string         `json:"command,omitempty"`
 	Template    string         `json:"template,omitempty"`
@@ -71,13 +80,15 @@ type ConnectionCreateResult struct {
 }
 
 type DiagnosticStep struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
+	Name    string         `json:"name"`
+	Status  string         `json:"status"`
+	Error   string         `json:"error,omitempty"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 type DiagnosticResult struct {
 	OK         bool             `json:"ok"`
+	Error      *ErrorResult     `json:"error,omitempty"`
 	Connection string           `json:"connection"`
 	Steps      []DiagnosticStep `json:"steps"`
 }
@@ -90,8 +101,19 @@ type DoctorCheck struct {
 
 type DoctorResult struct {
 	OK         bool          `json:"ok"`
+	Error      *ErrorResult  `json:"error,omitempty"`
 	Connection string        `json:"connection"`
 	Checks     []DoctorCheck `json:"checks"`
+}
+
+type AuditLogResult struct {
+	OK      bool                 `json:"ok"`
+	Entries []config.AuditRecord `json:"entries"`
+}
+
+type ErrorEnvelope struct {
+	OK    bool         `json:"ok"`
+	Error *ErrorResult `json:"error"`
 }
 
 type RedactedConnection struct {
@@ -131,6 +153,7 @@ type StatusResult struct {
 	OK                 bool                `json:"ok"`
 	Connection         *RedactedConnection `json:"connection,omitempty"`
 	ConnectionName     string              `json:"connection_name,omitempty"`
+	Database           string              `json:"database,omitempty"`
 	CurrentSession     string              `json:"current_session,omitempty"`
 	ConnectionExists   bool                `json:"connection_exists,omitempty"`
 	SelectedByFlag     bool                `json:"selected_by_flag,omitempty"`
@@ -216,5 +239,17 @@ func redactPassword(cfg *config.ConnectionConfig) RedactedPassword {
 		return RedactedPassword{Mode: "saved", Value: "[redacted]"}
 	default:
 		return RedactedPassword{Mode: "none"}
+	}
+}
+
+func errorResult(err error) *ErrorResult {
+	info := util.DescribeError(err)
+	if info == nil {
+		return nil
+	}
+	return &ErrorResult{
+		Code:    info.Code,
+		Message: info.Message,
+		Layer:   info.Layer,
 	}
 }

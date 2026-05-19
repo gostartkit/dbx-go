@@ -3,19 +3,20 @@ package app
 import "strings"
 
 var commandAliases = map[string]string{
-	"q":           "exit",
-	"quit":        "exit",
-	"conn":        "connect",
-	"cx":          "connect",
-	"conns":       "connections",
-	"ls db":       "list databases",
-	"show dbs":    "list databases",
-	"create db":   "create database",
-	"drop db":     "drop database",
-	"dry on":      "dry-run on",
-	"dry off":     "dry-run off",
-	"test conn":   "connection test",
-	"doctor conn": "connection doctor",
+	"q":              "exit",
+	"quit":           "exit",
+	"conn":           "connect",
+	"cx":             "connect",
+	"conns":          "connections",
+	"ls db":          "list databases",
+	"show databases": "list databases",
+	"show dbs":       "list databases",
+	"create db":      "create database",
+	"drop db":        "drop database",
+	"dry on":         "dry-run on",
+	"dry off":        "dry-run off",
+	"test conn":      "connection test",
+	"doctor conn":    "connection doctor",
 }
 
 func resolveAlias(line string) string {

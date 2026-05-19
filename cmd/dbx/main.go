@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"pkg.gostartkit.com/dbx/internal/app"
+	"pkg.gostartkit.com/dbx/internal/util"
 )
 
 func main() {
@@ -20,6 +21,9 @@ func main() {
 	if err := cli.Run(ctx, os.Args[1:]); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return
+		}
+		if util.IsOutputHandled(err) {
+			os.Exit(1)
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

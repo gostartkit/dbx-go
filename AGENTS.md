@@ -161,17 +161,19 @@ help aliases
 connect
 connect <name>
 connections
+audit log
 
 connection create
 connection edit <name>
 connection delete <name>
 connection show <name>
-connection test [name]
+connection test [name] [verbose]
 connection doctor [name]
 
 create database
 list databases
 drop database
+use <database>
 
 status
 dry-run on
@@ -217,21 +219,26 @@ Confirm execution?
 
 `dbx <command> ...` runs non-interactive mode through `pkg.gostartkit.com/cmd`.
 
+REPL and one-shot CLI commands should continue to share the same underlying services and execution paths. Avoid duplicating business logic across interactive and non-interactive entrypoints.
+
 Current non-interactive command families include:
 
 ```text
 dbx connect <name>
 dbx connections
+dbx audit log
 
 dbx connection create <name> [flags]
 dbx connection edit <name> [flags]
 dbx connection delete <name> [flags]
 dbx connection show <name>
-dbx connection test <name>
+dbx connection test <name> [--verbose]
 dbx connection doctor <name>
 
 dbx create database <name> [flags]
 dbx list databases [flags]
+dbx show databases [flags]
+dbx show dbs [flags]
 dbx drop database <name> [flags]
 
 dbx status
@@ -243,6 +250,7 @@ Global CLI flags currently supported:
 
 ```text
 --connection <name>
+--database <name>
 --config-dir <path>
 --dry-run
 --yes
@@ -262,6 +270,8 @@ Current layout:
 ```text
 ~/.config/dbx/
   history
+  logs/
+    audit.jsonl
   session.json
   templates/
 
@@ -286,6 +296,7 @@ Current config fields may include:
 
 ```json
 {
+  "version": 1,
   "name": "prod-proxy",
   "driver": "mysql",
   "mode": "proxy-ssh",
@@ -337,6 +348,7 @@ Directories:
 
 Current template features include:
 
+- schema version `1`
 - typed inputs: `string`, `secret`, `select`, `confirm`, `identifier`, `int`
 - transaction flag support
 - dry-run execution
@@ -409,11 +421,12 @@ Keep prompt helpers simple and explicit:
 
 ## Session State
 
-The REPL maintains in-process session state and persists the selected connection name in `session.json`.
+The REPL maintains in-process session state and persists the selected connection and selected database in `session.json`.
 
 The active session concept includes:
 
 - selected connection config
+- selected database name for the REPL session
 - active `*sql.DB` when connected
 - session-scoped dry-run mode
 - reconnect candidate on startup
@@ -468,6 +481,25 @@ sql execution
 shutdown
 ```
 
+Non-interactive JSON errors should expose stable error codes and sanitized messages. Current codes include values such as:
+
+```text
+CONFIG_NOT_FOUND
+VALIDATION_FAILED
+UNSUPPORTED_VERSION
+SSH_AUTH_FAILED
+PROXY_DIAL_FAILED
+MYSQL_ACCESS_DENIED
+TEMPLATE_NOT_FOUND
+SQL_EXECUTION_FAILED
+```
+
+Keep audit logging best-effort:
+
+- append JSONL records to `~/.config/dbx/logs/audit.jsonl`
+- never log passwords, proxy passwords, or secret template inputs
+- do not fail the user command if audit logging itself fails
+
 Keep secrets out of:
 
 - error strings
@@ -506,6 +538,7 @@ template system
 global templates
 connection templates
 dry-run
+audit log
 history persistence
 lightweight completion
 graceful shutdown

@@ -1,12 +1,14 @@
 package template
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 )
 
 type Template struct {
+	Version     int      `json:"version,omitempty"`
 	Name        string   `json:"name"`
 	Transaction bool     `json:"transaction,omitempty"`
 	Match       Match    `json:"match"`
@@ -15,6 +17,36 @@ type Template struct {
 
 	Layer  string `json:"-"`
 	Source string `json:"-"`
+}
+
+const CurrentTemplateSchemaVersion = 1
+
+func (t *Template) ApplyDefaults() {
+	if t.Version == 0 {
+		t.Version = CurrentTemplateSchemaVersion
+	}
+}
+
+func (t *Template) Validate() error {
+	if t == nil {
+		return fmt.Errorf("template is required")
+	}
+	t.ApplyDefaults()
+	if t.Version != CurrentTemplateSchemaVersion {
+		return fmt.Errorf("unsupported version %d", t.Version)
+	}
+	return nil
+}
+
+func (t *Template) UnmarshalJSON(data []byte) error {
+	type rawTemplate Template
+	var raw rawTemplate
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*t = Template(raw)
+	t.ApplyDefaults()
+	return nil
 }
 
 type Match struct {

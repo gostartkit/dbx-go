@@ -78,6 +78,40 @@ func OpenMySQL(ctx context.Context, cfg *config.ConnectionConfig) (*sql.DB, erro
 	return db, nil
 }
 
+func DiagnoseMySQL(ctx context.Context, cfg *config.ConnectionConfig) (*DiagnosticTrace, error) {
+	trace := &DiagnosticTrace{
+		Steps: make([]DiagnosticStep, 0, 3),
+	}
+
+	if cfg.Mode == "proxy" || cfg.Mode == "proxy-ssh" {
+		target := cfg.Address()
+		if cfg.Mode == "proxy-ssh" && cfg.SSH != nil {
+			target = fmt.Sprintf("%s:%d", cfg.SSH.Host, cfg.SSH.Port)
+		}
+		step, err := diagnoseProxyStep(ctx, cfg, target)
+		trace.Steps = append(trace.Steps, step)
+		if err != nil {
+			return trace, err
+		}
+	}
+
+	if cfg.Mode == "ssh" || cfg.Mode == "proxy-ssh" {
+		step, err := diagnoseSSHStep(ctx, cfg)
+		trace.Steps = append(trace.Steps, step)
+		if err != nil {
+			return trace, err
+		}
+	}
+
+	step, err := diagnoseMySQLStep(ctx, cfg)
+	trace.Steps = append(trace.Steps, step)
+	if err != nil {
+		return trace, err
+	}
+
+	return trace, nil
+}
+
 func ListDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
 	return QueryStrings(ctx, db, "SHOW DATABASES")
 }
@@ -130,6 +164,147 @@ func registerSSHDialer(cfg *config.ConnectionConfig) (string, error) {
 	})
 
 	return network, nil
+}
+
+func diagnoseProxyStep(ctx context.Context, cfg *config.ConnectionConfig, targetAddr string) (DiagnosticStep, error) {
+	details := map[string]any{
+		"url":    config.RedactProxyURL(cfg.Proxy.URL),
+		"target": targetAddr,
+	}
+
+	startedAt := time.Now()
+	conn, err := openProxyConn(ctx, cfg, targetAddr)
+	details["duration_ms"] = time.Since(startedAt).Milliseconds()
+	if err != nil {
+		return DiagnosticStep{
+			Name:    "proxy",
+			Status:  "fail",
+			Error:   diagnosticErrorText(err),
+			Details: details,
+		}, err
+	}
+	if conn != nil {
+		_ = conn.Close()
+	}
+
+	return DiagnosticStep{
+		Name:    "proxy",
+		Status:  "ok",
+		Details: details,
+	}, nil
+}
+
+func diagnoseSSHStep(ctx context.Context, cfg *config.ConnectionConfig) (DiagnosticStep, error) {
+	sshAddr := fmt.Sprintf("%s:%d", cfg.SSH.Host, cfg.SSH.Port)
+	details := map[string]any{
+		"host": sshAddr,
+		"user": cfg.SSH.User,
+	}
+
+	startedAt := time.Now()
+	authMethods, err := sshAuthMethods(cfg.SSH)
+	if err != nil {
+		details["duration_ms"] = time.Since(startedAt).Milliseconds()
+		return DiagnosticStep{
+			Name:    "ssh",
+			Status:  "fail",
+			Error:   diagnosticErrorText(err),
+			Details: details,
+		}, err
+	}
+
+	hostKeyCallback, err := sshHostKeyCallback()
+	if err != nil {
+		details["duration_ms"] = time.Since(startedAt).Milliseconds()
+		return DiagnosticStep{
+			Name:    "ssh",
+			Status:  "fail",
+			Error:   diagnosticErrorText(err),
+			Details: details,
+		}, err
+	}
+
+	clientConfig := &ssh.ClientConfig{
+		User:            cfg.SSH.User,
+		Auth:            authMethods,
+		HostKeyCallback: hostKeyCallback,
+		Timeout:         cfg.ConnectTimeout(),
+	}
+
+	baseConn, err := dialSSHBaseConn(ctx, cfg, sshAddr)
+	if err != nil {
+		details["duration_ms"] = time.Since(startedAt).Milliseconds()
+		return DiagnosticStep{
+			Name:    "ssh",
+			Status:  "fail",
+			Error:   diagnosticErrorText(err),
+			Details: details,
+		}, err
+	}
+
+	clientConn, chans, reqs, err := ssh.NewClientConn(baseConn, sshAddr, clientConfig)
+	if err != nil {
+		_ = baseConn.Close()
+		details["duration_ms"] = time.Since(startedAt).Milliseconds()
+		wrapped := util.WrapLayer("ssh", "complete SSH handshake with "+sshAddr, err)
+		return DiagnosticStep{
+			Name:    "ssh",
+			Status:  "fail",
+			Error:   diagnosticErrorText(wrapped),
+			Details: details,
+		}, wrapped
+	}
+
+	client := ssh.NewClient(clientConn, chans, reqs)
+	_ = client.Close()
+	details["duration_ms"] = time.Since(startedAt).Milliseconds()
+	return DiagnosticStep{
+		Name:    "ssh",
+		Status:  "ok",
+		Details: details,
+	}, nil
+}
+
+func diagnoseMySQLStep(ctx context.Context, cfg *config.ConnectionConfig) (DiagnosticStep, error) {
+	details := map[string]any{
+		"target": cfg.Address(),
+	}
+
+	startedAt := time.Now()
+	db, err := OpenMySQL(ctx, cfg)
+	details["duration_ms"] = time.Since(startedAt).Milliseconds()
+	if err != nil {
+		return DiagnosticStep{
+			Name:    "mysql",
+			Status:  "fail",
+			Error:   diagnosticErrorText(err),
+			Details: details,
+		}, err
+	}
+	if db != nil {
+		_ = db.Close()
+	}
+
+	return DiagnosticStep{
+		Name:    "mysql",
+		Status:  "ok",
+		Details: details,
+	}, nil
+}
+
+func diagnosticErrorText(err error) string {
+	current := err
+	for {
+		layerErr, ok := current.(*util.LayerError)
+		if !ok || layerErr.Err == nil {
+			break
+		}
+		current = layerErr.Err
+	}
+	if current == nil {
+		return ""
+	}
+	return current.Error()
 }
 
 func registerProxyDialer(cfg *config.ConnectionConfig) (string, error) {

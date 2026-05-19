@@ -66,4 +66,24 @@ func TestTemplateTransactionJSON(t *testing.T) {
 	if !tmpl.Transaction {
 		t.Fatalf("Transaction = false, want true")
 	}
+	if tmpl.Version != CurrentTemplateSchemaVersion {
+		t.Fatalf("Version = %d", tmpl.Version)
+	}
+}
+
+func TestTemplateValidateRejectsUnsupportedVersion(t *testing.T) {
+	t.Parallel()
+
+	tmpl := &Template{
+		Version: 2,
+		Name:    "bad",
+		Match: Match{
+			Command: "create database",
+		},
+		Actions: []Action{{Type: "sql", Description: "x", SQL: "SELECT 1"}},
+	}
+	err := tmpl.Validate()
+	if err == nil || err.Error() != "unsupported version 2" {
+		t.Fatalf("Validate error = %v", err)
+	}
 }

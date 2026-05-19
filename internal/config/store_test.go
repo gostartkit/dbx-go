@@ -1,10 +1,12 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestDefaultRootDirAndStorePaths(t *testing.T) {
@@ -30,6 +32,9 @@ func TestDefaultRootDirAndStorePaths(t *testing.T) {
 	}
 	if got := store.GlobalTemplatesDir(); got != filepath.Join(wantRoot, "templates") {
 		t.Fatalf("GlobalTemplatesDir = %q", got)
+	}
+	if got := store.AuditLogPath(); got != filepath.Join(wantRoot, "logs", "audit.jsonl") {
+		t.Fatalf("AuditLogPath = %q", got)
 	}
 }
 
@@ -69,6 +74,9 @@ func TestSaveLoadAndDeleteConnection(t *testing.T) {
 	if loaded.Name != cfg.Name || loaded.PasswordEnv != cfg.PasswordEnv {
 		t.Fatalf("loaded config = %#v", loaded)
 	}
+	if loaded.Version != CurrentConnectionSchemaVersion {
+		t.Fatalf("loaded version = %d", loaded.Version)
+	}
 	if loaded.Proxy == nil || loaded.Proxy.URL != cfg.Proxy.URL {
 		t.Fatalf("loaded proxy config = %#v", loaded.Proxy)
 	}
@@ -83,5 +91,78 @@ func TestSaveLoadAndDeleteConnection(t *testing.T) {
 	_, err = store.LoadConnection("prod")
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("LoadConnection after delete error = %v, want os.ErrNotExist", err)
+	}
+}
+
+func TestAppendAndLoadAudit(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	record := &AuditRecord{
+		Timestamp:  time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
+		Command:    "create database",
+		Connection: "prod",
+		Mode:       "proxy-ssh",
+		DryRun:     false,
+		Success:    true,
+		DurationMS: 123,
+	}
+	if err := store.AppendAudit(record); err != nil {
+		t.Fatalf("AppendAudit returned error: %v", err)
+	}
+
+	loaded, err := store.LoadAudit(10)
+	if err != nil {
+		t.Fatalf("LoadAudit returned error: %v", err)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("audit entries = %d", len(loaded))
+	}
+	if loaded[0].Command != "create database" || loaded[0].Connection != "prod" {
+		t.Fatalf("unexpected audit entry: %+v", loaded[0])
+	}
+
+	data, err := os.ReadFile(store.AuditLogPath())
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	var parsed AuditRecord
+	if err := json.Unmarshal(data[:len(data)-1], &parsed); err != nil {
+		t.Fatalf("Unmarshal returned error: %v", err)
+	}
+	if parsed.Mode != "proxy-ssh" || parsed.DurationMS != 123 {
+		t.Fatalf("unexpected parsed audit record: %+v", parsed)
+	}
+}
+
+func TestSaveAndLoadSessionWithDatabase(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+
+	session := &SessionFile{
+		CurrentConnection: "prod",
+		CurrentDatabase:   "app_prod",
+	}
+	if err := store.SaveSession(session); err != nil {
+		t.Fatalf("SaveSession returned error: %v", err)
+	}
+
+	loaded, err := store.LoadSession()
+	if err != nil {
+		t.Fatalf("LoadSession returned error: %v", err)
+	}
+	if loaded.CurrentConnection != "prod" || loaded.CurrentDatabase != "app_prod" {
+		t.Fatalf("unexpected session: %+v", loaded)
+	}
+
+	data, err := os.ReadFile(store.SessionPath())
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	if string(data) != "{\n  \"connection\": \"prod\",\n  \"database\": \"app_prod\"\n}\n" {
+		t.Fatalf("unexpected session file: %q", string(data))
 	}
 }

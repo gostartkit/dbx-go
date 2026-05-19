@@ -47,6 +47,18 @@ func (b *cliBuilder) listGroupCommand() *cmd.Command {
 	}
 }
 
+func (b *cliBuilder) showGroupCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "show",
+		UsageLine: "dbx show <subcommand>",
+		Short:     "Show database resources",
+		SubCommands: []*cmd.Command{
+			b.showDatabasesCommand(),
+			b.showDBsCommand(),
+		},
+	}
+}
+
 func (b *cliBuilder) dropGroupCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "drop",
@@ -56,6 +68,22 @@ func (b *cliBuilder) dropGroupCommand() *cmd.Command {
 			b.dropDatabaseCommand(),
 		},
 	}
+}
+
+func (b *cliBuilder) showDatabasesCommand() *cmd.Command {
+	command := b.listDatabasesCommand()
+	command.Name = "databases"
+	command.UsageLine = "dbx show databases [flags]"
+	command.Short = "Alias for list databases"
+	return command
+}
+
+func (b *cliBuilder) showDBsCommand() *cmd.Command {
+	command := b.listDatabasesCommand()
+	command.Name = "dbs"
+	command.UsageLine = "dbx show dbs [flags]"
+	command.Short = "Alias for list databases"
+	return command
 }
 
 func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
@@ -81,8 +109,8 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "create database", fmt.Errorf("usage: dbx create database <name> [flags]"))
 			}
-			return b.withApplication(ctx, func(application *Application) error {
-				return b.runCreateDatabase(ctx, application, args[0], flags)
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "create database", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runCreateDatabase(ctx, application, args[0], flags, meta)
 			})
 		},
 	}
@@ -103,8 +131,8 @@ func (b *cliBuilder) listDatabasesCommand() *cmd.Command {
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "list databases", err)
 			}
-			return b.withApplication(ctx, func(application *Application) error {
-				return b.runListDatabases(ctx, application, flags)
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "list databases", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runListDatabases(ctx, application, flags, meta)
 			})
 		},
 	}
@@ -126,8 +154,8 @@ func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "drop database", fmt.Errorf("usage: dbx drop database <name> [flags]"))
 			}
-			return b.withApplication(ctx, func(application *Application) error {
-				return b.runDropDatabase(ctx, application, args[0], flags)
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "drop database", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runDropDatabase(ctx, application, args[0], flags, meta)
 			})
 		},
 	}
@@ -143,10 +171,14 @@ func (b *cliBuilder) statusCommand() *cmd.Command {
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "status", err)
 			}
-			return b.withApplication(ctx, func(application *Application) error {
-				result, err := application.statusForCLI(b.globals.Connection)
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "status", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				result, err := application.statusForCLI(ctx, b.globals.Connection, b.globals.Database)
 				if err != nil {
 					return err
+				}
+				if result.Connection != nil {
+					meta.Connection = result.Connection.Name
+					meta.Mode = result.Connection.Mode
 				}
 				return b.writeOutput(result, func() error {
 					if result.Connection == nil {
@@ -154,6 +186,9 @@ func (b *cliBuilder) statusCommand() *cmd.Command {
 						return nil
 					}
 					fmt.Fprintf(b.out, "Connection: %s\n", result.Connection.Name)
+					if result.Database != "" {
+						fmt.Fprintf(b.out, "Database: %s\n", result.Database)
+					}
 					fmt.Fprintf(b.out, "Driver: %s\n", result.Connection.Driver)
 					fmt.Fprintf(b.out, "Mode: %s\n", result.Connection.Mode)
 					fmt.Fprintf(b.out, "Address: %s:%d\n", result.Connection.Host, result.Connection.Port)
@@ -168,13 +203,20 @@ func (b *cliBuilder) statusCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Application, name string, flags *createDatabaseFlags) error {
+func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Application, name string, flags *createDatabaseFlags, meta *auditMetadata) error {
 	if err := util.ValidateIdentifier(name); err != nil {
 		return util.WrapLayer("validation", "validate database name", err)
 	}
 
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
+		return err
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+	}
+	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
 		return err
 	}
 
@@ -236,6 +278,13 @@ func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Applica
 		application.printPlanResult(result)
 	}
 	if err != nil {
+		if strings.EqualFold(b.globals.Format, "json") && result != nil {
+			result.Error = errorResult(err)
+			if writeErr := b.writeOutput(result, func() error { return nil }); writeErr != nil {
+				return writeErr
+			}
+			return util.MarkOutputHandled(err)
+		}
 		return err
 	}
 
@@ -245,9 +294,16 @@ func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Applica
 	})
 }
 
-func (b *cliBuilder) runListDatabases(ctx context.Context, application *Application, flags *planOnlyFlags) error {
+func (b *cliBuilder) runListDatabases(ctx context.Context, application *Application, flags *planOnlyFlags, meta *auditMetadata) error {
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
+		return err
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+	}
+	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
 		return err
 	}
 
@@ -306,7 +362,7 @@ func (b *cliBuilder) runListDatabases(ctx context.Context, application *Applicat
 	})
 }
 
-func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Application, name string, flags *planOnlyFlags) error {
+func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Application, name string, flags *planOnlyFlags, meta *auditMetadata) error {
 	if err := util.ValidateIdentifier(name); err != nil {
 		return util.WrapLayer("validation", "validate database name", err)
 	}
@@ -316,6 +372,13 @@ func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Applicati
 
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
+		return err
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+	}
+	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
 		return err
 	}
 	selectedTemplate, err := application.selectTemplateForCLI("drop database", cfg, flags.template)
@@ -358,6 +421,13 @@ func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Applicati
 		application.printPlanResult(result)
 	}
 	if err != nil {
+		if strings.EqualFold(b.globals.Format, "json") && result != nil {
+			result.Error = errorResult(err)
+			if writeErr := b.writeOutput(result, func() error { return nil }); writeErr != nil {
+				return writeErr
+			}
+			return util.MarkOutputHandled(err)
+		}
 		return err
 	}
 	return b.writeOutput(result, func() error {

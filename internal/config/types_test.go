@@ -30,6 +30,9 @@ func TestConnectionConfigValidateProxySSH(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate returned error: %v", err)
 	}
+	if cfg.Version != CurrentConnectionSchemaVersion {
+		t.Fatalf("Version = %d", cfg.Version)
+	}
 }
 
 func TestConnectionConfigValidateProxy(t *testing.T) {
@@ -154,5 +157,31 @@ func TestParseAndRedactProxyURL(t *testing.T) {
 	}
 	if strings.Contains(redacted, "proxy_password") {
 		t.Fatalf("redacted proxy URL leaked password: %q", redacted)
+	}
+}
+
+func TestConnectionConfigVersionDefaultsAndRejectsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	cfg := &ConnectionConfig{
+		Name:        "prod",
+		Driver:      "mysql",
+		Mode:        "direct",
+		Host:        "127.0.0.1",
+		Port:        3306,
+		User:        "root",
+		PasswordEnv: "MYSQL_PROD_PASSWORD",
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+	if cfg.Version != CurrentConnectionSchemaVersion {
+		t.Fatalf("Version = %d", cfg.Version)
+	}
+
+	cfg.Version = 2
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "unsupported version 2") {
+		t.Fatalf("Validate error = %v", err)
 	}
 }

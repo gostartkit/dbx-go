@@ -3,7 +3,8 @@ package template
 func Builtins() []Template {
 	return []Template{
 		{
-			Name: "builtin_create_database",
+			Version: 1,
+			Name:    "builtin_create_database",
 			Match: Match{
 				Command: "create database",
 				Driver:  "mysql",
@@ -19,7 +20,8 @@ func Builtins() []Template {
 			Source: "builtin:create database",
 		},
 		{
-			Name: "builtin_list_databases",
+			Version: 1,
+			Name:    "builtin_list_databases",
 			Match: Match{
 				Command: "list databases",
 				Driver:  "mysql",
@@ -35,7 +37,8 @@ func Builtins() []Template {
 			Source: "builtin:list databases",
 		},
 		{
-			Name: "builtin_drop_database",
+			Version: 1,
+			Name:    "builtin_drop_database",
 			Match: Match{
 				Command: "drop database",
 				Driver:  "mysql",

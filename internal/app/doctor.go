@@ -16,17 +16,30 @@ import (
 )
 
 func (a *Application) handleConnectionDoctor(ctx context.Context, name string) error {
-	selected, err := a.resolveConnectionNameForSelection(ctx, name, "connection doctor")
-	if err != nil {
-		return err
-	}
+	return a.auditCommand(ctx, auditMetadata{Command: "connection doctor"}, func(meta *auditMetadata) error {
+		selected, err := a.resolveConnectionNameForSelection(ctx, name, "connection doctor")
+		if err != nil {
+			return err
+		}
+		meta.Connection = selected
 
-	result, doctorErr := a.doctorConnection(selected)
-	a.printDoctorResult(result)
-	if doctorErr != nil {
+		result, doctorErr := a.doctorConnection(selected)
+		if result != nil {
+			meta.Connection = result.Connection
+		}
+		if cfg, err := a.store.LoadConnection(selected); err == nil {
+			meta.Mode = cfg.Mode
+		}
+		a.printDoctorResult(result)
+		if doctorErr != nil {
+			failed := false
+			meta.Success = &failed
+			return nil
+		}
+		succeeded := true
+		meta.Success = &succeeded
 		return nil
-	}
-	return nil
+	})
 }
 
 func (a *Application) doctorConnection(name string) (*DoctorResult, error) {

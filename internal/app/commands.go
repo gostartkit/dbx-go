@@ -26,12 +26,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 	switch {
 	case len(fields) == 2 && fields[0] == "connect":
 		return false, a.handleConnectByName(ctx, fields[1])
+	case len(fields) == 2 && fields[0] == "use":
+		return false, a.handleUseDatabase(ctx, fields[1])
 	case line == "connection create":
 		return false, a.handleConnectionCreate(ctx)
 	case len(fields) == 2 && fields[0] == "connection" && fields[1] == "doctor":
 		return false, a.handleConnectionDoctor(ctx, "")
-	case len(fields) == 2 && fields[0] == "connection" && fields[1] == "test":
-		return false, a.handleConnectionTest(ctx, "")
 	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "doctor":
 		return false, a.handleConnectionDoctor(ctx, fields[2])
 	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "edit":
@@ -40,8 +40,11 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleConnectionDelete(ctx, fields[2])
 	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "show":
 		return false, a.handleConnectionShow(ctx, fields[2])
-	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "test":
-		return false, a.handleConnectionTest(ctx, fields[2])
+	case len(fields) >= 2 && fields[0] == "connection" && fields[1] == "test":
+		name, verbose, ok := parseConnectionTestArgs(fields[2:])
+		if ok {
+			return false, a.handleConnectionTest(ctx, name, verbose)
+		}
 	case len(fields) >= 1 && fields[0] == "help":
 		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(line, "help")))
 	}
@@ -57,6 +60,8 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleConnect(ctx)
 	case "connections":
 		return false, a.handleConnections(ctx)
+	case "audit log":
+		return false, a.handleAuditLog(ctx)
 	case "status":
 		return false, a.handleStatus(ctx)
 	case "create database":
@@ -85,280 +90,325 @@ func (a *Application) handleHelp(topic string) error {
 }
 
 func (a *Application) handleConnect(ctx context.Context) error {
-	connections, err := a.store.ListConnections()
-	if err != nil {
-		return util.WrapLayer("config", "list configured connections", err)
-	}
-	if len(connections) == 0 {
-		a.prompt.Println("No saved connections. Run: connection create")
-		return nil
-	}
+	return a.auditCommand(ctx, auditMetadata{Command: "connect"}, func(meta *auditMetadata) error {
+		connections, err := a.store.ListConnections()
+		if err != nil {
+			return util.WrapLayer("config", "list configured connections", err)
+		}
+		if len(connections) == 0 {
+			a.prompt.Println("No saved connections. Run: connection create")
+			return nil
+		}
 
-	name, err := a.promptForConnectionSelection(ctx, connections)
-	if err != nil {
-		return err
-	}
-	return a.handleConnectByName(ctx, name)
+		name, err := a.promptForConnectionSelection(ctx, connections)
+		if err != nil {
+			return err
+		}
+		return a.connectByName(ctx, name, meta)
+	})
 }
 
 func (a *Application) handleConnections(ctx context.Context) error {
-	a.prompt.Println("Execution Plan")
-	a.prompt.Printf("  1. Read connection configs from %s\n", a.store.RootDir)
+	return a.auditCommand(ctx, auditMetadata{Command: "connections"}, func(meta *auditMetadata) error {
+		a.prompt.Println("Execution Plan")
+		a.prompt.Printf("  1. Read connection configs from %s\n", a.store.RootDir)
 
-	confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-	if err != nil {
-		return err
-	}
-	if !confirmed {
-		a.prompt.Println("Cancelled.")
+		confirmed, err := a.confirm(ctx, "Confirm execution?", true)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			a.prompt.Println("Cancelled.")
+			return nil
+		}
+
+		connections, err := a.store.ListConnections()
+		if err != nil {
+			return util.WrapLayer("config", "list configured connections", err)
+		}
+		if len(connections) == 0 {
+			a.prompt.Println("No configured connections found.")
+			return nil
+		}
+
+		a.prompt.Println("Configured connections:")
+		for _, connection := range connections {
+			a.prompt.Printf("  - %s (%s %s %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address())
+		}
 		return nil
-	}
-
-	connections, err := a.store.ListConnections()
-	if err != nil {
-		return util.WrapLayer("config", "list configured connections", err)
-	}
-	if len(connections) == 0 {
-		a.prompt.Println("No configured connections found.")
-		return nil
-	}
-
-	a.prompt.Println("Configured connections:")
-	for _, connection := range connections {
-		a.prompt.Printf("  - %s (%s %s %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address())
-	}
-	return nil
+	})
 }
 
 func (a *Application) handleStatus(ctx context.Context) error {
-	a.prompt.Println("Execution Plan")
-	a.prompt.Println("  1. Inspect the current session and ping the active database connection")
+	return a.auditCommand(ctx, auditMetadata{Command: "status", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		a.prompt.Println("Execution Plan")
+		a.prompt.Println("  1. Inspect the current session and ping the active database connection")
 
-	confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-	if err != nil {
-		return err
-	}
-	if !confirmed {
-		a.prompt.Println("Cancelled.")
+		confirmed, err := a.confirm(ctx, "Confirm execution?", true)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			a.prompt.Println("Cancelled.")
+			return nil
+		}
+
+		if a.session.Connection == nil {
+			a.prompt.Println("No active connection.")
+			return nil
+		}
+		meta.Connection = a.session.Connection.Name
+		meta.Mode = a.session.Connection.Mode
+
+		a.prompt.Printf("Connection: %s\n", a.session.Connection.Name)
+		if strings.TrimSpace(a.session.Database) != "" {
+			a.prompt.Printf("Database: %s\n", a.session.Database)
+		}
+		a.prompt.Printf("Driver: %s\n", a.session.Connection.Driver)
+		a.prompt.Printf("Mode: %s\n", a.session.Connection.Mode)
+		a.prompt.Printf("Address: %s\n", a.session.Connection.Address())
+		a.prompt.Printf("Connect timeout: %s\n", a.session.Connection.ConnectTimeout())
+		a.prompt.Printf("Query timeout: %s\n", a.session.Connection.QueryTimeout())
+		a.prompt.Printf("Dry run: %t\n", a.dryRun)
+
+		if a.session.DB == nil {
+			a.prompt.Println("Status: selected but not connected")
+			return nil
+		}
+
+		if err := a.connector.Ping(ctx, a.session.Connection, a.session.DB); err != nil {
+			_ = a.session.Close()
+			failed := false
+			meta.Success = &failed
+			a.prompt.Printf("Status: stale connection (%v)\n", err)
+			return nil
+		}
+
+		a.prompt.Println("Status: connected")
 		return nil
-	}
+	})
+}
 
-	if a.session.Connection == nil {
-		a.prompt.Println("No active connection.")
+func (a *Application) handleUseDatabase(ctx context.Context, database string) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "use"}, func(meta *auditMetadata) error {
+		cfg, db, err := a.requireConnection(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+
+		if err := a.setRuntimeDatabaseSelection(ctx, cfg, db, database, true); err != nil {
+			if strings.Contains(err.Error(), "database not found:") {
+				return fmt.Errorf("Database not found: %s", database)
+			}
+			return err
+		}
+		a.prompt.Printf("Using database: %s\n", a.session.Database)
 		return nil
-	}
-
-	a.prompt.Printf("Connection: %s\n", a.session.Connection.Name)
-	a.prompt.Printf("Driver: %s\n", a.session.Connection.Driver)
-	a.prompt.Printf("Mode: %s\n", a.session.Connection.Mode)
-	a.prompt.Printf("Address: %s\n", a.session.Connection.Address())
-	a.prompt.Printf("Connect timeout: %s\n", a.session.Connection.ConnectTimeout())
-	a.prompt.Printf("Query timeout: %s\n", a.session.Connection.QueryTimeout())
-	a.prompt.Printf("Dry run: %t\n", a.dryRun)
-
-	if a.session.DB == nil {
-		a.prompt.Println("Status: selected but not connected")
-		return nil
-	}
-
-	if err := a.connector.Ping(ctx, a.session.Connection, a.session.DB); err != nil {
-		_ = a.session.Close()
-		a.prompt.Printf("Status: stale connection (%v)\n", err)
-		return nil
-	}
-
-	a.prompt.Println("Status: connected")
-	return nil
+	})
 }
 
 func (a *Application) handleCreateDatabase(ctx context.Context) error {
-	cfg, db, err := a.requireConnection(ctx)
-	if err != nil {
-		return err
-	}
+	return a.auditCommand(ctx, auditMetadata{Command: "create database", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		cfg, db, err := a.requireConnection(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
 
-	databaseName, err := a.ask(ctx, "Database name", "")
-	if err != nil {
-		return err
-	}
-	if err := util.ValidateIdentifier(databaseName); err != nil {
-		return err
-	}
+		databaseName, err := a.ask(ctx, "Database name", "")
+		if err != nil {
+			return err
+		}
+		if err := util.ValidateIdentifier(databaseName); err != nil {
+			return err
+		}
 
-	charset, err := a.choose(ctx, "Charset", []string{"utf8mb4", "utf8"}, "utf8mb4")
-	if err != nil {
-		return err
-	}
+		charset, err := a.choose(ctx, "Charset", []string{"utf8mb4", "utf8"}, "utf8mb4")
+		if err != nil {
+			return err
+		}
 
-	collationOptions := map[string][]string{
-		"utf8mb4": {"utf8mb4_unicode_ci", "utf8mb4_general_ci"},
-		"utf8":    {"utf8_unicode_ci", "utf8_general_ci"},
-	}
+		collationOptions := map[string][]string{
+			"utf8mb4": {"utf8mb4_unicode_ci", "utf8mb4_general_ci"},
+			"utf8":    {"utf8_unicode_ci", "utf8_general_ci"},
+		}
 
-	collationChoices := collationOptions[charset]
-	collation, err := a.choose(ctx, "Collation", collationChoices, collationChoices[0])
-	if err != nil {
-		return err
-	}
+		collationChoices := collationOptions[charset]
+		collation, err := a.choose(ctx, "Collation", collationChoices, collationChoices[0])
+		if err != nil {
+			return err
+		}
 
-	template, err := a.templates.Resolve("create database", cfg)
-	if err != nil {
-		return util.WrapLayer("template", "resolve create database template", err)
-	}
+		template, err := a.templates.Resolve("create database", cfg)
+		if err != nil {
+			return util.WrapLayer("template", "resolve create database template", err)
+		}
 
-	values := map[string]string{
-		"database":  databaseName,
-		"charset":   charset,
-		"collation": collation,
-	}
+		values := map[string]string{
+			"database":  databaseName,
+			"charset":   charset,
+			"collation": collation,
+		}
 
-	if err := a.collectTemplateInputs(ctx, template, values); err != nil {
-		return util.WrapLayer("template", "collect template inputs", err)
-	}
+		if err := a.collectTemplateInputs(ctx, template, values); err != nil {
+			return util.WrapLayer("template", "collect template inputs", err)
+		}
 
-	plan, err := tpl.BuildPlan(template, cfg, values)
-	if err != nil {
-		return util.WrapLayer("template", "build create database execution plan", err)
-	}
+		plan, err := tpl.BuildPlan(template, cfg, values)
+		if err != nil {
+			return util.WrapLayer("template", "build create database execution plan", err)
+		}
 
-	previewPlan, err := tpl.BuildPlan(template, cfg, redactTemplateValues(template, values))
-	if err != nil {
-		return util.WrapLayer("template", "build redacted create database preview", err)
-	}
+		previewPlan, err := tpl.BuildPlan(template, cfg, redactTemplateValues(template, values))
+		if err != nil {
+			return util.WrapLayer("template", "build redacted create database preview", err)
+		}
 
-	confirmed, err := a.previewAndConfirm(ctx, previewPlan)
-	if err != nil {
-		return err
-	}
-	if !confirmed {
-		a.prompt.Println("Cancelled.")
+		confirmed, err := a.previewAndConfirm(ctx, previewPlan)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			a.prompt.Println("Cancelled.")
+			return nil
+		}
+
+		result, err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun)
+		a.printPlanResult(result)
+		if err != nil {
+			return err
+		}
+
+		a.prompt.Printf("Database %s created.\n", databaseName)
 		return nil
-	}
-
-	result, err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun)
-	a.printPlanResult(result)
-	if err != nil {
-		return err
-	}
-
-	a.prompt.Printf("Database %s created.\n", databaseName)
-	return nil
+	})
 }
 
 func (a *Application) handleListDatabases(ctx context.Context) error {
-	cfg, db, err := a.requireConnection(ctx)
-	if err != nil {
-		return err
-	}
+	return a.auditCommand(ctx, auditMetadata{Command: "list databases", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		cfg, db, err := a.requireConnection(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
 
-	template, err := a.templates.Resolve("list databases", cfg)
-	if err != nil {
-		return util.WrapLayer("template", "resolve list databases template", err)
-	}
+		template, err := a.templates.Resolve("list databases", cfg)
+		if err != nil {
+			return util.WrapLayer("template", "resolve list databases template", err)
+		}
 
-	plan, err := tpl.BuildPlan(template, cfg, map[string]string{})
-	if err != nil {
-		return util.WrapLayer("template", "build list databases execution plan", err)
-	}
+		plan, err := tpl.BuildPlan(template, cfg, map[string]string{})
+		if err != nil {
+			return util.WrapLayer("template", "build list databases execution plan", err)
+		}
 
-	confirmed, err := a.previewAndConfirm(ctx, plan)
-	if err != nil {
-		return err
-	}
-	if !confirmed {
-		a.prompt.Println("Cancelled.")
+		confirmed, err := a.previewAndConfirm(ctx, plan)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			a.prompt.Println("Cancelled.")
+			return nil
+		}
+		if a.dryRun {
+			a.printPlanResult(&PlanExecutionResult{
+				OK:      true,
+				DryRun:  true,
+				Actions: []ActionResult{{Description: plan.Actions[0].Description, SQL: plan.Actions[0].SQL, Status: ActionStatusDryRun}},
+			})
+			return nil
+		}
+
+		results, err := a.connector.QueryStrings(ctx, cfg, db, plan.Actions[0].SQL)
+		if err != nil {
+			return err
+		}
+
+		if len(results) == 0 {
+			a.prompt.Println("No databases found.")
+			return nil
+		}
+
+		a.prompt.Println("Databases:")
+		for _, name := range results {
+			a.prompt.Printf("  - %s\n", name)
+		}
 		return nil
-	}
-	if a.dryRun {
-		a.printPlanResult(&PlanExecutionResult{
-			OK:      true,
-			DryRun:  true,
-			Actions: []ActionResult{{Description: plan.Actions[0].Description, SQL: plan.Actions[0].SQL, Status: ActionStatusDryRun}},
-		})
-		return nil
-	}
-
-	results, err := a.connector.QueryStrings(ctx, cfg, db, plan.Actions[0].SQL)
-	if err != nil {
-		return err
-	}
-
-	if len(results) == 0 {
-		a.prompt.Println("No databases found.")
-		return nil
-	}
-
-	a.prompt.Println("Databases:")
-	for _, name := range results {
-		a.prompt.Printf("  - %s\n", name)
-	}
-	return nil
+	})
 }
 
 func (a *Application) handleDropDatabase(ctx context.Context) error {
-	cfg, db, err := a.requireConnection(ctx)
-	if err != nil {
-		return err
-	}
+	return a.auditCommand(ctx, auditMetadata{Command: "drop database", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		cfg, db, err := a.requireConnection(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
 
-	databases, err := a.connector.ListDatabases(ctx, cfg, db)
-	if err != nil {
-		return err
-	}
+		databases, err := a.connector.ListDatabases(ctx, cfg, db)
+		if err != nil {
+			return err
+		}
 
-	choices := filterDroppableDatabases(databases)
-	if len(choices) == 0 {
-		return fmt.Errorf("no droppable databases found")
-	}
+		choices := filterDroppableDatabases(databases)
+		if len(choices) == 0 {
+			return fmt.Errorf("no droppable databases found")
+		}
 
-	databaseName, err := a.choose(ctx, "Database name", choices, "")
-	if err != nil {
-		return err
-	}
-	if err := util.ValidateIdentifier(databaseName); err != nil {
-		return err
-	}
+		databaseName, err := a.choose(ctx, "Database name", choices, "")
+		if err != nil {
+			return err
+		}
+		if err := util.ValidateIdentifier(databaseName); err != nil {
+			return err
+		}
 
-	template, err := a.templates.Resolve("drop database", cfg)
-	if err != nil {
-		return util.WrapLayer("template", "resolve drop database template", err)
-	}
+		template, err := a.templates.Resolve("drop database", cfg)
+		if err != nil {
+			return util.WrapLayer("template", "resolve drop database template", err)
+		}
 
-	values := map[string]string{
-		"database": databaseName,
-	}
+		values := map[string]string{
+			"database": databaseName,
+		}
 
-	if err := a.collectTemplateInputs(ctx, template, values); err != nil {
-		return util.WrapLayer("template", "collect template inputs", err)
-	}
+		if err := a.collectTemplateInputs(ctx, template, values); err != nil {
+			return util.WrapLayer("template", "collect template inputs", err)
+		}
 
-	plan, err := tpl.BuildPlan(template, cfg, values)
-	if err != nil {
-		return util.WrapLayer("template", "build drop database execution plan", err)
-	}
+		plan, err := tpl.BuildPlan(template, cfg, values)
+		if err != nil {
+			return util.WrapLayer("template", "build drop database execution plan", err)
+		}
 
-	previewPlan, err := tpl.BuildPlan(template, cfg, redactTemplateValues(template, values))
-	if err != nil {
-		return util.WrapLayer("template", "build redacted drop database preview", err)
-	}
+		previewPlan, err := tpl.BuildPlan(template, cfg, redactTemplateValues(template, values))
+		if err != nil {
+			return util.WrapLayer("template", "build redacted drop database preview", err)
+		}
 
-	confirmed, err := a.previewAndConfirm(ctx, previewPlan)
-	if err != nil {
-		return err
-	}
-	if !confirmed {
-		a.prompt.Println("Cancelled.")
+		confirmed, err := a.previewAndConfirm(ctx, previewPlan)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			a.prompt.Println("Cancelled.")
+			return nil
+		}
+
+		result, err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun)
+		a.printPlanResult(result)
+		if err != nil {
+			return err
+		}
+
+		a.prompt.Printf("Database %s dropped.\n", databaseName)
 		return nil
-	}
-
-	result, err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun)
-	a.printPlanResult(result)
-	if err != nil {
-		return err
-	}
-
-	a.prompt.Printf("Database %s dropped.\n", databaseName)
-	return nil
+	})
 }
 
 func (a *Application) requireConnection(ctx context.Context) (*config.ConnectionConfig, *sql.DB, error) {

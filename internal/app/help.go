@@ -22,17 +22,19 @@ help aliases          Show supported aliases
 connect               Connect to a saved connection
 connect <name>        Connect to a specific saved connection
 connections           List saved connections
+audit log             Show recent audit entries
 
 connection create     Create a new saved connection
 connection edit <name> Edit a saved connection
 connection delete <name> Delete a saved connection
 connection show <name> Show a saved connection
-connection test [name] Test a saved connection
+connection test [name] [verbose] Test a saved connection
 connection doctor [name] Inspect a saved connection statically
 
 create database       Create a database from a template
 list databases        List databases on the active connection
 drop database         Drop a database from a template
+use <database>        Select a database for the active REPL session
 
 status                Show the current session status
 dry-run on            Preview SQL without executing it
@@ -49,7 +51,7 @@ Subcommands:
   connection edit <name>
   connection delete <name>
   connection show <name>
-  connection test [name]
+  connection test [name] [verbose]
   connection doctor [name]
 
 Examples:
@@ -57,6 +59,7 @@ Examples:
   connection edit prod
   connection show dev
   connection test prod
+  connection test prod verbose
   connection doctor prod`),
 	},
 	"connection create": {
@@ -123,7 +126,9 @@ This command checks:
 
 Examples:
   connection test
-  connection test prod`),
+  connection test prod
+  connection test prod verbose
+  dbx connection test prod --verbose`),
 	},
 	"connection doctor": {
 		title: "connection doctor",
@@ -160,6 +165,18 @@ List all saved connections.
 Example:
   connections`),
 	},
+	"audit log": {
+		title: "audit log",
+		body: strings.TrimSpace(`
+Show recent local audit log entries.
+
+Audit entries are stored at:
+  ~/.config/dbx/logs/audit.jsonl
+
+Examples:
+  audit log
+  dbx audit log --format json`),
+	},
 	"create database": {
 		title: "create database",
 		body: strings.TrimSpace(`
@@ -181,6 +198,19 @@ List databases on the active connection.
 Example:
   list databases`),
 	},
+	"use": {
+		title: "use",
+		body: strings.TrimSpace(`
+Select a database for the active REPL session.
+
+This command:
+  - validates the database name
+  - verifies that the database exists
+  - updates the session prompt and saved session state
+
+Example:
+  use app_prod`),
+	},
 	"drop database": {
 		title: "drop database",
 		body: strings.TrimSpace(`
@@ -201,6 +231,7 @@ Show the current session status.
 
 This includes:
   - active connection name
+  - selected database when set
   - connection mode and address
   - timeout settings
   - dry-run state`),
@@ -224,6 +255,7 @@ Supported aliases:
   cx       -> connect
   conns    -> connections
   ls db    -> list databases
+  show databases -> list databases
   show dbs -> list databases
   create db -> create database
   drop db   -> drop database

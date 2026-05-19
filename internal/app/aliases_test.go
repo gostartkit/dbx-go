@@ -13,6 +13,7 @@ func TestResolveAlias(t *testing.T) {
 		"cx dev":           "connect dev",
 		"conns":            "connections",
 		"ls db":            "list databases",
+		"show databases":   "list databases",
 		"show dbs":         "list databases",
 		"create db":        "create database",
 		"drop db":          "drop database",

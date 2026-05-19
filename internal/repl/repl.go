@@ -9,16 +9,19 @@ import (
 )
 
 type Handler func(ctx context.Context, line string) (bool, error)
+type PromptLabel func() string
 
 type REPL struct {
-	prompt  *ui.Prompt
-	handler Handler
+	prompt      *ui.Prompt
+	promptLabel PromptLabel
+	handler     Handler
 }
 
-func New(prompt *ui.Prompt, handler Handler) *REPL {
+func New(prompt *ui.Prompt, promptLabel PromptLabel, handler Handler) *REPL {
 	return &REPL{
-		prompt:  prompt,
-		handler: handler,
+		prompt:      prompt,
+		promptLabel: promptLabel,
+		handler:     handler,
 	}
 }
 
@@ -31,7 +34,11 @@ func (r *REPL) Run(ctx context.Context) error {
 
 		resultCh := make(chan promptResult, 1)
 		go func() {
-			line, err := r.prompt.ReadPrompt("dbx> ")
+			label := "dbx> "
+			if r.promptLabel != nil {
+				label = r.promptLabel()
+			}
+			line, err := r.prompt.ReadPrompt(label)
 			resultCh <- promptResult{line: line, err: err}
 		}()
 

@@ -8,6 +8,7 @@ import (
 
 type Session struct {
 	Connection *config.ConnectionConfig
+	Database   string
 	DB         *sql.DB
 }
 
@@ -24,5 +25,6 @@ func (s *Session) Close() error {
 func (s *Session) Reset() error {
 	err := s.Close()
 	s.Connection = nil
+	s.Database = ""
 	return err
 }

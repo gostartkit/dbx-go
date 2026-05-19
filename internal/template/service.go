@@ -115,6 +115,9 @@ func (s *Service) loadDir(dir string, layer string) ([]Template, error) {
 		if err := json.Unmarshal(data, &tpl); err != nil {
 			return nil, fmt.Errorf("load template %s: %w", path, err)
 		}
+		if err := tpl.Validate(); err != nil {
+			return nil, fmt.Errorf("load template %s: %w", path, err)
+		}
 
 		tpl.Layer = layer
 		tpl.Source = path

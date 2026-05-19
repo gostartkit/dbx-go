@@ -9,9 +9,20 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 const historyLimit = 1000
+
+type AuditRecord struct {
+	Timestamp  time.Time `json:"timestamp"`
+	Command    string    `json:"command"`
+	Connection string    `json:"connection,omitempty"`
+	Mode       string    `json:"mode,omitempty"`
+	DryRun     bool      `json:"dry_run"`
+	Success    bool      `json:"success"`
+	DurationMS int64     `json:"duration_ms"`
+}
 
 type Store struct {
 	RootDir string
@@ -33,7 +44,10 @@ func (s *Store) EnsureLayout() error {
 	if err := os.MkdirAll(s.RootDir, 0o755); err != nil {
 		return err
 	}
-	return os.MkdirAll(s.GlobalTemplatesDir(), 0o755)
+	if err := os.MkdirAll(s.GlobalTemplatesDir(), 0o755); err != nil {
+		return err
+	}
+	return os.MkdirAll(s.LogsDir(), 0o755)
 }
 
 func (s *Store) SessionPath() string {
@@ -46,6 +60,14 @@ func (s *Store) HistoryPath() string {
 
 func (s *Store) GlobalTemplatesDir() string {
 	return filepath.Join(s.RootDir, "templates")
+}
+
+func (s *Store) LogsDir() string {
+	return filepath.Join(s.RootDir, "logs")
+}
+
+func (s *Store) AuditLogPath() string {
+	return filepath.Join(s.LogsDir(), "audit.jsonl")
 }
 
 func (s *Store) ConnectionDir(name string) string {
@@ -206,6 +228,62 @@ func (s *Store) AppendHistory(command string) error {
 
 	_, err = file.WriteString(command + "\n")
 	return err
+}
+
+func (s *Store) AppendAudit(record *AuditRecord) error {
+	if record == nil {
+		return fmt.Errorf("audit record is required")
+	}
+	if err := os.MkdirAll(s.LogsDir(), 0o755); err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	file, err := os.OpenFile(s.AuditLogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.Write(data)
+	return err
+}
+
+func (s *Store) LoadAudit(limit int) ([]AuditRecord, error) {
+	file, err := os.Open(s.AuditLogPath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	records := make([]AuditRecord, 0)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var record AuditRecord
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if limit > 0 && len(records) > limit {
+		records = append([]AuditRecord(nil), records[len(records)-limit:]...)
+	}
+	return records, nil
 }
 
 func (s *Store) writeJSON(path string, value any) error {

@@ -6,10 +6,12 @@ import (
 
 	"pkg.gostartkit.com/dbx/internal/config"
 	"pkg.gostartkit.com/dbx/internal/connect"
+	"pkg.gostartkit.com/dbx/internal/driver"
 )
 
 type connectorClient interface {
 	Open(ctx context.Context, cfg *config.ConnectionConfig) (*sql.DB, error)
+	Diagnose(ctx context.Context, cfg *config.ConnectionConfig) (*driver.DiagnosticTrace, error)
 	Ping(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB) error
 	ListDatabases(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB) ([]string, error)
 	QueryStrings(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, query string) ([]string, error)

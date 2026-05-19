@@ -60,15 +60,21 @@ func (b *cliBuilder) connectCommand() *cmd.Command {
 		Long:        helpEntries["connect"].body,
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name"}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			return b.withApplication(ctx, func(application *Application) error {
-				if len(args) == 0 {
+			if len(args) == 0 {
+				return b.withApplication(ctx, func(application *Application) error {
 					if strings.EqualFold(b.globals.Format, "json") {
 						return util.WrapLayer("validation", "connect", fmt.Errorf("connect without a name is only supported in text mode"))
 					}
 					return application.handleConnect(ctx)
-				}
+				})
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "connect"}, func(application *Application, meta *auditMetadata) error {
 				if len(args) != 1 {
 					return util.WrapLayer("validation", "connect", fmt.Errorf("usage: dbx connect <name>"))
+				}
+				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
+					meta.Connection = cfg.Name
+					meta.Mode = cfg.Mode
 				}
 
 				result, err := application.connectNonInteractive(ctx, args[0])
@@ -91,7 +97,7 @@ func (b *cliBuilder) connectionsCommand() *cmd.Command {
 		Short:     "List saved connections",
 		Long:      helpEntries["connections"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			return b.withApplication(ctx, func(application *Application) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "connections"}, func(application *Application, meta *auditMetadata) error {
 				if err := b.requireNoArgs(args); err != nil {
 					return util.WrapLayer("validation", "connections", err)
 				}
@@ -180,11 +186,13 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 				return util.WrapLayer("validation", "connection create", fmt.Errorf("usage: dbx connection create <name> [flags]"))
 			}
 
-			return b.withApplication(ctx, func(application *Application) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection create"}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := buildCreateConnectionConfig(args[0], flags)
 				if err != nil {
 					return err
 				}
+				meta.Connection = cfg.Name
+				meta.Mode = cfg.Mode
 				if application.store.ConnectionExists(cfg.Name) && !flags.force {
 					return util.WrapLayer("config", "create connection", fmt.Errorf("connection %q already exists; use --force to overwrite", cfg.Name))
 				}
@@ -275,15 +283,17 @@ func (b *cliBuilder) connectionEditCommand() *cmd.Command {
 				return util.WrapLayer("validation", "connection edit", fmt.Errorf("usage: dbx connection edit <name> [flags]"))
 			}
 
-			return b.withApplication(ctx, func(application *Application) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection edit", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := application.store.LoadConnection(args[0])
 				if err != nil {
 					return util.WrapLayer("config", "load connection "+args[0], err)
 				}
+				meta.Mode = cfg.Mode
 
 				if err := applyEditConnectionFlags(cfg, flags); err != nil {
 					return err
 				}
+				meta.Mode = cfg.Mode
 				if flags.test {
 					if err := application.testConnection(ctx, cfg); err != nil {
 						return err
@@ -321,7 +331,10 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection delete", fmt.Errorf("usage: dbx connection delete <name>"))
 			}
-			return b.withApplication(ctx, func(application *Application) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection delete", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
+				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
+					meta.Mode = cfg.Mode
+				}
 				confirmed, err := b.confirm(ctx, application, fmt.Sprintf("Delete connection %q?", args[0]), false)
 				if err != nil {
 					return err
@@ -353,11 +366,12 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 				return util.WrapLayer("validation", "connection show", fmt.Errorf("usage: dbx connection show <name>"))
 			}
 
-			return b.withApplication(ctx, func(application *Application) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection show", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				result, err := application.showConnection(args[0])
 				if err != nil {
 					return err
 				}
+				meta.Mode = result.Mode
 				return b.writeOutput(result, func() error {
 					fmt.Fprintf(b.out, "Name: %s\n", result.Name)
 					fmt.Fprintf(b.out, "Driver: %s\n", result.Driver)
@@ -404,26 +418,37 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) connectionTestCommand() *cmd.Command {
+	var verbose bool
 	return &cmd.Command{
 		Name:        "test",
 		UsageLine:   "dbx connection test <name>",
 		Short:       "Test a saved connection",
 		Long:        helpEntries["connection test"].body,
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		SetFlags: func(f *cmd.FlagSet) {
+			f.BoolVar(&verbose, "verbose", false, "include per-layer diagnostic details", "")
+		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection test", fmt.Errorf("usage: dbx connection test <name>"))
 			}
 
-			return b.withApplication(ctx, func(application *Application) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection test", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := application.store.LoadConnection(args[0])
 				if err != nil {
 					return util.WrapLayer("config", "load connection "+args[0], err)
 				}
+				meta.Mode = cfg.Mode
 
-				result, diagErr := application.diagnoseConnection(ctx, cfg)
+				result, diagErr := application.diagnoseConnection(ctx, cfg, diagnosticOptions{
+					Verbose:    verbose,
+					ConfigPath: application.store.ConnectionConfigPath(args[0]),
+				})
+				if diagErr != nil {
+					result.Error = errorResult(diagErr)
+				}
 				if writeErr := b.writeOutput(result, func() error {
-					application.printDiagnosticResult(result)
+					application.printDiagnosticResult(result, verbose)
 					if diagErr == nil {
 						fmt.Fprintln(b.out, "Connection successful.")
 						return nil
@@ -434,8 +459,12 @@ func (b *cliBuilder) connectionTestCommand() *cmd.Command {
 					return writeErr
 				}
 				if diagErr != nil {
-					return diagErr
+					failed := false
+					meta.Success = &failed
+					return util.MarkOutputHandled(diagErr)
 				}
+				succeeded := true
+				meta.Success = &succeeded
 				return nil
 			})
 		},
@@ -454,8 +483,14 @@ func (b *cliBuilder) connectionDoctorCommand() *cmd.Command {
 				return util.WrapLayer("validation", "connection doctor", fmt.Errorf("usage: dbx connection doctor <name>"))
 			}
 
-			return b.withApplication(ctx, func(application *Application) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection doctor", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
+				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
+					meta.Mode = cfg.Mode
+				}
 				result, doctorErr := application.doctorConnection(args[0])
+				if doctorErr != nil {
+					result.Error = errorResult(doctorErr)
+				}
 				if writeErr := b.writeOutput(result, func() error {
 					application.printDoctorResult(result)
 					return nil
@@ -463,8 +498,12 @@ func (b *cliBuilder) connectionDoctorCommand() *cmd.Command {
 					return writeErr
 				}
 				if doctorErr != nil {
-					return doctorErr
+					failed := false
+					meta.Success = &failed
+					return util.MarkOutputHandled(doctorErr)
 				}
+				succeeded := true
+				meta.Success = &succeeded
 				return nil
 			})
 		},

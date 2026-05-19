@@ -8,10 +8,12 @@ import (
 	"strings"
 
 	"pkg.gostartkit.com/cmd"
+	"pkg.gostartkit.com/dbx/internal/util"
 )
 
 type cliGlobals struct {
 	Connection string
+	Database   string
 	ConfigDir  string
 	DryRun     bool
 	Yes        bool
@@ -58,9 +60,11 @@ func newCommandAppWithOptions(in io.Reader, out io.Writer, err io.Writer, option
 	cli.Commands = []*cmd.Command{
 		builder.connectCommand(),
 		builder.connectionsCommand(),
+		builder.auditGroupCommand(),
 		builder.connectionGroupCommand(),
 		builder.createGroupCommand(),
 		builder.listGroupCommand(),
+		builder.showGroupCommand(),
 		builder.dropGroupCommand(),
 		builder.statusCommand(),
 	}
@@ -70,6 +74,7 @@ func newCommandAppWithOptions(in io.Reader, out io.Writer, err io.Writer, option
 
 func (b *cliBuilder) setGlobalFlags(f *cmd.FlagSet) {
 	f.StringVar(&b.globals.Connection, "connection", "", "saved connection name", "")
+	f.StringVar(&b.globals.Database, "database", "", "database name for this command only", "")
 	f.StringVar(&b.globals.ConfigDir, "config-dir", "", "override config directory", "")
 	f.BoolVar(&b.globals.DryRun, "dry-run", false, "render SQL without executing it", "")
 	f.BoolVar(&b.globals.Yes, "yes", false, "skip confirmation prompts", "y")
@@ -96,7 +101,27 @@ func (b *cliBuilder) withApplication(ctx context.Context, fn func(application *A
 	defer application.Close()
 
 	application.dryRun = b.globals.DryRun
-	return fn(application)
+	err = fn(application)
+	if err != nil && strings.EqualFold(b.globals.Format, "json") && !util.IsOutputHandled(err) {
+		if writeErr := b.writeOutput(&ErrorEnvelope{
+			OK:    false,
+			Error: errorResult(err),
+		}, func() error {
+			return nil
+		}); writeErr != nil {
+			return writeErr
+		}
+		return util.MarkOutputHandled(err)
+	}
+	return err
+}
+
+func (b *cliBuilder) withAuditedApplication(ctx context.Context, meta auditMetadata, fn func(application *Application, meta *auditMetadata) error) error {
+	return b.withApplication(ctx, func(application *Application) error {
+		return application.auditCommand(ctx, meta, func(meta *auditMetadata) error {
+			return fn(application, meta)
+		})
+	})
 }
 
 func (b *cliBuilder) applicationOptions() Options {

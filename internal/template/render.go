@@ -16,6 +16,9 @@ func BuildPlan(tpl *Template, cfg *config.ConnectionConfig, values map[string]st
 	if tpl == nil {
 		return nil, fmt.Errorf("template is required")
 	}
+	if err := tpl.Validate(); err != nil {
+		return nil, err
+	}
 
 	rawData := renderData(cfg, values, false)
 	sqlData := renderData(cfg, values, true)

@@ -77,7 +77,7 @@ func (a *Application) connectNonInteractive(ctx context.Context, name string) (*
 	}, nil
 }
 
-func (a *Application) statusForCLI(connectionName string) (*StatusResult, error) {
+func (a *Application) statusForCLI(ctx context.Context, connectionName string, database string) (*StatusResult, error) {
 	result := &StatusResult{
 		OK:     true,
 		DryRun: a.dryRun,
@@ -88,8 +88,12 @@ func (a *Application) statusForCLI(connectionName string) (*StatusResult, error)
 		if err != nil {
 			return nil, util.WrapLayer("config", "load connection "+connectionName, err)
 		}
+		if err := a.applyCLIDatabaseSelection(ctx, cfg, database); err != nil {
+			return nil, err
+		}
 		result.Connection = redactConnection(cfg)
 		result.ConnectionName = cfg.Name
+		result.Database = a.session.Database
 		result.ConnectionExists = true
 		result.SelectedByFlag = true
 		result.Message = "loaded connection config"
@@ -108,6 +112,7 @@ func (a *Application) statusForCLI(connectionName string) (*StatusResult, error)
 	result.HasStoredSession = true
 	result.CurrentSession = sessionFile.CurrentConnection
 	result.ConnectionName = sessionFile.CurrentConnection
+	result.Database = sessionFile.CurrentDatabase
 	result.ConnectionExists = a.store.ConnectionExists(sessionFile.CurrentConnection)
 	if !result.ConnectionExists {
 		result.Message = "saved session points to a missing connection"
@@ -118,9 +123,23 @@ func (a *Application) statusForCLI(connectionName string) (*StatusResult, error)
 	if err != nil {
 		return nil, util.WrapLayer("config", "load current session connection "+sessionFile.CurrentConnection, err)
 	}
+	if err := a.applyCLIDatabaseSelection(ctx, cfg, database); err != nil {
+		return nil, err
+	}
 	result.Connection = redactConnection(cfg)
+	if strings.TrimSpace(database) != "" || result.Database == "" {
+		result.Database = a.session.Database
+	}
 	result.Message = "loaded saved session config"
 	return result, nil
+}
+
+func (a *Application) applyCLIDatabaseSelection(ctx context.Context, cfg *config.ConnectionConfig, database string) error {
+	if cfg == nil {
+		return nil
+	}
+	a.session.Connection = cloneConnectionConfig(cfg)
+	return a.setRuntimeDatabaseSelection(ctx, cfg, nil, database, false)
 }
 
 func (a *Application) selectTemplateForCLI(command string, cfg *config.ConnectionConfig, templateName string) (*tpl.Template, error) {

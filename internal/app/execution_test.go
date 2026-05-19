@@ -133,3 +133,42 @@ func TestRunPlanDryRunSkipsTransaction(t *testing.T) {
 		t.Fatalf("runner counts = %+v", runner)
 	}
 }
+
+func TestExecutePlanIncludesActionDurations(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApplication()
+	runner := &fakeRunner{}
+	plan := &tpl.ExecutionPlan{
+		Actions: []tpl.RenderedAction{
+			{Description: "one", SQL: "ONE"},
+		},
+	}
+
+	result, err := app.executePlan(context.Background(), plan, runner)
+	if err != nil {
+		t.Fatalf("executePlan returned error: %v", err)
+	}
+	if len(result.Actions) != 1 || result.Actions[0].DurationMS <= 0 {
+		t.Fatalf("unexpected action duration: %+v", result.Actions)
+	}
+}
+
+func TestPrintPlanResultIncludesDuration(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	app := &Application{
+		prompt: ui.NewPrompt(strings.NewReader(""), &out),
+	}
+
+	app.printPlanResult(&PlanExecutionResult{
+		Actions: []ActionResult{
+			{Description: "Create database", Status: ActionStatusOK, DurationMS: 124},
+		},
+	})
+
+	if !strings.Contains(out.String(), "[OK] Create database (124ms)") {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
