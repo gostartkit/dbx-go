@@ -24,6 +24,7 @@ func BuildPlan(tpl *Template, cfg *config.ConnectionConfig, values map[string]st
 		TemplateName: tpl.Name,
 		Layer:        tpl.Layer,
 		Source:       tpl.Source,
+		Transaction:  tpl.Transaction,
 		Actions:      make([]RenderedAction, 0, len(tpl.Actions)),
 	}
 

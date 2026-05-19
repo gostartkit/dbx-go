@@ -14,6 +14,8 @@
 ## Features
 
 - Interactive `dbx>` prompt
+- Lightweight TAB completion for commands and saved connection names
+- Explicit command aliases without changing canonical help output
 - Direct and SSH MySQL connections
 - Hidden password input
 - `known_hosts` SSH host verification
@@ -66,17 +68,68 @@ dbx/
 
 ```text
 /
-/help
-/connect
-/connections
-/status
-/create database
-/list databases
-/drop database
-/dry-run on
-/dry-run off
-/exit
+help
+help <command>
+help aliases
+connect
+connect <name>
+connections
+connection create
+connection edit <name>
+connection delete <name>
+connection show <name>
+status
+create database
+list databases
+drop database
+dry-run on
+dry-run off
+exit
 ```
+
+`/` is reserved for command discovery. Operational commands do not use a `/` prefix.
+
+## REPL Ergonomics
+
+TAB completion is intentionally lightweight. It does not implement full readline-style editing, but it does support command and saved-connection completion:
+
+```text
+dbx> conn<TAB>
+connect
+connections
+connection create
+connection edit
+connection delete
+connection show
+
+dbx> connection <TAB>
+create
+edit
+delete
+show
+
+dbx> connect <TAB>
+dev
+prod
+```
+
+Supported aliases stay intentionally small and explicit:
+
+```text
+q             -> exit
+quit          -> exit
+conn          -> connect
+cx            -> connect
+conns         -> connections
+ls db         -> list databases
+show dbs      -> list databases
+create db     -> create database
+drop db       -> drop database
+dry on        -> dry-run on
+dry off       -> dry-run off
+```
+
+Use `help aliases` inside the REPL to display the alias list.
 
 Running `dbx` enters the interactive shell:
 
@@ -165,15 +218,40 @@ Global template example:
 ```json
 {
   "name": "create_database_with_user",
+  "transaction": true,
   "match": {
     "command": "create database",
     "driver": "mysql"
   },
   "inputs": [
     {
+      "name": "database",
+      "type": "identifier",
+      "prompt": "Database name"
+    },
+    {
+      "name": "charset",
+      "type": "select",
+      "prompt": "Charset",
+      "default": "utf8mb4",
+      "options": ["utf8mb4", "utf8"]
+    },
+    {
+      "name": "create_user",
+      "type": "confirm",
+      "prompt": "Create same-name user?",
+      "default": true
+    },
+    {
+      "name": "port",
+      "type": "int",
+      "prompt": "Port",
+      "default": 3306
+    },
+    {
       "name": "password",
-      "prompt": "New user password",
-      "secret": true
+      "type": "secret",
+      "prompt": "New user password"
     }
   ],
   "actions": [
@@ -220,15 +298,15 @@ Connection template example:
 $ dbx
 Reconnect previous session "prod"? [y/n]: y
 Reconnected to prod.
-Available commands:
-  /                Show all commands
-  /help            Show all commands
-  ...
 
-dbx> /dry-run on
+dbx> /
+Available commands
+...
+
+dbx> dry-run on
 Dry-run mode is on.
 
-dbx> /create database
+dbx> create database
 Database name: appdb
   1. utf8mb4
   2. utf8
@@ -251,12 +329,137 @@ Confirm execution? [y/n] [y]:
 [DRY-RUN] Create user
 ```
 
+Connection selection with `connect` and no argument:
+
+```text
+dbx> connect
+1) prod     mysql ssh    10.0.1.20:3306 via bastion.example.com
+2) dev      mysql direct 127.0.0.1:3306
+Select connection by number or name: 1
+Connected to prod.
+```
+
+Connection creation flow:
+
+```text
+dbx> connection create
+Connection name: prod
+  1. direct
+  2. ssh
+Connection mode [direct]: ssh
+Database host: 10.0.1.20
+Database port [3306]:
+Database user: root
+  1. prompt every time
+  2. env variable
+  3. save password
+Password handling [prompt every time]: env variable
+Environment variable name [MYSQL_PROD_PASSWORD]:
+Connect timeout seconds [10]:
+Query timeout seconds [30]:
+SSH host: bastion.example.com
+SSH port [22]:
+SSH user: ubuntu
+  1. private key
+  2. env variable
+SSH auth [private key]:
+SSH private key [~/.ssh/id_rsa]:
+Test connection? [y/n] [y]:
+Connection successful.
+Save connection? [y/n] [y]:
+Saved: ~/.config/dbx/prod/config.json
+Connect now? [y/n] [y]:
+```
+
+Connection inspection:
+
+```text
+dbx> connection show prod
+Name: prod
+Driver: mysql
+Mode: ssh
+
+Host: 10.0.1.20:3306
+User: root
+
+Password:
+  env: MYSQL_PROD_PASSWORD
+
+SSH:
+  host: bastion.example.com:22
+  user: ubuntu
+  private_key: ~/.ssh/id_rsa
+```
+
+Connection editing and deletion:
+
+```text
+dbx> connection edit prod
+...interactive update flow...
+
+dbx> connection delete prod
+Delete connection "prod"? [y/n] [n]: y
+Deleted connection prod.
+```
+
+Transactional template execution:
+
+```text
+dbx> create database
+Database name: appdb
+Charset [utf8mb4]:
+Collation [utf8mb4_unicode_ci]:
+New user password:
+Template: create_database_with_user (global)
+Source: ~/.config/dbx/templates/create_database_with_user.json
+Execution Plan
+  1. Create database
+  2. Create user
+Rendered SQL
+  1. CREATE DATABASE IF NOT EXISTS `appdb` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  2. CREATE USER IF NOT EXISTS 'appdb'@'%' IDENTIFIED BY '***'
+Confirm execution? [y/n] [y]: y
+[OK] Create database
+[OK] Create user
+Committed transaction.
+Database appdb created.
+```
+
+## Installation
+
+Build locally:
+
+```bash
+make build
+```
+
+Install a release artifact with the helper script:
+
+```bash
+sh scripts/install.sh
+```
+
+Override the repository, version, or install directory if needed:
+
+```bash
+REPO="OWNER/dbx" VERSION="v0.2.0" INSTALL_DIR="$HOME/.local/bin" sh scripts/install.sh
+```
+
+Create release artifacts locally:
+
+```bash
+sh scripts/release.sh
+```
+
+This writes platform archives and `checksums.txt` to `dist/`.
+
 ## Security Notes
 
 - User-facing workflows never require raw SQL input.
 - Database identifiers are validated against `[a-zA-Z_][a-zA-Z0-9_]*`.
 - Password prompts are hidden when stdin is a terminal.
 - Secret template values are redacted from previews.
+- `type: "secret"` and legacy `secret: true` inputs are both redacted.
 - SSH access is native through Go SSH libraries, not `exec.Command("ssh")`.
 - SSH host verification uses `known_hosts`.
 - `DBX_KNOWN_HOSTS` can point to alternate `known_hosts` files if needed.
@@ -268,14 +471,18 @@ make fmt
 make vet
 make test
 make build
+make check
+make release
 ```
 
 ## Known Limitations
 
 - MySQL is the only supported database in the MVP.
 - REPL history is persisted, but arrow-key navigation is intentionally not implemented.
+- TAB completion is lightweight and does not provide full shell-style line editing.
 - Dry-run is session-scoped and not persisted.
 - SSH verification expects a prepared `known_hosts` file.
+- MySQL can implicitly commit around statements such as `CREATE DATABASE` and `CREATE USER`, so `transaction: true` is best-effort for those workflows.
 - The CLI entrypoint is intentionally REPL-first; one-shot subcommands are not a focus.
 
 ## Future Roadmap

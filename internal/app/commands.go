@@ -20,52 +20,60 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		}
 	}
 
-	switch line {
+	resolved := resolveAlias(line)
+	fields := strings.Fields(resolved)
+
+	switch {
+	case len(fields) == 2 && fields[0] == "connect":
+		return false, a.handleConnectByName(ctx, fields[1])
+	case line == "connection create":
+		return false, a.handleConnectionCreate(ctx)
+	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "edit":
+		return false, a.handleConnectionEdit(ctx, fields[2])
+	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "delete":
+		return false, a.handleConnectionDelete(ctx, fields[2])
+	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "show":
+		return false, a.handleConnectionShow(ctx, fields[2])
+	case len(fields) >= 1 && fields[0] == "help":
+		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(line, "help")))
+	}
+
+	switch resolved {
 	case "":
 		return false, nil
-	case "/", "/help":
-		a.printHelp()
-		return false, nil
-	case "/connect":
+	case "/":
+		return false, a.handleHelp("")
+	case "help":
+		return false, a.handleHelp("")
+	case "connect":
 		return false, a.handleConnect(ctx)
-	case "/connections":
+	case "connections":
 		return false, a.handleConnections(ctx)
-	case "/status":
+	case "status":
 		return false, a.handleStatus(ctx)
-	case "/create database":
+	case "create database":
 		return false, a.handleCreateDatabase(ctx)
-	case "/list databases":
+	case "list databases":
 		return false, a.handleListDatabases(ctx)
-	case "/drop database":
+	case "drop database":
 		return false, a.handleDropDatabase(ctx)
-	case "/dry-run on":
+	case "dry-run on":
 		a.dryRun = true
 		a.prompt.Println("Dry-run mode is on.")
 		return false, nil
-	case "/dry-run off":
+	case "dry-run off":
 		a.dryRun = false
 		a.prompt.Println("Dry-run mode is off.")
 		return false, nil
-	case "/exit":
+	case "exit":
 		return true, nil
 	default:
-		return false, fmt.Errorf("unknown command %q; use /help", line)
+		return false, fmt.Errorf("unknown command %q; use / or help", line)
 	}
 }
 
-func (a *Application) printHelp() {
-	a.prompt.Println("Available commands:")
-	a.prompt.Println("  /                Show all commands")
-	a.prompt.Println("  /help            Show all commands")
-	a.prompt.Println("  /connect         Connect to a configured database")
-	a.prompt.Println("  /connections     List configured connections")
-	a.prompt.Println("  /status          Show the current session status")
-	a.prompt.Println("  /create database Create a database from a template")
-	a.prompt.Println("  /list databases  List databases on the active connection")
-	a.prompt.Println("  /drop database   Drop a database from a template")
-	a.prompt.Println("  /dry-run on      Preview SQL without executing it")
-	a.prompt.Println("  /dry-run off     Disable dry-run mode")
-	a.prompt.Println("  /exit            Exit dbx")
+func (a *Application) handleHelp(topic string) error {
+	return printHelpTopic(a.prompt, topic)
 }
 
 func (a *Application) handleConnect(ctx context.Context) error {
@@ -74,63 +82,15 @@ func (a *Application) handleConnect(ctx context.Context) error {
 		return util.WrapLayer("config", "list configured connections", err)
 	}
 	if len(connections) == 0 {
-		return fmt.Errorf("no connections found in %s", a.store.RootDir)
-	}
-
-	names := make([]string, 0, len(connections))
-	for _, connection := range connections {
-		names = append(names, connection.Name)
-	}
-
-	defaultName := names[0]
-	if a.session.Connection != nil && slices.Contains(names, a.session.Connection.Name) {
-		defaultName = a.session.Connection.Name
-	}
-
-	name, err := a.choose(ctx, "Connection name", names, defaultName)
-	if err != nil {
-		return err
-	}
-
-	cfg, err := a.store.LoadConnection(name)
-	if err != nil {
-		return util.WrapLayer("config", "load connection "+name, err)
-	}
-
-	a.prompt.Println("Execution Plan")
-	a.prompt.Printf("  1. Open %s MySQL connection %q to %s\n", cfg.Mode, cfg.Name, cfg.Address())
-	if cfg.Mode == "ssh" {
-		a.prompt.Printf("  2. Tunnel through SSH bastion %s:%d as %s\n", cfg.SSH.Host, cfg.SSH.Port, cfg.SSH.User)
-	}
-
-	confirmed, err := a.confirm(ctx, "Confirm execution?", true)
-	if err != nil {
-		return err
-	}
-	if !confirmed {
-		a.prompt.Println("Cancelled.")
+		a.prompt.Println("No saved connections. Run: connection create")
 		return nil
 	}
 
-	db, err := a.connector.Open(ctx, cfg)
+	name, err := a.promptForConnectionSelection(ctx, connections)
 	if err != nil {
 		return err
 	}
-
-	if err := a.session.Close(); err != nil {
-		db.Close()
-		return err
-	}
-
-	a.session.Connection = cfg
-	a.session.DB = db
-
-	if err := a.store.SaveSession(&config.SessionFile{CurrentConnection: cfg.Name}); err != nil {
-		return util.WrapLayer("config", "save session", err)
-	}
-
-	a.prompt.Printf("Connected to %s.\n", cfg.Name)
-	return nil
+	return a.handleConnectByName(ctx, name)
 }
 
 func (a *Application) handleConnections(ctx context.Context) error {
@@ -267,12 +227,7 @@ func (a *Application) handleCreateDatabase(ctx context.Context) error {
 		return nil
 	}
 
-	if a.dryRun {
-		a.reportDryRun(plan)
-		return nil
-	}
-
-	if err := a.executePlan(ctx, cfg, db, plan); err != nil {
+	if err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun); err != nil {
 		return err
 	}
 
@@ -382,12 +337,7 @@ func (a *Application) handleDropDatabase(ctx context.Context) error {
 		return nil
 	}
 
-	if a.dryRun {
-		a.reportDryRun(plan)
-		return nil
-	}
-
-	if err := a.executePlan(ctx, cfg, db, plan); err != nil {
+	if err := a.runPlan(ctx, plan, sqlRunner{db: db}, a.dryRun); err != nil {
 		return err
 	}
 
@@ -397,11 +347,11 @@ func (a *Application) handleDropDatabase(ctx context.Context) error {
 
 func (a *Application) requireConnection(ctx context.Context) (*config.ConnectionConfig, *sql.DB, error) {
 	if a.session.Connection == nil || a.session.DB == nil {
-		return nil, nil, fmt.Errorf("no active database connection; run /connect first")
+		return nil, nil, fmt.Errorf("no active database connection; run connect first")
 	}
 	if err := a.connector.Ping(ctx, a.session.Connection, a.session.DB); err != nil {
 		_ = a.session.Close()
-		return nil, nil, util.WrapLayer("mysql", "active connection is stale; reconnect with /connect", err)
+		return nil, nil, util.WrapLayer("mysql", "active connection is stale; reconnect with connect", err)
 	}
 	return a.session.Connection, a.session.DB, nil
 }
@@ -417,19 +367,45 @@ func (a *Application) collectTemplateInputs(ctx context.Context, template *tpl.T
 			err   error
 		)
 
-		switch {
-		case len(input.Choices) > 0:
-			value, err = a.choose(ctx, input.Prompt, input.Choices, input.Default)
-		case input.Secret:
+		switch input.EffectiveType() {
+		case "select":
+			value, err = a.choose(ctx, input.Prompt, input.SelectOptions(), input.DefaultString())
+		case "secret":
 			value, err = a.askPassword(ctx, input.Prompt)
+		case "confirm":
+			confirmed, confirmErr := a.confirm(ctx, input.Prompt, input.DefaultBool())
+			if confirmErr != nil {
+				return confirmErr
+			}
+			if confirmed {
+				value = "true"
+			} else {
+				value = "false"
+			}
+		case "identifier":
+			value, err = a.ask(ctx, input.Prompt, input.DefaultString())
+			if err == nil {
+				err = util.ValidateIdentifier(value)
+			}
+		case "int":
+			var intValue int
+			defaultInt, ok := input.DefaultInt()
+			if ok {
+				intValue, err = a.askInt(ctx, input.Prompt, defaultInt)
+			} else {
+				intValue, err = a.askInt(ctx, input.Prompt, 0)
+			}
+			if err == nil {
+				value = fmt.Sprintf("%d", intValue)
+			}
 		default:
-			value, err = a.ask(ctx, input.Prompt, input.Default)
+			value, err = a.ask(ctx, input.Prompt, input.DefaultString())
 		}
 		if err != nil {
 			return err
 		}
 
-		if input.Identifier {
+		if input.Identifier && input.EffectiveType() != "identifier" {
 			if err := util.ValidateIdentifier(value); err != nil {
 				return err
 			}
@@ -481,7 +457,7 @@ func redactTemplateValues(template *tpl.Template, values map[string]string) map[
 	}
 
 	for _, input := range template.Inputs {
-		if input.Secret {
+		if input.EffectiveType() == "secret" {
 			if _, exists := redacted[input.Name]; exists {
 				redacted[input.Name] = "***"
 			}
@@ -489,17 +465,6 @@ func redactTemplateValues(template *tpl.Template, values map[string]string) map[
 	}
 
 	return redacted
-}
-
-func (a *Application) executePlan(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, plan *tpl.ExecutionPlan) error {
-	for _, action := range plan.Actions {
-		if err := a.connector.ExecStatement(ctx, cfg, db, action.SQL); err != nil {
-			a.prompt.Printf("[FAIL] %s\n", action.Description)
-			return err
-		}
-		a.prompt.Printf("[OK] %s\n", action.Description)
-	}
-	return nil
 }
 
 func (a *Application) reportDryRun(plan *tpl.ExecutionPlan) {

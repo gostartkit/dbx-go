@@ -6,10 +6,10 @@ func TestHistoryPersistence(t *testing.T) {
 	root := t.TempDir()
 	store := NewStore(root)
 
-	if err := store.AppendHistory("/connect"); err != nil {
+	if err := store.AppendHistory("connect"); err != nil {
 		t.Fatalf("AppendHistory returned error: %v", err)
 	}
-	if err := store.AppendHistory("/status"); err != nil {
+	if err := store.AppendHistory("status"); err != nil {
 		t.Fatalf("AppendHistory returned error: %v", err)
 	}
 
@@ -21,7 +21,7 @@ func TestHistoryPersistence(t *testing.T) {
 	if len(history) != 2 {
 		t.Fatalf("history length = %d, want 2", len(history))
 	}
-	if history[0] != "/connect" || history[1] != "/status" {
+	if history[0] != "connect" || history[1] != "status" {
 		t.Fatalf("history = %#v", history)
 	}
 }

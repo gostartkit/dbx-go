@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -28,5 +30,52 @@ func TestDefaultRootDirAndStorePaths(t *testing.T) {
 	}
 	if got := store.GlobalTemplatesDir(); got != filepath.Join(wantRoot, "templates") {
 		t.Fatalf("GlobalTemplatesDir = %q", got)
+	}
+}
+
+func TestSaveLoadAndDeleteConnection(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+
+	cfg := &ConnectionConfig{
+		Name:           "prod",
+		Driver:         "mysql",
+		Mode:           "ssh",
+		Host:           "10.0.1.20",
+		Port:           3306,
+		User:           "root",
+		PasswordEnv:    "MYSQL_PROD_PASSWORD",
+		PasswordPrompt: false,
+		SSH: &SSHConfig{
+			Host:       "bastion.example.com",
+			Port:       22,
+			User:       "ubuntu",
+			PrivateKey: "~/.ssh/id_rsa",
+		},
+	}
+
+	if err := store.SaveConnection(cfg); err != nil {
+		t.Fatalf("SaveConnection returned error: %v", err)
+	}
+
+	loaded, err := store.LoadConnection("prod")
+	if err != nil {
+		t.Fatalf("LoadConnection returned error: %v", err)
+	}
+
+	if loaded.Name != cfg.Name || loaded.PasswordEnv != cfg.PasswordEnv {
+		t.Fatalf("loaded config = %#v", loaded)
+	}
+	if loaded.SSH == nil || loaded.SSH.Host != cfg.SSH.Host {
+		t.Fatalf("loaded SSH config = %#v", loaded.SSH)
+	}
+
+	if err := store.DeleteConnection("prod"); err != nil {
+		t.Fatalf("DeleteConnection returned error: %v", err)
+	}
+
+	_, err = store.LoadConnection("prod")
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("LoadConnection after delete error = %v, want os.ErrNotExist", err)
 	}
 }

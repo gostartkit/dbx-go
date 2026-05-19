@@ -48,6 +48,7 @@ func New(in io.Reader, out io.Writer, _ io.Writer) (*Application, error) {
 		session:   &Session{},
 		history:   history,
 	}
+	application.prompt.SetCompleter(application.completeInput)
 
 	if loadErr := application.loadReconnectCandidate(); loadErr != nil {
 		application.prompt.Printf("Warning: %v\n", loadErr)
@@ -56,11 +57,24 @@ func New(in io.Reader, out io.Writer, _ io.Writer) (*Application, error) {
 	return application, nil
 }
 
+func (a *Application) completeInput(line string) ui.Completion {
+	connections, err := a.store.ListConnections()
+	if err != nil {
+		return calculateCompletion(line, nil)
+	}
+
+	names := make([]string, 0, len(connections))
+	for _, connection := range connections {
+		names = append(names, connection.Name)
+	}
+
+	return calculateCompletion(line, names)
+}
+
 func (a *Application) Run(ctx context.Context) error {
 	if err := a.maybeReconnect(ctx); err != nil {
 		return err
 	}
-	a.printHelp()
 	return repl.New(a.prompt, a.handleLine).Run(ctx)
 }
 
@@ -106,15 +120,29 @@ func (a *Application) maybeReconnect(ctx context.Context) error {
 		return nil
 	}
 
-	db, err := a.connector.Open(ctx, a.reconnectCandidate)
+	runtimeCfg, err := a.prepareConnectionForOpen(ctx, a.reconnectCandidate)
+	if err != nil {
+		return err
+	}
+
+	db, err := a.connector.Open(ctx, runtimeCfg)
 	if err != nil {
 		a.prompt.Printf("Warning: %v\n", util.WrapLayer("mysql", "reconnect previous session "+a.reconnectCandidate.Name, err))
 		a.reconnectCandidate = nil
 		return nil
 	}
 
-	a.session.Connection = a.reconnectCandidate
+	if err := a.session.Close(); err != nil {
+		db.Close()
+		return err
+	}
+
+	a.session.Connection = cloneConnectionConfig(a.reconnectCandidate)
 	a.session.DB = db
+	if err := a.store.SaveSession(&config.SessionFile{CurrentConnection: a.reconnectCandidate.Name}); err != nil {
+		return util.WrapLayer("config", "save session", err)
+	}
+
 	a.prompt.Printf("Reconnected to %s.\n", a.reconnectCandidate.Name)
 	a.reconnectCandidate = nil
 	return nil

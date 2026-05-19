@@ -1,14 +1,34 @@
 {
   "name": "create_database_with_user",
+  "transaction": true,
   "match": {
     "command": "create database",
     "driver": "mysql"
   },
   "inputs": [
     {
+      "name": "database",
+      "type": "identifier",
+      "prompt": "Database name"
+    },
+    {
+      "name": "charset",
+      "type": "select",
+      "prompt": "Charset",
+      "default": "utf8mb4",
+      "options": ["utf8mb4", "utf8"]
+    },
+    {
+      "name": "collation",
+      "type": "select",
+      "prompt": "Collation",
+      "default": "utf8mb4_unicode_ci",
+      "options": ["utf8mb4_unicode_ci", "utf8mb4_general_ci"]
+    },
+    {
       "name": "password",
-      "prompt": "New user password",
-      "secret": true
+      "type": "secret",
+      "prompt": "New user password"
     }
   ],
   "actions": [

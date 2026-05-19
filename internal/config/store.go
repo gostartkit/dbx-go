@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -101,6 +102,29 @@ func (s *Store) LoadConnection(name string) (*ConnectionConfig, error) {
 	return &cfg, nil
 }
 
+func (s *Store) SaveConnection(cfg *ConnectionConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("connection config is required")
+	}
+	cfg.ApplyDefaults()
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	return s.writeJSON(s.ConnectionConfigPath(cfg.Name), cfg)
+}
+
+func (s *Store) DeleteConnection(name string) error {
+	path := s.ConnectionDir(name)
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("connection directory %s is not a directory", path)
+	}
+	return os.RemoveAll(path)
+}
+
 func (s *Store) ConnectionExists(name string) bool {
 	if strings.TrimSpace(name) == "" {
 		return false
@@ -195,5 +219,30 @@ func (s *Store) writeJSON(path string, value any) error {
 	}
 
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o644)
+
+	tempFile, err := os.CreateTemp(filepath.Dir(path), ".dbx-*.tmp")
+	if err != nil {
+		return err
+	}
+
+	tempPath := tempFile.Name()
+	if _, err := tempFile.Write(data); err != nil {
+		tempFile.Close()
+		os.Remove(tempPath)
+		return err
+	}
+	if err := tempFile.Chmod(0o644); err != nil {
+		tempFile.Close()
+		os.Remove(tempPath)
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		os.Remove(tempPath)
+		return err
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		os.Remove(tempPath)
+		return err
+	}
+	return nil
 }

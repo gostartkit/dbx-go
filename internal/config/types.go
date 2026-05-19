@@ -28,16 +28,17 @@ type TimeoutConfig struct {
 }
 
 type ConnectionConfig struct {
-	Name        string         `json:"name"`
-	Driver      string         `json:"driver"`
-	Mode        string         `json:"mode"`
-	Host        string         `json:"host"`
-	Port        int            `json:"port"`
-	User        string         `json:"user"`
-	Password    string         `json:"password,omitempty"`
-	PasswordEnv string         `json:"password_env,omitempty"`
-	SSH         *SSHConfig     `json:"ssh,omitempty"`
-	Timeout     *TimeoutConfig `json:"timeout,omitempty"`
+	Name           string         `json:"name"`
+	Driver         string         `json:"driver"`
+	Mode           string         `json:"mode"`
+	Host           string         `json:"host"`
+	Port           int            `json:"port"`
+	User           string         `json:"user"`
+	Password       string         `json:"password,omitempty"`
+	PasswordEnv    string         `json:"password_env,omitempty"`
+	PasswordPrompt bool           `json:"password_prompt,omitempty"`
+	SSH            *SSHConfig     `json:"ssh,omitempty"`
+	Timeout        *TimeoutConfig `json:"timeout,omitempty"`
 }
 
 type SessionFile struct {
