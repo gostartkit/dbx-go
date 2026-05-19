@@ -19,17 +19,22 @@ type Options struct {
 }
 
 type Application struct {
-	prompt             *ui.Prompt
-	store              *config.Store
-	connector          connectorClient
-	templates          *tpl.Service
-	session            *Session
-	history            []string
-	dryRun             bool
-	reconnectCandidate *config.ConnectionConfig
-	reconnectDatabase  string
-	completionDBs      []string
-	completionDBsConn  string
+	prompt               *ui.Prompt
+	store                *config.Store
+	connector            connectorClient
+	templates            *tpl.Service
+	session              *Session
+	history              []string
+	dryRun               bool
+	reconnectCandidate   *config.ConnectionConfig
+	reconnectDatabase    string
+	completionDBs        []string
+	completionDBsConn    string
+	completionTables     []string
+	completionTablesConn string
+	completionTablesDB   string
+	completionUsers      []string
+	completionUsersConn  string
 }
 
 func New(in io.Reader, out io.Writer, _ io.Writer) (*Application, error) {
@@ -80,15 +85,31 @@ func NewWithOptions(in io.Reader, out io.Writer, _ io.Writer, opts Options) (*Ap
 func (a *Application) completeInput(line string) ui.Completion {
 	connections, err := a.store.ListConnections()
 	if err != nil {
-		return calculateCompletion(line, nil, nil)
+		return calculateCompletion(line, CompletionContext{
+			Connection: a.currentConnectionName(),
+			Database:   a.currentDatabaseName(),
+			DryRun:     a.dryRun,
+		})
 	}
 
-	names := make([]string, 0, len(connections))
+	connectionSuggestions := make([]CompletionConnection, 0, len(connections))
 	for _, connection := range connections {
-		names = append(names, connection.Name)
+		connectionSuggestions = append(connectionSuggestions, CompletionConnection{
+			Name:   connection.Name,
+			Driver: connection.Driver,
+			Mode:   connection.Mode,
+		})
 	}
 
-	return calculateCompletion(line, names, a.currentCompletionDatabases())
+	return calculateCompletion(line, CompletionContext{
+		Connection:  a.currentConnectionName(),
+		Database:    a.currentDatabaseName(),
+		DryRun:      a.dryRun,
+		Connections: connectionSuggestions,
+		Databases:   a.currentCompletionDatabases(),
+		Tables:      a.currentCompletionTables(),
+		Users:       a.currentCompletionUsers(),
+	})
 }
 
 func (a *Application) Run(ctx context.Context) error {
@@ -161,6 +182,8 @@ func (a *Application) maybeReconnect(ctx context.Context) error {
 	a.session.Connection = cloneConnectionConfig(a.reconnectCandidate)
 	a.session.DB = db
 	a.session.Database = ""
+	a.clearTableCompletion()
+	a.clearUserCompletion()
 	if err := a.restoreSessionDatabase(ctx); err != nil {
 		a.prompt.Printf("Warning: %v\n", err)
 	}
@@ -223,6 +246,39 @@ func (a *Application) currentCompletionDatabases() []string {
 	return append([]string(nil), a.completionDBs...)
 }
 
+func (a *Application) currentCompletionUsers() []string {
+	if a.session == nil || a.session.Connection == nil || a.session.DB == nil {
+		return nil
+	}
+	if a.completionUsersConn == a.session.Connection.Name && len(a.completionUsers) > 0 {
+		return append([]string(nil), a.completionUsers...)
+	}
+	users, err := a.connector.QueryStrings(context.Background(), a.session.Connection, a.session.DB, "SELECT DISTINCT User FROM mysql.user ORDER BY User")
+	if err != nil {
+		return nil
+	}
+	a.completionUsersConn = a.session.Connection.Name
+	a.completionUsers = append([]string(nil), users...)
+	return append([]string(nil), a.completionUsers...)
+}
+
+func (a *Application) currentCompletionTables() []string {
+	if a.session == nil || a.session.Connection == nil || a.session.DB == nil || strings.TrimSpace(a.session.Database) == "" {
+		return nil
+	}
+	if a.completionTablesConn == a.session.Connection.Name && a.completionTablesDB == a.session.Database && len(a.completionTables) > 0 {
+		return append([]string(nil), a.completionTables...)
+	}
+	tables, err := a.connector.ListTables(context.Background(), a.session.Connection, a.session.DB, a.session.Database)
+	if err != nil {
+		return nil
+	}
+	a.completionTablesConn = a.session.Connection.Name
+	a.completionTablesDB = a.session.Database
+	a.completionTables = append([]string(nil), tables...)
+	return append([]string(nil), a.completionTables...)
+}
+
 func (a *Application) recordHistory(line string) error {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -241,4 +297,18 @@ func (a *Application) recordHistory(line string) error {
 		a.history = append([]string(nil), a.history[len(a.history)-1000:]...)
 	}
 	return nil
+}
+
+func (a *Application) currentConnectionName() string {
+	if a.session == nil || a.session.Connection == nil {
+		return ""
+	}
+	return a.session.Connection.Name
+}
+
+func (a *Application) currentDatabaseName() string {
+	if a.session == nil {
+		return ""
+	}
+	return a.session.Database
 }

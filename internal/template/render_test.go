@@ -89,6 +89,21 @@ func TestBuiltinMySQLSQLGeneration(t *testing.T) {
 			},
 			wantSQL: "DROP DATABASE IF EXISTS `greenhn-dev`",
 		},
+		{
+			name:    "show users",
+			command: "show users",
+			values:  map[string]string{},
+			wantSQL: "SELECT CONCAT(User, '@', Host) FROM mysql.user ORDER BY User, Host",
+		},
+		{
+			name:    "drop user",
+			command: "drop user",
+			values: map[string]string{
+				"username":  "analytics-ro",
+				"user_host": "%",
+			},
+			wantSQL: "DROP USER 'analytics-ro'@'%'",
+		},
 	}
 
 	for _, tc := range cases {
@@ -117,5 +132,51 @@ func TestBuiltinMySQLSQLGeneration(t *testing.T) {
 				t.Fatalf("SQL = %q, want %q", got, tc.wantSQL)
 			}
 		})
+	}
+}
+
+func TestBuiltinCreateUserSQLGeneration(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.ConnectionConfig{
+		Name:   "dev",
+		Driver: "mysql",
+		Mode:   "direct",
+		Host:   "127.0.0.1",
+		Port:   3306,
+		User:   "root",
+	}
+
+	var selected *Template
+	for _, builtin := range Builtins() {
+		if builtin.Match.Command == "create user" {
+			builtinCopy := builtin
+			selected = &builtinCopy
+			break
+		}
+	}
+	if selected == nil {
+		t.Fatal("builtin create user template not found")
+	}
+
+	plan, err := BuildPlan(selected, cfg, map[string]string{
+		"username":          "analytics-ro",
+		"user_host":         "%",
+		"password":          "S3cretPass",
+		"grant_description": "Grant SELECT on `greenhn-dev`.*",
+		"grant_sql":         "GRANT SELECT ON `greenhn-dev`.* TO 'analytics-ro'@'%'",
+		"grant_database":    "greenhn-dev",
+	})
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+	if len(plan.Actions) != 2 {
+		t.Fatalf("actions = %d, want 2", len(plan.Actions))
+	}
+	if got := plan.Actions[0].SQL; got != "CREATE USER 'analytics-ro'@'%' IDENTIFIED BY 'S3cretPass'" {
+		t.Fatalf("create user SQL = %q", got)
+	}
+	if got := plan.Actions[1].SQL; got != "GRANT SELECT ON `greenhn-dev`.* TO 'analytics-ro'@'%'" {
+		t.Fatalf("grant SQL = %q", got)
 	}
 }

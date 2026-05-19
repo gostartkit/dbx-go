@@ -769,6 +769,134 @@ func TestCLICreateDatabaseAllowsHyphenName(t *testing.T) {
 	}
 }
 
+func TestCLIShowUsersParsesCommand(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"show", "users", "--connection", "prod", "--dry-run", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"command": "show users"`) {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
+func TestCLICreateUserDryRunRedactsPassword(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
+		ConfigDir: root,
+		Connector: &databaseSelectionConnector{databases: []string{"app_prod"}},
+	})
+	err := app.Run(context.Background(), []string{
+		"--connection", "prod",
+		"--database", "app_prod",
+		"--dry-run",
+		"--format", "json",
+		"create", "user", "analytics-ro",
+		"--password", "secret123",
+		"--grant", "readonly",
+		"--config-dir", root,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "secret123") {
+		t.Fatalf("stdout leaked password: %s", stdout.String())
+	}
+
+	var result PlanExecutionResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if !result.DryRun || len(result.Actions) == 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if !strings.Contains(result.Actions[0].SQL, "***") {
+		t.Fatalf("expected redacted SQL, got %q", result.Actions[0].SQL)
+	}
+	if !strings.Contains(result.Actions[len(result.Actions)-1].SQL, "GRANT SELECT ON `app_prod`.*") {
+		t.Fatalf("missing readonly grant SQL: %+v", result.Actions)
+	}
+}
+
+func TestCLICreateUserRequiresYesUnlessDryRun(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, _, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{
+		"--connection", "prod",
+		"create", "user", "analytics-ro",
+		"--password", "secret123",
+		"--config-dir", root,
+	})
+	if err == nil {
+		t.Fatalf("expected confirmation error")
+	}
+	if app.ExitStatus() == 0 {
+		t.Fatalf("expected non-zero exit status")
+	}
+	if !strings.Contains(err.Error(), "confirmation required") {
+		t.Fatalf("unexpected error: %v\nstderr=%s", err, stderr.String())
+	}
+}
+
+func TestCLIDropUserDryRunDoesNotRequireYes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{
+		"--connection", "prod",
+		"--dry-run",
+		"--format", "json",
+		"drop", "user", "analytics-ro",
+		"--config-dir", root,
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"command": "drop user"`) {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
 func TestCLIDropDatabaseAllowsHyphenName(t *testing.T) {
 	t.Parallel()
 

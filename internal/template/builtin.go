@@ -53,5 +53,119 @@ func Builtins() []Template {
 			Layer:  "builtin",
 			Source: "builtin:drop database",
 		},
+		{
+			Version: 1,
+			Name:    "builtin_create_user",
+			Match: Match{
+				Command: "create user",
+				Driver:  "mysql",
+			},
+			Inputs: []Input{
+				{
+					Name:   "password",
+					Type:   "secret",
+					Prompt: "Password",
+				},
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Create MySQL user '{{username}}'@'{{user_host}}'",
+					SQL:         "CREATE USER '{{username}}'@'{{user_host}}' IDENTIFIED BY '{{password}}'",
+				},
+				{
+					Type:        "sql",
+					Description: "{{grant_description}}",
+					SQL:         "{{grant_sql}}",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:create user",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_show_users",
+			Match: Match{
+				Command: "show users",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "List MySQL user accounts on connection {{connection.name}}",
+					SQL:         "SELECT CONCAT(User, '@', Host) FROM mysql.user ORDER BY User, Host",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show users",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_show_tables",
+			Match: Match{
+				Command: "show tables",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "List tables in database `{{database}}`",
+					SQL:         "SHOW TABLES FROM `{{database}}`",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show tables",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_describe_table",
+			Match: Match{
+				Command: "describe table",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Describe table `{{table}}` in database `{{database}}`",
+					SQL:         "DESCRIBE `{{database}}`.`{{table}}`",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:describe table",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_show_grants",
+			Match: Match{
+				Command: "show grants",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show grants for '{{username}}'@'{{user_host}}'",
+					SQL:         "SHOW GRANTS FOR '{{username}}'@'{{user_host}}'",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show grants",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_drop_user",
+			Match: Match{
+				Command: "drop user",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Drop MySQL user '{{username}}'@'{{user_host}}'",
+					SQL:         "DROP USER '{{username}}'@'{{user_host}}'",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:drop user",
+		},
 	}
 }

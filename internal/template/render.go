@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"strings"
 	ttpl "text/template"
 
 	"pkg.gostartkit.com/dbx/internal/config"
@@ -43,6 +44,9 @@ func BuildPlan(tpl *Template, cfg *config.ConnectionConfig, values map[string]st
 		sql, err := renderText(action.SQL, sqlData)
 		if err != nil {
 			return nil, fmt.Errorf("render SQL for action %q: %w", action.Description, err)
+		}
+		if strings.TrimSpace(sql) == "" {
+			continue
 		}
 
 		plan.Actions = append(plan.Actions, RenderedAction{
@@ -88,6 +92,10 @@ func renderData(cfg *config.ConnectionConfig, values map[string]string, escapeSt
 
 	for key, value := range values {
 		if escapeStrings {
+			if strings.HasSuffix(key, "_sql") {
+				data[key] = value
+				continue
+			}
 			data[key] = util.EscapeMySQLString(value)
 			continue
 		}

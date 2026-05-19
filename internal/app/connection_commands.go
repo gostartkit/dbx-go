@@ -530,6 +530,8 @@ func (a *Application) activateConnection(ctx context.Context, cfg *config.Connec
 	a.session.Connection = cloneConnectionConfig(cfg)
 	a.session.DB = db
 	a.clearDatabaseSelection()
+	a.clearTableCompletion()
+	a.clearUserCompletion()
 
 	if persistSession {
 		if err := a.saveCurrentSession(); err != nil {

@@ -36,6 +36,21 @@ func (c *readOnlyConnector) ListDatabases(context.Context, *config.ConnectionCon
 	return []string{"app_prod", "analytics_v2"}, nil
 }
 
+func (c *readOnlyConnector) ListTables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
+	return []string{"users", "orders"}, nil
+}
+
+func (c *readOnlyConnector) DescribeTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableColumn, error) {
+	return []driver.TableColumn{
+		{Name: "id", Type: "bigint"},
+		{Name: "email", Type: "varchar(255)"},
+	}, nil
+}
+
+func (c *readOnlyConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
+	return []string{"GRANT SELECT ON `app_prod`.* TO 'analytics-ro'@'%'"}, nil
+}
+
 func (c *readOnlyConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
 	return append([]string(nil), c.queryStrings...), nil
 }
@@ -107,6 +122,44 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 				return app.handleConnectionDoctor(context.Background(), "prod")
 			},
 			wantOut: "Connection doctor: prod",
+		},
+		{
+			name: "show users",
+			run: func(app *Application) error {
+				return app.handleShowUsers(context.Background())
+			},
+			wantOut: "Users:",
+		},
+		{
+			name: "show tables",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleShowTables(context.Background())
+			},
+			wantOut: "Tables:",
+		},
+		{
+			name: "describe",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleDescribeTable(context.Background(), "users")
+			},
+			wantOut: "id",
+		},
+		{
+			name: "show grants",
+			run: func(app *Application) error {
+				return app.handleShowGrants(context.Background(), "analytics-ro", "%")
+			},
+			wantOut: "GRANT SELECT",
+		},
+		{
+			name: "context",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleContext(context.Background())
+			},
+			wantOut: "Connection: prod",
 		},
 		{
 			name: "connections",
@@ -202,5 +255,74 @@ func TestCreateDatabaseConfirmsWhenNotDryRun(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Cancelled.") {
 		t.Fatalf("expected cancel path: %q", out.String())
+	}
+}
+
+func TestCreateUserConfirmsWhenNotDryRun(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	app, err := NewWithOptions(strings.NewReader("\n3\nn\nn\n"), &out, &out, Options{
+		ConfigDir: root,
+		Connector: &readOnlyConnector{},
+	})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+	app.session.Connection = sampleConnection("prod")
+	app.session.DB = &sql.DB{}
+
+	if err := app.handleCreateUser(context.Background(), "analytics-ro"); err != nil {
+		t.Fatalf("handleCreateUser returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Confirm execution?") {
+		t.Fatalf("expected confirmation prompt: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "Cancelled.") {
+		t.Fatalf("expected cancel path: %q", out.String())
+	}
+}
+
+func TestDropUserDryRunDoesNotAskConfirmation(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	app, err := NewWithOptions(strings.NewReader("\n"), &out, &out, Options{
+		ConfigDir: root,
+		Connector: &readOnlyConnector{},
+	})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+	app.session.Connection = sampleConnection("prod")
+	app.session.DB = &sql.DB{}
+	app.dryRun = true
+
+	if err := app.handleDropUser(context.Background(), "analytics-ro"); err != nil {
+		t.Fatalf("handleDropUser returned error: %v", err)
+	}
+	if strings.Contains(out.String(), "Confirm execution?") {
+		t.Fatalf("unexpected confirmation prompt: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "[DRY-RUN]") {
+		t.Fatalf("expected dry-run output: %q", out.String())
 	}
 }

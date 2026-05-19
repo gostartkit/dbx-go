@@ -32,6 +32,7 @@ func (b *cliBuilder) createGroupCommand() *cmd.Command {
 		Short:     "Create database resources",
 		SubCommands: []*cmd.Command{
 			b.createDatabaseCommand(),
+			b.createUserCommand(),
 		},
 	}
 }
@@ -43,6 +44,7 @@ func (b *cliBuilder) listGroupCommand() *cmd.Command {
 		Short:     "List database resources",
 		SubCommands: []*cmd.Command{
 			b.listDatabasesCommand(),
+			b.listUsersCommand(),
 		},
 	}
 }
@@ -55,6 +57,10 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 		SubCommands: []*cmd.Command{
 			b.showDatabasesCommand(),
 			b.showDBsCommand(),
+			b.showTablesCommand(),
+			b.showGrantsCommand(),
+			b.showUsersCommand(),
+			b.showUserGroupCommand(),
 		},
 	}
 }
@@ -66,6 +72,7 @@ func (b *cliBuilder) dropGroupCommand() *cmd.Command {
 		Short:     "Drop database resources",
 		SubCommands: []*cmd.Command{
 			b.dropDatabaseCommand(),
+			b.dropUserCommand(),
 		},
 	}
 }

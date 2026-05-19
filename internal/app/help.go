@@ -34,9 +34,16 @@ connection doctor [name] Inspect a saved connection statically
 create database       Create a database from a template
 list databases        List databases on the active connection
 drop database         Drop a database from a template
+create user           Create a MySQL user
+show users            List MySQL users
+drop user             Drop a MySQL user
+show tables           List tables in the current database
+describe [table]      Describe a table in the current database
+show grants <user>    Show MySQL grants for a user
 use <database>        Select a database for the active REPL session
 
 status                Show the current session status
+context               Show the active REPL context
 dry-run on            Preview SQL without executing it
 dry-run off           Disable dry-run mode
 exit                  Exit dbx`),
@@ -190,6 +197,21 @@ This command:
 Example:
   create database`),
 	},
+	"create user": {
+		title: "create user",
+		body: strings.TrimSpace(`
+Create a MySQL user from the resolved template.
+
+This command:
+  - collects username, host, and password details
+  - can grant access to the current REPL database
+  - previews the execution plan
+  - requires confirmation before execution
+
+Examples:
+  create user
+  create user analytics-ro`),
+	},
 	"list databases": {
 		title: "list databases",
 		body: strings.TrimSpace(`
@@ -197,6 +219,58 @@ List databases on the active connection.
 
 Example:
   list databases`),
+	},
+	"show users": {
+		title: "show users",
+		body: strings.TrimSpace(`
+List MySQL user accounts on the active connection.
+
+Aliases:
+  list users
+  show user accounts
+
+Example:
+  show users`),
+	},
+	"show tables": {
+		title: "show tables",
+		body: strings.TrimSpace(`
+List tables in the current database context.
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - does not require confirmation
+
+Example:
+  show tables`),
+	},
+	"describe": {
+		title: "describe",
+		body: strings.TrimSpace(`
+Describe a table in the current database context.
+
+Usage:
+  describe users
+  describe table users
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - does not require confirmation`),
+	},
+	"show grants": {
+		title: "show grants",
+		body: strings.TrimSpace(`
+Show MySQL grants for a user.
+
+Usage:
+  show grants analytics-ro
+  show grants analytics-ro localhost
+
+This command:
+  - defaults the host to %
+  - does not require confirmation`),
 	},
 	"use": {
 		title: "use",
@@ -224,6 +298,19 @@ This command:
 Example:
   drop database`),
 	},
+	"drop user": {
+		title: "drop user",
+		body: strings.TrimSpace(`
+Drop a MySQL user from the resolved template.
+
+This command:
+  - prompts for the username and host when needed
+  - previews the execution plan
+  - requires confirmation before execution
+
+Example:
+  drop user analytics-ro`),
+	},
 	"status": {
 		title: "status",
 		body: strings.TrimSpace(`
@@ -235,6 +322,20 @@ This includes:
   - connection mode and address
   - timeout settings
   - dry-run state`),
+	},
+	"context": {
+		title: "context",
+		body: strings.TrimSpace(`
+Show the active REPL context in a compact form.
+
+This includes:
+  - selected connection
+  - selected database
+  - connection mode
+  - dry-run state
+
+Aliases:
+  ctx`),
 	},
 	"dry-run": {
 		title: "dry-run",
@@ -254,9 +355,13 @@ Supported aliases:
   conn     -> connect
   cx       -> connect
   conns    -> connections
+  ctx      -> context
   ls db    -> list databases
   show databases -> list databases
   show dbs -> list databases
+  list users -> show users
+  show user accounts -> show users
+  desc table -> describe table
   create db -> create database
   drop db   -> drop database
   test conn -> connection test

@@ -13,8 +13,15 @@ import (
 )
 
 type Completion struct {
-	Prefix     string
-	Candidates []string
+	Prefix      string
+	Suggestions []Suggestion
+	Hint        string
+}
+
+type Suggestion struct {
+	Value       string
+	Description string
+	Category    string
 }
 
 type Completer func(line string) Completion
@@ -187,6 +194,7 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 
 		switch b {
 		case '\n', '\r':
+			p.redrawLine(label, current, "")
 			fmt.Fprintln(p.out)
 			if p.history != nil {
 				p.history.Reset()
@@ -200,14 +208,14 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 		case '\t':
 			completion := p.completer(current)
 			current = p.applyCompletion(current, completion)
-			p.redrawLine(label, current)
+			p.redrawCurrentLine(label, current)
 		case 127, 8:
 			if current == "" {
 				continue
 			}
 			runes := []rune(current)
 			current = string(runes[:len(runes)-1])
-			p.redrawLine(label, current)
+			p.redrawCurrentLine(label, current)
 		case 27:
 			updated, handled, escErr := p.handleEscapeSequence(current)
 			if escErr != nil {
@@ -215,44 +223,43 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 			}
 			if handled {
 				current = updated
-				p.redrawLine(label, current)
+				p.redrawCurrentLine(label, current)
 			}
 		default:
 			current += string(b)
-			fmt.Fprintf(p.out, "%c", b)
+			p.redrawCurrentLine(label, current)
 		}
 	}
 }
 
 func (p *Prompt) applyCompletion(current string, completion Completion) string {
-	if len(completion.Candidates) == 0 {
+	candidates := completionValues(completion)
+	if len(candidates) == 0 {
 		return current
 	}
 
-	common := longestCommonPrefix(completion.Candidates)
-	if len(completion.Candidates) == 1 || (completion.Prefix != "" && len(common) > len(completion.Prefix)) {
+	common := longestCommonPrefix(candidates)
+	if len(candidates) == 1 || (completion.Prefix != "" && len(common) > len(completion.Prefix)) {
 		prefixLen := len(completion.Prefix)
 		if prefixLen > len(current) {
 			prefixLen = len(current)
 		}
 
 		base := current[:len(current)-prefixLen]
-		replacement := completion.Candidates[0]
-		if len(completion.Candidates) > 1 && len(common) > len(completion.Prefix) {
+		replacement := candidates[0]
+		if len(candidates) > 1 && len(common) > len(completion.Prefix) {
 			replacement = common
 		}
 
 		updated := base + replacement
-		if len(completion.Candidates) == 1 {
+		if len(candidates) == 1 {
 			updated += " "
 		}
 		return updated
 	}
 
 	fmt.Fprintln(p.out)
-	for _, candidate := range completion.Candidates {
-		fmt.Fprintln(p.out, candidate)
-	}
+	p.printSuggestions(completion.Suggestions)
 	return current
 }
 
@@ -288,8 +295,12 @@ func (p *Prompt) handleEscapeSequence(current string) (string, bool, error) {
 	}
 }
 
-func (p *Prompt) redrawLine(label string, current string) {
+func (p *Prompt) redrawLine(label string, current string, hint string) {
 	fmt.Fprintf(p.out, "\r\033[2K%s%s", label, current)
+	if hint != "" {
+		fmt.Fprintf(p.out, "\033[90m%s\033[0m", hint)
+		fmt.Fprintf(p.out, "\033[%dD", len([]rune(hint)))
+	}
 }
 
 func (p *Prompt) clearCurrentLineForOutput() {
@@ -314,6 +325,38 @@ func longestCommonPrefix(values []string) string {
 		}
 	}
 	return prefix
+}
+
+func (p *Prompt) redrawCurrentLine(label string, current string) {
+	hint := ""
+	if p.completer != nil {
+		hint = p.completer(current).Hint
+	}
+	p.redrawLine(label, current, hint)
+}
+
+func completionValues(completion Completion) []string {
+	values := make([]string, 0, len(completion.Suggestions))
+	for _, suggestion := range completion.Suggestions {
+		values = append(values, suggestion.Value)
+	}
+	return values
+}
+
+func (p *Prompt) printSuggestions(suggestions []Suggestion) {
+	maxWidth := 0
+	for _, suggestion := range suggestions {
+		if len(suggestion.Value) > maxWidth {
+			maxWidth = len(suggestion.Value)
+		}
+	}
+	for _, suggestion := range suggestions {
+		if suggestion.Description == "" {
+			fmt.Fprintln(p.out, suggestion.Value)
+			continue
+		}
+		fmt.Fprintf(p.out, "%-*s  %s\n", maxWidth, suggestion.Value, suggestion.Description)
+	}
 }
 
 func (p *Prompt) readLine() (string, error) {

@@ -70,6 +70,18 @@ func (d *diagnosticConnector) ListDatabases(context.Context, *config.ConnectionC
 	return nil, nil
 }
 
+func (d *diagnosticConnector) ListTables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
+	return nil, nil
+}
+
+func (d *diagnosticConnector) DescribeTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableColumn, error) {
+	return nil, nil
+}
+
+func (d *diagnosticConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
+	return nil, nil
+}
+
 func (d *diagnosticConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
 	return nil, nil
 }

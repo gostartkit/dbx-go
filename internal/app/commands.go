@@ -28,6 +28,20 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleConnectByName(ctx, fields[1])
 	case len(fields) == 2 && fields[0] == "use":
 		return false, a.handleUseDatabase(ctx, fields[1])
+	case len(fields) == 2 && fields[0] == "describe":
+		return false, a.handleDescribeTable(ctx, fields[1])
+	case len(fields) == 3 && fields[0] == "describe" && fields[1] == "table":
+		return false, a.handleDescribeTable(ctx, fields[2])
+	case len(fields) == 2 && fields[0] == "describe" && fields[1] == "table":
+		return false, a.handleDescribeTable(ctx, "")
+	case len(fields) == 3 && fields[0] == "create" && fields[1] == "user":
+		return false, a.handleCreateUser(ctx, fields[2])
+	case len(fields) == 2 && fields[0] == "create" && fields[1] == "user":
+		return false, a.handleCreateUser(ctx, "")
+	case len(fields) == 3 && fields[0] == "drop" && fields[1] == "user":
+		return false, a.handleDropUser(ctx, fields[2])
+	case len(fields) == 2 && fields[0] == "drop" && fields[1] == "user":
+		return false, a.handleDropUser(ctx, "")
 	case line == "connection create":
 		return false, a.handleConnectionCreate(ctx)
 	case len(fields) == 2 && fields[0] == "connection" && fields[1] == "doctor":
@@ -47,6 +61,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		}
 	case len(fields) >= 1 && fields[0] == "help":
 		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(line, "help")))
+	case len(fields) == 2 && fields[0] == "show" && fields[1] == "tables":
+		return false, a.handleShowTables(ctx)
+	case len(fields) == 3 && fields[0] == "show" && fields[1] == "grants":
+		return false, a.handleShowGrants(ctx, fields[2], "")
+	case len(fields) == 4 && fields[0] == "show" && fields[1] == "grants":
+		return false, a.handleShowGrants(ctx, fields[2], fields[3])
 	}
 
 	switch resolved {
@@ -60,6 +80,8 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleConnect(ctx)
 	case "connections":
 		return false, a.handleConnections(ctx)
+	case "context":
+		return false, a.handleContext(ctx)
 	case "audit log":
 		return false, a.handleAuditLog(ctx)
 	case "status":
@@ -68,6 +90,10 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleCreateDatabase(ctx)
 	case "list databases":
 		return false, a.handleListDatabases(ctx)
+	case "show users":
+		return false, a.handleShowUsers(ctx)
+	case "show tables":
+		return false, a.handleShowTables(ctx)
 	case "drop database":
 		return false, a.handleDropDatabase(ctx)
 	case "dry-run on":
@@ -258,6 +284,8 @@ func (a *Application) handleCreateDatabase(ctx context.Context) error {
 			return err
 		}
 
+		a.completionDBs = nil
+		a.completionDBsConn = ""
 		a.prompt.Printf("Database %s created.\n", databaseName)
 		return nil
 	})
@@ -375,6 +403,15 @@ func (a *Application) handleDropDatabase(ctx context.Context) error {
 			return err
 		}
 
+		if a.session.Database == databaseName {
+			a.clearDatabaseSelection()
+			if err := a.saveCurrentSession(); err != nil {
+				return util.WrapLayer("config", "save session", err)
+			}
+		} else {
+			a.completionDBs = nil
+			a.completionDBsConn = ""
+		}
 		a.prompt.Printf("Database %s dropped.\n", databaseName)
 		return nil
 	})

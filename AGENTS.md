@@ -173,7 +173,14 @@ connection doctor [name]
 create database
 list databases
 drop database
+create user
+show users
+drop user
+show tables
+describe [table]
+show grants <user> [host]
 use <database>
+context
 
 status
 dry-run on
@@ -240,8 +247,15 @@ dbx list databases [flags]
 dbx show databases [flags]
 dbx show dbs [flags]
 dbx drop database <name> [flags]
+dbx create user <name> [flags]
+dbx show users [flags]
+dbx drop user <name> [flags]
+dbx show tables [flags]
+dbx describe <table> [flags]
+dbx show grants <user> [host] [flags]
 
 dbx status
+dbx context
 dbx help
 dbx help <command>
 ```
@@ -367,13 +381,15 @@ Built-in variables include:
 
 Users must never provide unrestricted SQL.
 
-Identifiers must match:
+Do not use one global identifier rule for every object type.
 
-```text
-[a-zA-Z_][a-zA-Z0-9_]*
-```
+Current validation rules are split by purpose:
 
-All identifiers must be validated before SQL rendering.
+- database names allow letters, numbers, `_`, and `-`
+- MySQL usernames allow letters, numbers, `_`, and `-`
+- stricter internal identifiers may still use `[a-zA-Z_][a-zA-Z0-9_]*`
+
+All identifiers must still be validated before SQL rendering, and MySQL object names must be quoted safely in generated SQL.
 
 ## Diagnostics
 
@@ -534,6 +550,10 @@ proxy-SSH MySQL
 connection test
 connection doctor
 create/list/drop database
+create/show/drop user
+show tables
+describe table
+show grants
 template system
 global templates
 connection templates

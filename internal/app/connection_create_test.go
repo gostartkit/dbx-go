@@ -32,6 +32,18 @@ func (f failingConnector) ListDatabases(context.Context, *config.ConnectionConfi
 	return nil, nil
 }
 
+func (f failingConnector) ListTables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
+	return nil, nil
+}
+
+func (f failingConnector) DescribeTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableColumn, error) {
+	return nil, nil
+}
+
+func (f failingConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
+	return nil, nil
+}
+
 func (f failingConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
 	return nil, nil
 }

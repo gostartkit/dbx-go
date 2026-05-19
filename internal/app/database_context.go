@@ -15,6 +15,18 @@ func (a *Application) clearDatabaseSelection() {
 	a.session.Database = ""
 	a.completionDBs = nil
 	a.completionDBsConn = ""
+	a.clearTableCompletion()
+}
+
+func (a *Application) clearUserCompletion() {
+	a.completionUsers = nil
+	a.completionUsersConn = ""
+}
+
+func (a *Application) clearTableCompletion() {
+	a.completionTables = nil
+	a.completionTablesConn = ""
+	a.completionTablesDB = ""
 }
 
 func (a *Application) saveCurrentSession() error {
@@ -77,6 +89,7 @@ func (a *Application) setRuntimeDatabaseSelection(ctx context.Context, cfg *conf
 	a.session.Database = database
 	a.completionDBsConn = cfg.Name
 	a.completionDBs = append([]string(nil), databases...)
+	a.clearTableCompletion()
 
 	if persist {
 		if err := a.saveCurrentSession(); err != nil {

@@ -60,7 +60,54 @@ type ConnectionsResult struct {
 type DatabasesResult struct {
 	OK         bool     `json:"ok"`
 	Connection string   `json:"connection,omitempty"`
+	Database   string   `json:"database,omitempty"`
 	Databases  []string `json:"databases,omitempty"`
+}
+
+type TablesResult struct {
+	OK         bool     `json:"ok"`
+	Connection string   `json:"connection,omitempty"`
+	Database   string   `json:"database,omitempty"`
+	Tables     []string `json:"tables,omitempty"`
+}
+
+type TableColumnResult struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Null    string `json:"null,omitempty"`
+	Key     string `json:"key,omitempty"`
+	Default string `json:"default,omitempty"`
+	Extra   string `json:"extra,omitempty"`
+}
+
+type TableDescriptionResult struct {
+	OK         bool                `json:"ok"`
+	Connection string              `json:"connection,omitempty"`
+	Database   string              `json:"database,omitempty"`
+	Table      string              `json:"table,omitempty"`
+	Columns    []TableColumnResult `json:"columns,omitempty"`
+}
+
+type GrantsResult struct {
+	OK         bool     `json:"ok"`
+	Connection string   `json:"connection,omitempty"`
+	User       string   `json:"user,omitempty"`
+	Host       string   `json:"host,omitempty"`
+	Grants     []string `json:"grants,omitempty"`
+}
+
+type UsersResult struct {
+	OK         bool     `json:"ok"`
+	Connection string   `json:"connection,omitempty"`
+	Users      []string `json:"users,omitempty"`
+}
+
+type UserMutationResult struct {
+	OK       bool   `json:"ok"`
+	User     string `json:"user,omitempty"`
+	Host     string `json:"host,omitempty"`
+	Grant    string `json:"grant,omitempty"`
+	Database string `json:"database,omitempty"`
 }
 
 type ConnectResult struct {
@@ -161,6 +208,14 @@ type StatusResult struct {
 	ConnectedInProcess bool                `json:"connected_in_process,omitempty"`
 	DryRun             bool                `json:"dry_run,omitempty"`
 	Message            string              `json:"message,omitempty"`
+}
+
+type ContextResult struct {
+	OK         bool   `json:"ok"`
+	Connection string `json:"connection,omitempty"`
+	Database   string `json:"database,omitempty"`
+	Mode       string `json:"mode,omitempty"`
+	DryRun     bool   `json:"dry_run,omitempty"`
 }
 
 func summarizeConnection(cfg config.ConnectionConfig) ConnectionSummary {

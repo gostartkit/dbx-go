@@ -116,6 +116,15 @@ func ListDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
 	return QueryStrings(ctx, db, "SHOW DATABASES")
 }
 
+type TableColumn struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Null    string `json:"null,omitempty"`
+	Key     string `json:"key,omitempty"`
+	Default string `json:"default,omitempty"`
+	Extra   string `json:"extra,omitempty"`
+}
+
 func Ping(ctx context.Context, db *sql.DB) error {
 	if err := db.PingContext(ctx); err != nil {
 		return util.WrapLayer("mysql", "ping database", err)
@@ -144,6 +153,61 @@ func QueryStrings(ctx context.Context, db *sql.DB, query string) ([]string, erro
 	}
 
 	return values, nil
+}
+
+func ListTables(ctx context.Context, db *sql.DB, database string) ([]string, error) {
+	query := "SHOW TABLES FROM " + util.QuoteMySQLIdentifier(database)
+	return QueryStrings(ctx, db, query)
+}
+
+func DescribeTable(ctx context.Context, db *sql.DB, database string, table string) ([]TableColumn, error) {
+	query := fmt.Sprintf(
+		"DESCRIBE %s.%s",
+		util.QuoteMySQLIdentifier(database),
+		util.QuoteMySQLIdentifier(table),
+	)
+
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, util.WrapLayer("sql execution", "run query", err)
+	}
+	defer rows.Close()
+
+	columns := make([]TableColumn, 0)
+	for rows.Next() {
+		var (
+			field      string
+			typ        string
+			nullValue  sql.NullString
+			keyValue   sql.NullString
+			defaultVal sql.NullString
+			extraValue sql.NullString
+		)
+		if err := rows.Scan(&field, &typ, &nullValue, &keyValue, &defaultVal, &extraValue); err != nil {
+			return nil, util.WrapLayer("sql execution", "scan query result", err)
+		}
+		columns = append(columns, TableColumn{
+			Name:    field,
+			Type:    typ,
+			Null:    nullValue.String,
+			Key:     keyValue.String,
+			Default: defaultVal.String,
+			Extra:   extraValue.String,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, util.WrapLayer("sql execution", "read query rows", err)
+	}
+	return columns, nil
+}
+
+func ShowGrants(ctx context.Context, db *sql.DB, user string, host string) ([]string, error) {
+	query := fmt.Sprintf(
+		"SHOW GRANTS FOR '%s'@'%s'",
+		util.EscapeMySQLString(user),
+		util.EscapeMySQLString(host),
+	)
+	return QueryStrings(ctx, db, query)
 }
 
 func ExecStatement(ctx context.Context, db *sql.DB, statement string) error {

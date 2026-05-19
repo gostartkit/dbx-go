@@ -7,152 +7,427 @@ import (
 	"pkg.gostartkit.com/dbx/internal/ui"
 )
 
-var topLevelCommands = []string{
-	"connect",
-	"connections",
-	"audit log",
-	"connection create",
-	"connection doctor",
-	"connection edit",
-	"connection delete",
-	"connection show",
-	"connection test",
-	"create database",
-	"list databases",
-	"show databases",
-	"show dbs",
-	"drop database",
-	"use",
-	"status",
-	"dry-run on",
-	"dry-run off",
-	"help",
-	"exit",
+type CompletionContext struct {
+	Connection  string
+	Database    string
+	DryRun      bool
+	Connections []CompletionConnection
+	Databases   []string
+	Tables      []string
+	Users       []string
 }
 
-func calculateCompletion(line string, savedConnections []string, databases []string) ui.Completion {
+type CompletionConnection struct {
+	Name   string
+	Driver string
+	Mode   string
+}
+
+type Suggestion struct {
+	Value       string
+	Description string
+	Category    string
+}
+
+type CompletionProvider interface {
+	Complete(ctx CompletionContext, req completionRequest) []Suggestion
+}
+
+type completionRequest struct {
+	Line          string
+	Fields        []string
+	TrailingSpace bool
+	Prefix        string
+}
+
+type completionProviderFunc func(ctx CompletionContext, req completionRequest) []Suggestion
+
+func (f completionProviderFunc) Complete(ctx CompletionContext, req completionRequest) []Suggestion {
+	return f(ctx, req)
+}
+
+type completionEngine struct {
+	providers []CompletionProvider
+}
+
+var rootSuggestions = []Suggestion{
+	{Value: "connect", Description: "connect to a saved connection", Category: "command"},
+	{Value: "connections", Description: "list saved connections", Category: "command"},
+	{Value: "audit log", Description: "show recent audit entries", Category: "command"},
+	{Value: "connection create", Description: "create a saved connection", Category: "command"},
+	{Value: "connection edit", Description: "edit a saved connection", Category: "command"},
+	{Value: "connection delete", Description: "delete a saved connection", Category: "command"},
+	{Value: "connection show", Description: "show a saved connection", Category: "command"},
+	{Value: "connection test", Description: "test a saved connection", Category: "command"},
+	{Value: "connection doctor", Description: "inspect a saved connection statically", Category: "command"},
+	{Value: "context", Description: "show current REPL context", Category: "command"},
+	{Value: "create database", Description: "create a database", Category: "command"},
+	{Value: "create user", Description: "create a MySQL user", Category: "command"},
+	{Value: "list databases", Description: "list databases", Category: "command"},
+	{Value: "show databases", Description: "alias for list databases", Category: "alias"},
+	{Value: "show dbs", Description: "alias for list databases", Category: "alias"},
+	{Value: "show tables", Description: "list tables in current database", Category: "command"},
+	{Value: "show users", Description: "list MySQL users", Category: "command"},
+	{Value: "show grants", Description: "show grants for a MySQL user", Category: "command"},
+	{Value: "drop database", Description: "drop a database", Category: "command"},
+	{Value: "drop user", Description: "drop a MySQL user", Category: "command"},
+	{Value: "describe", Description: "describe a table", Category: "command"},
+	{Value: "use", Description: "select the current database", Category: "command"},
+	{Value: "status", Description: "show session status", Category: "command"},
+	{Value: "dry-run on", Description: "enable dry-run mode", Category: "command"},
+	{Value: "dry-run off", Description: "disable dry-run mode", Category: "command"},
+	{Value: "help", Description: "show command help", Category: "command"},
+	{Value: "exit", Description: "exit the REPL", Category: "command"},
+	{Value: "ctx", Description: "alias for context", Category: "alias"},
+	{Value: "desc table", Description: "alias for describe table", Category: "alias"},
+	{Value: "list users", Description: "alias for show users", Category: "alias"},
+	{Value: "show user accounts", Description: "alias for show users", Category: "alias"},
+}
+
+func calculateCompletion(line string, ctx CompletionContext) ui.Completion {
+	req := parseCompletionRequest(line)
+	engine := newCompletionEngine()
+	suggestions := engine.Complete(ctx, req)
+	return toUICompletion(req, suggestions)
+}
+
+func newCompletionEngine() completionEngine {
+	return completionEngine{
+		providers: []CompletionProvider{
+			completionProviderFunc(completeConnectionCommands),
+			completionProviderFunc(completeConnectNames),
+			completionProviderFunc(completeUseDatabases),
+			completionProviderFunc(completeShowGrantsUsers),
+			completionProviderFunc(completeDropUsers),
+			completionProviderFunc(completeDescribeTables),
+			completionProviderFunc(completeShowTables),
+			completionProviderFunc(completeCreateDropShowListHelpAuditTree),
+			completionProviderFunc(completeRootCommands),
+		},
+	}
+}
+
+func (e completionEngine) Complete(ctx CompletionContext, req completionRequest) []Suggestion {
+	for _, provider := range e.providers {
+		suggestions := provider.Complete(ctx, req)
+		if len(suggestions) > 0 {
+			return suggestions
+		}
+	}
+	return nil
+}
+
+func parseCompletionRequest(line string) completionRequest {
 	trailingSpace := strings.HasSuffix(line, " ")
 	trimmed := strings.TrimLeft(line, " ")
 	fields := strings.Fields(trimmed)
-	if len(fields) == 0 {
-		return ui.Completion{Prefix: "", Candidates: append([]string(nil), topLevelCommands...)}
+	prefix := ""
+	if len(fields) > 0 {
+		prefix = fields[len(fields)-1]
 	}
-
-	if len(fields) == 1 && !trailingSpace {
-		prefix := fields[0]
-		candidates := filterByPrefix(topLevelCommands, prefix)
-		return ui.Completion{Prefix: prefix, Candidates: candidates}
-	}
-
-	first := fields[0]
-	last := fields[len(fields)-1]
-	prefix := last
 	if trailingSpace {
 		prefix = ""
 	}
-
-	switch first {
-	case "connection":
-		switch len(fields) {
-		case 1:
-			return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"create", "doctor", "edit", "delete", "show", "test"}, prefix)}
-		case 2:
-			if trailingSpace && slices.Contains([]string{"doctor", "edit", "delete", "show"}, fields[1]) {
-				return ui.Completion{Prefix: "", Candidates: filterByPrefix(sortedStrings(savedConnections), "")}
-			}
-			if trailingSpace && fields[1] == "test" {
-				candidates := append(sortedStrings(savedConnections), "verbose")
-				return ui.Completion{Prefix: "", Candidates: candidates}
-			}
-			if !trailingSpace && len(fields) == 2 {
-				if slices.Contains([]string{"doctor", "edit", "delete", "show", "test"}, fields[1]) {
-					return ui.Completion{Prefix: fields[1], Candidates: filterByPrefix([]string{"doctor", "edit", "delete", "show", "test"}, fields[1])}
-				}
-				return ui.Completion{Prefix: fields[1], Candidates: filterByPrefix([]string{"create", "doctor", "edit", "delete", "show", "test"}, fields[1])}
-			}
-		case 3:
-			if slices.Contains([]string{"doctor", "edit", "delete", "show"}, fields[1]) {
-				return ui.Completion{Prefix: prefix, Candidates: filterByPrefix(sortedStrings(savedConnections), prefix)}
-			}
-			if fields[1] == "test" {
-				if trailingSpace {
-					return ui.Completion{Prefix: "", Candidates: []string{"verbose"}}
-				}
-				candidates := append(sortedStrings(savedConnections), "verbose")
-				return ui.Completion{Prefix: prefix, Candidates: filterByPrefix(candidates, prefix)}
-			}
-		case 4:
-			if fields[1] == "test" {
-				if trailingSpace {
-					return ui.Completion{Prefix: "", Candidates: []string{"verbose"}}
-				}
-				return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"verbose"}, prefix)}
-			}
-		}
-	case "connect":
-		if len(fields) >= 2 || trailingSpace {
-			return ui.Completion{Prefix: prefix, Candidates: filterByPrefix(sortedStrings(savedConnections), prefix)}
-		}
-	case "create":
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"database"}, prefix)}
-	case "list":
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"databases"}, prefix)}
-	case "show":
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"databases", "dbs"}, prefix)}
-	case "drop":
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"database"}, prefix)}
-	case "use":
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix(sortedStrings(databases), prefix)}
-	case "dry-run":
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"on", "off"}, prefix)}
-	case "dry":
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"on", "off"}, prefix)}
-	case "help":
-		topics := []string{
-			"connect",
-			"connections",
-			"audit log",
-			"connection",
-			"connection create",
-			"connection doctor",
-			"connection edit",
-			"connection delete",
-			"connection show",
-			"connection test",
-			"create database",
-			"list databases",
-			"drop database",
-			"use",
-			"status",
-			"dry-run",
-			"aliases",
-			"exit",
-		}
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix(topics, strings.TrimSpace(strings.Join(fields[1:], " ")))}
-	case "audit":
-		return ui.Completion{Prefix: prefix, Candidates: filterByPrefix([]string{"log"}, prefix)}
+	return completionRequest{
+		Line:          line,
+		Fields:        fields,
+		TrailingSpace: trailingSpace,
+		Prefix:        prefix,
 	}
-
-	return ui.Completion{Prefix: prefix, Candidates: nil}
 }
 
-func filterByPrefix(candidates []string, prefix string) []string {
+func toUICompletion(req completionRequest, suggestions []Suggestion) ui.Completion {
+	filtered := filterSuggestionsByPrefix(suggestions, req.Prefix)
+	uiSuggestions := make([]ui.Suggestion, 0, len(filtered))
+	for _, suggestion := range filtered {
+		uiSuggestions = append(uiSuggestions, ui.Suggestion{
+			Value:       suggestion.Value,
+			Description: suggestion.Description,
+			Category:    suggestion.Category,
+		})
+	}
+
+	return ui.Completion{
+		Prefix:      req.Prefix,
+		Suggestions: uiSuggestions,
+		Hint:        completionHint(req, filtered),
+	}
+}
+
+func filterSuggestionsByPrefix(suggestions []Suggestion, prefix string) []Suggestion {
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
-		return append([]string(nil), candidates...)
+		return append([]Suggestion(nil), suggestions...)
 	}
 
-	out := make([]string, 0, len(candidates))
-	for _, candidate := range candidates {
-		if strings.HasPrefix(candidate, prefix) {
-			out = append(out, candidate)
+	filtered := make([]Suggestion, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		if strings.HasPrefix(suggestion.Value, prefix) {
+			filtered = append(filtered, suggestion)
 		}
 	}
-	return out
+	return filtered
 }
 
-func sortedStrings(values []string) []string {
+func completionHint(req completionRequest, suggestions []Suggestion) string {
+	if req.TrailingSpace || req.Prefix == "" || len(suggestions) == 0 {
+		return ""
+	}
+	first := suggestions[0].Value
+	if !strings.HasPrefix(first, req.Prefix) || len(first) <= len(req.Prefix) {
+		return ""
+	}
+	return first[len(req.Prefix):]
+}
+
+func completeRootCommands(_ CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 || (len(req.Fields) == 1 && !req.TrailingSpace) {
+		return rootSuggestions
+	}
+	return nil
+}
+
+func completeConnectionCommands(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 || req.Fields[0] != "connection" {
+		return nil
+	}
+
+	subcommands := []Suggestion{
+		{Value: "create", Description: "create a saved connection", Category: "subcommand"},
+		{Value: "edit", Description: "edit a saved connection", Category: "subcommand"},
+		{Value: "delete", Description: "delete a saved connection", Category: "subcommand"},
+		{Value: "show", Description: "show a saved connection", Category: "subcommand"},
+		{Value: "test", Description: "test a saved connection", Category: "subcommand"},
+		{Value: "doctor", Description: "inspect a saved connection statically", Category: "subcommand"},
+	}
+
+	switch len(req.Fields) {
+	case 1:
+		return subcommands
+	case 2:
+		if req.TrailingSpace && req.Fields[1] == "test" {
+			suggestions := connectionSuggestions(ctx)
+			suggestions = append(suggestions, Suggestion{Value: "verbose", Description: "show detailed timing and targets", Category: "flag"})
+			return suggestions
+		}
+		if !req.TrailingSpace {
+			return subcommands
+		}
+		if slices.Contains([]string{"edit", "delete", "show", "test", "doctor"}, req.Fields[1]) {
+			return connectionSuggestions(ctx)
+		}
+	case 3:
+		if slices.Contains([]string{"edit", "delete", "show", "doctor"}, req.Fields[1]) {
+			return connectionSuggestions(ctx)
+		}
+		if req.Fields[1] == "test" {
+			if req.TrailingSpace {
+				return []Suggestion{{Value: "verbose", Description: "show detailed timing and targets", Category: "flag"}}
+			}
+			suggestions := connectionSuggestions(ctx)
+			suggestions = append(suggestions, Suggestion{Value: "verbose", Description: "show detailed timing and targets", Category: "flag"})
+			return suggestions
+		}
+	case 4:
+		if req.Fields[1] == "test" {
+			return []Suggestion{{Value: "verbose", Description: "show detailed timing and targets", Category: "flag"}}
+		}
+	}
+	return nil
+}
+
+func completeConnectNames(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 || req.Fields[0] != "connect" {
+		return nil
+	}
+	if len(req.Fields) == 1 && !req.TrailingSpace {
+		return nil
+	}
+	return connectionSuggestions(ctx)
+}
+
+func completeUseDatabases(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 || req.Fields[0] != "use" {
+		return nil
+	}
+	if len(req.Fields) == 1 && req.TrailingSpace {
+		return stringSuggestions(ctx.Databases, "database")
+	}
+	if len(req.Fields) == 2 {
+		return stringSuggestions(ctx.Databases, "database")
+	}
+	return nil
+}
+
+func completeDropUsers(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "drop" || req.Fields[1] != "user" {
+		return nil
+	}
+	if len(req.Fields) == 2 && req.TrailingSpace {
+		return stringSuggestions(ctx.Users, "user")
+	}
+	if len(req.Fields) == 3 {
+		return stringSuggestions(ctx.Users, "user")
+	}
+	return nil
+}
+
+func completeShowGrantsUsers(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "show" || req.Fields[1] != "grants" {
+		return nil
+	}
+	if len(req.Fields) == 2 && req.TrailingSpace {
+		return stringSuggestions(ctx.Users, "user")
+	}
+	if len(req.Fields) == 3 {
+		return stringSuggestions(ctx.Users, "user")
+	}
+	return nil
+}
+
+func completeDescribeTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 || req.Fields[0] != "describe" {
+		return nil
+	}
+	switch len(req.Fields) {
+	case 1:
+		if req.TrailingSpace {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+	case 2:
+		if req.Fields[1] == "table" && req.TrailingSpace {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		if req.Fields[1] == "table" {
+			return []Suggestion{{Value: "table", Description: "describe a table", Category: "subcommand"}}
+		}
+		return stringSuggestions(ctx.Tables, "table")
+	case 3:
+		if req.Fields[1] == "table" {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+	}
+	return nil
+}
+
+func completeShowTables(_ CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 2 && req.Fields[0] == "show" && !req.TrailingSpace && req.Fields[1] == "tables" {
+		return []Suggestion{{Value: "tables", Description: "list tables in current database", Category: "subcommand"}}
+	}
+	return nil
+}
+
+func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 {
+		return nil
+	}
+
+	switch req.Fields[0] {
+	case "create":
+		return []Suggestion{
+			{Value: "database", Description: "create a database", Category: "subcommand"},
+			{Value: "user", Description: "create a MySQL user", Category: "subcommand"},
+		}
+	case "drop":
+		if len(req.Fields) == 1 || (len(req.Fields) == 2 && req.Fields[1] != "user") {
+			return []Suggestion{
+				{Value: "database", Description: "drop a database", Category: "subcommand"},
+				{Value: "user", Description: "drop a MySQL user", Category: "subcommand"},
+			}
+		}
+	case "list":
+		return []Suggestion{
+			{Value: "databases", Description: "list databases", Category: "subcommand"},
+			{Value: "users", Description: "alias for show users", Category: "alias"},
+		}
+	case "show":
+		if len(req.Fields) == 1 {
+			return []Suggestion{
+				{Value: "databases", Description: "list databases", Category: "subcommand"},
+				{Value: "dbs", Description: "alias for list databases", Category: "alias"},
+				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
+				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
+				{Value: "grants", Description: "show grants for a MySQL user", Category: "subcommand"},
+				{Value: "user", Description: "show user aliases", Category: "alias"},
+			}
+		}
+		if len(req.Fields) == 2 && req.Fields[1] == "user" {
+			return []Suggestion{{Value: "accounts", Description: "alias for show users", Category: "alias"}}
+		}
+	case "help":
+		return []Suggestion{
+			{Value: "connect", Description: "connect help", Category: "topic"},
+			{Value: "connections", Description: "connections help", Category: "topic"},
+			{Value: "audit log", Description: "audit log help", Category: "topic"},
+			{Value: "connection", Description: "connection command help", Category: "topic"},
+			{Value: "connection create", Description: "connection create help", Category: "topic"},
+			{Value: "connection edit", Description: "connection edit help", Category: "topic"},
+			{Value: "connection delete", Description: "connection delete help", Category: "topic"},
+			{Value: "connection show", Description: "connection show help", Category: "topic"},
+			{Value: "connection test", Description: "connection test help", Category: "topic"},
+			{Value: "connection doctor", Description: "connection doctor help", Category: "topic"},
+			{Value: "create database", Description: "create database help", Category: "topic"},
+			{Value: "create user", Description: "create user help", Category: "topic"},
+			{Value: "list databases", Description: "list databases help", Category: "topic"},
+			{Value: "show tables", Description: "show tables help", Category: "topic"},
+			{Value: "show users", Description: "show users help", Category: "topic"},
+			{Value: "show grants", Description: "show grants help", Category: "topic"},
+			{Value: "drop database", Description: "drop database help", Category: "topic"},
+			{Value: "drop user", Description: "drop user help", Category: "topic"},
+			{Value: "describe", Description: "describe help", Category: "topic"},
+			{Value: "use", Description: "use help", Category: "topic"},
+			{Value: "status", Description: "status help", Category: "topic"},
+			{Value: "context", Description: "context help", Category: "topic"},
+			{Value: "dry-run", Description: "dry-run help", Category: "topic"},
+			{Value: "aliases", Description: "alias help", Category: "topic"},
+			{Value: "exit", Description: "exit help", Category: "topic"},
+		}
+	case "audit":
+		return []Suggestion{{Value: "log", Description: "show recent audit entries", Category: "subcommand"}}
+	case "dry-run", "dry":
+		return []Suggestion{
+			{Value: "on", Description: "enable dry-run mode", Category: "subcommand"},
+			{Value: "off", Description: "disable dry-run mode", Category: "subcommand"},
+		}
+	}
+	return nil
+}
+
+func connectionSuggestions(ctx CompletionContext) []Suggestion {
+	connections := append([]CompletionConnection(nil), ctx.Connections...)
+	slices.SortFunc(connections, func(a CompletionConnection, b CompletionConnection) int {
+		switch {
+		case a.Name < b.Name:
+			return -1
+		case a.Name > b.Name:
+			return 1
+		default:
+			return 0
+		}
+	})
+
+	suggestions := make([]Suggestion, 0, len(connections))
+	for _, connection := range connections {
+		description := strings.TrimSpace(connection.Driver + " " + connection.Mode)
+		suggestions = append(suggestions, Suggestion{
+			Value:       connection.Name,
+			Description: description,
+			Category:    "connection",
+		})
+	}
+	return suggestions
+}
+
+func stringSuggestions(values []string, category string) []Suggestion {
 	sorted := append([]string(nil), values...)
 	slices.Sort(sorted)
-	return sorted
+
+	suggestions := make([]Suggestion, 0, len(sorted))
+	for _, value := range sorted {
+		suggestions = append(suggestions, Suggestion{
+			Value:    value,
+			Category: category,
+		})
+	}
+	return suggestions
 }

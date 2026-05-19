@@ -14,7 +14,8 @@
 ## Features
 
 - Interactive `dbx>` prompt
-- Lightweight TAB completion for commands and saved connection names
+- Context-aware TAB completion for commands, connections, databases, tables, and MySQL users
+- Lightweight inline hints for common command prefixes
 - Explicit command aliases without changing canonical help output
 - Direct, proxy, SSH, and proxy-SSH MySQL connections
 - Hidden password input
@@ -87,9 +88,16 @@ connection show <name>
 connection test [name] [verbose]
 connection doctor [name]
 status
+context
 create database
 list databases
 drop database
+create user
+show users
+drop user
+show tables
+describe [table]
+show grants <user> [host]
 use <database>
 dry-run on
 dry-run off
@@ -117,8 +125,15 @@ dbx list databases [flags]
 dbx show databases [flags]
 dbx show dbs [flags]
 dbx drop database <name> [flags]
+dbx create user <name> [flags]
+dbx show users [flags]
+dbx drop user <name> [flags]
+dbx show tables [flags]
+dbx describe <table> [flags]
+dbx show grants <user> [host] [flags]
 
 dbx status
+dbx context
 dbx help
 dbx help <command>
 ```
@@ -136,7 +151,7 @@ Global CLI flags:
 
 ## REPL Ergonomics
 
-TAB completion is intentionally lightweight. It does not implement full readline-style editing, but it does support command, saved-connection, and `use <database>` completion when the REPL is connected. Up and Down arrows navigate persisted command history in the interactive REPL.
+TAB completion is intentionally lightweight, but it is now operationally context-aware. It does not implement full readline-style editing, but it does understand command position, saved connections, current database context, and lightweight inline hints. Up and Down arrows navigate persisted command history in the interactive REPL.
 
 ```text
 dbx> conn<TAB>
@@ -164,6 +179,44 @@ prod
 dbx> use <TAB>
 app_demo
 app_prod
+
+dbx(prod/app_prod)> describe <TAB>
+orders
+users
+
+dbx> drop user <TAB>
+analytics-ro
+app_user
+
+dbx(prod)> show grants <TAB>
+analytics-ro
+app_user
+```
+
+Common command-tree examples:
+
+```text
+dbx> create <TAB>
+database
+user
+
+dbx> drop <TAB>
+database
+user
+
+dbx> show <TAB>
+databases
+dbs
+users
+tables
+grants
+
+dbx> help <TAB>
+connection
+create
+drop
+use
+context
 ```
 
 Supported aliases stay intentionally small and explicit:
@@ -179,6 +232,11 @@ show databases -> list databases
 show dbs      -> list databases
 create db     -> create database
 drop db       -> drop database
+list users    -> show users
+show user accounts -> show users
+describe      -> describe
+desc table    -> describe table
+ctx           -> context
 test conn     -> connection test
 doctor conn   -> connection doctor
 dry on        -> dry-run on
@@ -189,7 +247,7 @@ Use `help aliases` inside the REPL to display the alias list.
 
 ## Confirmation Behavior
 
-Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `list databases`, `show databases`, and `show dbs`.
+Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `list databases`, `show databases`, `show dbs`, and `show users`.
 
 Mutating commands require confirmation in the REPL unless dry-run is active. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
 
@@ -227,6 +285,12 @@ dbx(prod/analytics_v2)> status
 Connection: prod
 Database: analytics_v2
 ...
+
+dbx(prod/analytics_v2)> context
+Connection: prod
+Database: analytics_v2
+Mode: proxy-ssh
+Dry-run: off
 ```
 
 `use <database>` updates the active REPL session and persists the selected database in `session.json`. One-shot CLI commands stay stateless and instead accept `--database <name>` for a single invocation.
@@ -237,6 +301,14 @@ Database names accept letters, numbers, `_`, and `-`. Examples:
 greenhn-dev
 prod-db
 analytics_v2
+```
+
+MySQL usernames accept letters, numbers, `_`, and `-`. Examples:
+
+```text
+app_user
+analytics-ro
+service_v2
 ```
 
 ## Configuration
@@ -352,6 +424,25 @@ Proxy -> MySQL example:
   }
 }
 ```
+
+## Operational Inspection
+
+These commands keep `dbx` in its operational REPL lane without turning it into a raw SQL shell:
+
+```text
+show tables
+describe users
+show grants analytics-ro
+context
+```
+
+`show tables` and `describe` require a selected database context. If none is selected, `dbx` returns:
+
+```text
+no database selected; use: use <database>
+```
+
+`show grants` defaults the MySQL host to `%` unless a second argument is provided.
 
 ## Template Precedence
 
@@ -488,6 +579,29 @@ Confirm execution? [y/n] [y]:
 [DRY-RUN] Create user
 ```
 
+User creation with a database-aware grant:
+
+```text
+dbx(prod/app_prod)> create user
+Username: analytics-ro
+Host [%]:
+  1. prompt
+  2. env variable
+  3. generated password
+Password mode [prompt]: generated password
+Grant access to current database app_prod? [y/n] [y]:
+  1. all
+  2. readonly
+Privileges [all]: readonly
+Template: builtin_create_user (builtin)
+Execution Plan
+  1. Create MySQL user 'analytics-ro'@'%'
+  2. Grant SELECT on `app_prod`.*
+Rendered SQL
+  1. CREATE USER 'analytics-ro'@'%' IDENTIFIED BY '***'
+  2. GRANT SELECT ON `app_prod`.* TO 'analytics-ro'@'%'
+```
+
 Connection selection with `connect` and no argument:
 
 ```text
@@ -609,6 +723,29 @@ Connection doctor: prod-proxy
 [OK] proxy scheme socks5
 [WARN] proxy URL contains inline password
        suggestion: avoid saving inline proxy passwords in config
+```
+
+Operational inspection in the REPL:
+
+```text
+dbx> connect prod
+Connected to prod.
+
+dbx(prod)> use app_prod
+Using database: app_prod
+
+dbx(prod/app_prod)> show tables
+users
+orders
+audit_logs
+
+dbx(prod/app_prod)> describe users
+id               bigint
+email            varchar(255)
+created_at       datetime
+
+dbx(prod/app_prod)> show grants analytics-ro
+GRANT SELECT ON `app_prod`.* TO 'analytics-ro'@'%'
 ```
 
 Connection editing and deletion:
@@ -787,6 +924,75 @@ Example JSON:
 }
 ```
 
+Show tables from the current CLI database context:
+
+```bash
+dbx --connection prod --database app_prod show tables
+```
+
+Describe a table:
+
+```bash
+dbx --connection prod --database app_prod describe users
+```
+
+Show grants for a MySQL user:
+
+```bash
+dbx --connection prod show grants analytics-ro
+dbx --connection prod show grants analytics-ro localhost
+```
+
+Context output for scripts or quick checks:
+
+```bash
+dbx --connection prod --database app_prod context --format json
+```
+
+Example JSON:
+
+```json
+{
+  "ok": true,
+  "connection": "prod",
+  "database": "app_prod",
+  "mode": "proxy-ssh",
+  "dry_run": false
+}
+```
+
+Show tables JSON:
+
+```bash
+dbx --connection prod --database app_prod show tables --format json
+```
+
+```json
+{
+  "ok": true,
+  "connection": "prod",
+  "database": "app_prod",
+  "tables": ["users", "orders", "audit_logs"]
+}
+```
+
+Describe JSON:
+
+```json
+{
+  "ok": true,
+  "connection": "prod",
+  "database": "app_prod",
+  "table": "users",
+  "columns": [
+    {
+      "name": "id",
+      "type": "bigint"
+    }
+  ]
+}
+```
+
 Structured JSON error output:
 
 ```json
@@ -811,6 +1017,30 @@ Create a database from a saved connection:
 
 ```bash
 dbx --connection prod create database app_demo --yes
+```
+
+Create a readonly reporting user for the current database:
+
+```bash
+dbx --connection prod --database analytics_v2 create user analytics-ro \
+  --password-env ANALYTICS_RO_PASSWORD \
+  --grant readonly \
+  --yes
+```
+
+Create a user with a generated password:
+
+```bash
+dbx --connection prod create user app_user \
+  --generate-password \
+  --yes
+```
+
+Show and drop users:
+
+```bash
+dbx --connection prod show users
+dbx --connection prod drop user analytics-ro --host % --yes
 ```
 
 Render a template without executing it:
@@ -852,6 +1082,12 @@ List databases for scripts:
 
 ```bash
 dbx --connection prod list databases --format json
+```
+
+Show users for scripts:
+
+```bash
+dbx --connection prod show users --format json
 ```
 
 Drop a database safely:
@@ -949,6 +1185,7 @@ connect prod
 - Proxy passwords in `proxy.url` are redacted in user-facing output and JSON summaries.
 - Verbose connection test output also redacts proxy passwords and never prints database or SSH passwords.
 - Audit log entries store command names, connection names, modes, dry-run state, success, and duration, but never passwords or secret template input values.
+- Generated passwords from `create user --generate-password` are shown once in text mode after a successful create, and are never written to JSON output, dry-run previews, or audit logs.
 - SSH host verification uses `known_hosts`.
 - `DBX_KNOWN_HOSTS` can point to alternate `known_hosts` files if needed.
 - `connection doctor` only performs static `known_hosts` checks against plain host entries; it does not verify hashed entries or make network calls.

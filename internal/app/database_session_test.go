@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 
@@ -12,14 +13,21 @@ import (
 )
 
 type databaseSelectionConnector struct {
-	databases []string
-	openCalls int
-	listCalls int
+	databases  []string
+	tables     []string
+	users      []string
+	dbErr      error
+	tableErr   error
+	userErr    error
+	openCalls  int
+	listCalls  int
+	tableCalls int
+	userCalls  int
 }
 
 func (c *databaseSelectionConnector) Open(context.Context, *config.ConnectionConfig) (*sql.DB, error) {
 	c.openCalls++
-	return nil, nil
+	return sql.Open("mysql", "root@tcp(127.0.0.1:3306)/mysql")
 }
 
 func (c *databaseSelectionConnector) Diagnose(context.Context, *config.ConnectionConfig) (*driver.DiagnosticTrace, error) {
@@ -32,11 +40,37 @@ func (c *databaseSelectionConnector) Ping(context.Context, *config.ConnectionCon
 
 func (c *databaseSelectionConnector) ListDatabases(context.Context, *config.ConnectionConfig, *sql.DB) ([]string, error) {
 	c.listCalls++
+	if c.dbErr != nil {
+		return nil, c.dbErr
+	}
 	return append([]string(nil), c.databases...), nil
 }
 
+func (c *databaseSelectionConnector) ListTables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
+	c.tableCalls++
+	if c.tableErr != nil {
+		return nil, c.tableErr
+	}
+	if len(c.tables) == 0 {
+		return []string{"users", "orders"}, nil
+	}
+	return append([]string(nil), c.tables...), nil
+}
+
+func (c *databaseSelectionConnector) DescribeTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableColumn, error) {
+	return []driver.TableColumn{{Name: "id", Type: "bigint"}}, nil
+}
+
+func (c *databaseSelectionConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
+	return []string{"GRANT SELECT ON *.* TO 'analytics-ro'@'%'"}, nil
+}
+
 func (c *databaseSelectionConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
-	return nil, nil
+	c.userCalls++
+	if c.userErr != nil {
+		return nil, c.userErr
+	}
+	return append([]string(nil), c.users...), nil
 }
 
 func TestHandleLineUseParsesDatabase(t *testing.T) {
@@ -191,5 +225,71 @@ func TestActivateConnectionClearsDatabaseSelection(t *testing.T) {
 	}
 	if sessionFile.CurrentConnection != "prod" || sessionFile.CurrentDatabase != "" {
 		t.Fatalf("unexpected session file: %+v", sessionFile)
+	}
+}
+
+func TestCurrentCompletionTablesCachesByConnectionAndDatabase(t *testing.T) {
+	t.Parallel()
+
+	connector := &databaseSelectionConnector{tables: []string{"users", "orders"}}
+	app := &Application{
+		connector: connector,
+		session: &Session{
+			Connection: sampleConnection("prod"),
+			Database:   "app_prod",
+			DB:         &sql.DB{},
+		},
+	}
+
+	first := app.currentCompletionTables()
+	second := app.currentCompletionTables()
+	if len(first) != 2 || len(second) != 2 {
+		t.Fatalf("unexpected tables: %#v %#v", first, second)
+	}
+	if connector.tableCalls != 1 {
+		t.Fatalf("tableCalls = %d, want 1", connector.tableCalls)
+	}
+}
+
+func TestCurrentCompletionTablesClearsOnDatabaseSelectionReset(t *testing.T) {
+	t.Parallel()
+
+	app := &Application{
+		session:              &Session{Connection: sampleConnection("prod"), Database: "app_prod"},
+		completionTables:     []string{"users"},
+		completionTablesConn: "prod",
+		completionTablesDB:   "app_prod",
+	}
+
+	app.clearDatabaseSelection()
+	if len(app.completionTables) != 0 || app.completionTablesConn != "" || app.completionTablesDB != "" {
+		t.Fatalf("table cache not cleared: %+v", app)
+	}
+}
+
+func TestCompletionFailuresFallBackToEmptySuggestions(t *testing.T) {
+	t.Parallel()
+
+	app := &Application{
+		connector: &databaseSelectionConnector{
+			dbErr:    errors.New("db failure"),
+			tableErr: errors.New("table failure"),
+			userErr:  errors.New("user failure"),
+		},
+		session: &Session{
+			Connection: sampleConnection("prod"),
+			Database:   "app_prod",
+			DB:         &sql.DB{},
+		},
+	}
+
+	if got := app.currentCompletionDatabases(); got != nil {
+		t.Fatalf("currentCompletionDatabases() = %#v, want nil", got)
+	}
+	if got := app.currentCompletionTables(); got != nil {
+		t.Fatalf("currentCompletionTables() = %#v, want nil", got)
+	}
+	if got := app.currentCompletionUsers(); got != nil {
+		t.Fatalf("currentCompletionUsers() = %#v, want nil", got)
 	}
 }
