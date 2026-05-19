@@ -33,6 +33,13 @@ type Prompt struct {
 	completer Completer
 	history   *HistoryNavigator
 	isTerm    func() bool
+	rawActive bool
+	label     string
+	current   string
+}
+
+type rawModeWriter struct {
+	writer io.Writer
 }
 
 func NewPrompt(in io.Reader, out io.Writer) *Prompt {
@@ -67,13 +74,13 @@ func (p *Prompt) AppendHistory(entry string) bool {
 }
 
 func (p *Prompt) Println(args ...any) {
-	p.clearCurrentLineForOutput()
-	fmt.Fprintln(p.out, args...)
+	p.ClearLine()
+	fmt.Fprintln(p.systemWriter(), args...)
 }
 
 func (p *Prompt) Printf(format string, args ...any) {
-	p.clearCurrentLineForOutput()
-	fmt.Fprintf(p.out, format, args...)
+	p.ClearLine()
+	fmt.Fprintf(p.systemWriter(), format, args...)
 }
 
 func (p *Prompt) ReadPrompt(label string) (string, error) {
@@ -182,6 +189,14 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 		return "", err
 	}
 	defer term.Restore(int(p.inFile.Fd()), state)
+	p.rawActive = true
+	p.label = label
+	p.current = ""
+	defer func() {
+		p.rawActive = false
+		p.label = ""
+		p.current = ""
+	}()
 
 	fmt.Fprint(p.out, label)
 
@@ -195,7 +210,7 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 		switch b {
 		case '\n', '\r':
 			p.redrawLine(label, current, "")
-			fmt.Fprintln(p.out)
+			p.writeNewline()
 			if p.history != nil {
 				p.history.Reset()
 			}
@@ -258,8 +273,10 @@ func (p *Prompt) applyCompletion(current string, completion Completion) string {
 		return updated
 	}
 
-	fmt.Fprintln(p.out)
-	p.printSuggestions(completion.Suggestions)
+	p.PrintSystemOutput(func(w io.Writer) {
+		p.printSuggestionsTo(w, completion.Suggestions)
+		fmt.Fprintln(w)
+	})
 	return current
 }
 
@@ -296,18 +313,48 @@ func (p *Prompt) handleEscapeSequence(current string) (string, bool, error) {
 }
 
 func (p *Prompt) redrawLine(label string, current string, hint string) {
+	_ = hint
 	fmt.Fprintf(p.out, "\r\033[2K%s%s", label, current)
-	if hint != "" {
-		fmt.Fprintf(p.out, "\033[90m%s\033[0m", hint)
-		fmt.Fprintf(p.out, "\033[%dD", len([]rune(hint)))
-	}
 }
 
-func (p *Prompt) clearCurrentLineForOutput() {
+func (p *Prompt) ClearLine() {
 	if p.isTerm == nil || !p.isTerm() {
 		return
 	}
 	fmt.Fprint(p.out, "\r\033[2K")
+}
+
+func (p *Prompt) Redraw() {
+	if !p.rawActive {
+		return
+	}
+	p.redrawLine(p.label, p.current, "")
+}
+
+func (p *Prompt) PrintSystemOutput(fn func(io.Writer)) {
+	if p.rawActive {
+		p.ClearLine()
+		p.writeNewline()
+		fn(p.systemWriter())
+		p.Redraw()
+		return
+	}
+	fn(p.systemWriter())
+}
+
+func (p *Prompt) systemWriter() io.Writer {
+	if p.rawActive {
+		return rawModeWriter{writer: p.out}
+	}
+	return p.out
+}
+
+func (p *Prompt) writeNewline() {
+	if p.rawActive {
+		fmt.Fprint(p.out, "\r\n")
+		return
+	}
+	fmt.Fprint(p.out, "\n")
 }
 
 func longestCommonPrefix(values []string) string {
@@ -328,11 +375,9 @@ func longestCommonPrefix(values []string) string {
 }
 
 func (p *Prompt) redrawCurrentLine(label string, current string) {
-	hint := ""
-	if p.completer != nil {
-		hint = p.completer(current).Hint
-	}
-	p.redrawLine(label, current, hint)
+	p.label = label
+	p.current = current
+	p.redrawLine(label, current, "")
 }
 
 func completionValues(completion Completion) []string {
@@ -344,6 +389,10 @@ func completionValues(completion Completion) []string {
 }
 
 func (p *Prompt) printSuggestions(suggestions []Suggestion) {
+	p.printSuggestionsTo(p.out, suggestions)
+}
+
+func (p *Prompt) printSuggestionsTo(w io.Writer, suggestions []Suggestion) {
 	maxWidth := 0
 	for _, suggestion := range suggestions {
 		if len(suggestion.Value) > maxWidth {
@@ -352,11 +401,22 @@ func (p *Prompt) printSuggestions(suggestions []Suggestion) {
 	}
 	for _, suggestion := range suggestions {
 		if suggestion.Description == "" {
-			fmt.Fprintln(p.out, suggestion.Value)
+			fmt.Fprintln(w, suggestion.Value)
 			continue
 		}
-		fmt.Fprintf(p.out, "%-*s  %s\n", maxWidth, suggestion.Value, suggestion.Description)
+		fmt.Fprintf(w, "%-*s  %s\n", maxWidth, suggestion.Value, suggestion.Description)
 	}
+}
+
+func (w rawModeWriter) Write(p []byte) (int, error) {
+	text := string(p)
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\n", "\r\n")
+	_, err := io.WriteString(w.writer, text)
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 func (p *Prompt) readLine() (string, error) {
