@@ -32,26 +32,6 @@ type connectionCreateFlags struct {
 	overwrite      bool
 }
 
-type connectionEditFlags struct {
-	driver         optionalString
-	mode           optionalString
-	host           optionalString
-	port           optionalInt
-	user           optionalString
-	passwordEnv    optionalString
-	password       optionalString
-	proxyURL       optionalString
-	sshHost        optionalString
-	sshPort        optionalInt
-	sshUser        optionalString
-	sshPasswordEnv optionalString
-	sshPassword    optionalString
-	sshPrivateKey  optionalString
-	connectTimeout optionalInt
-	queryTimeout   optionalInt
-	test           bool
-}
-
 func (b *cliBuilder) connectCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "connect",
@@ -173,49 +153,11 @@ func (b *cliBuilder) createConnectionCommand() *cmd.Command {
 	return command
 }
 
-func (b *cliBuilder) editGroupCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "edit",
-		UsageLine: "dbx edit <subcommand>",
-		Short:     "Edit saved resources",
-		SubCommands: []*cmd.Command{
-			b.editConnectionCommand(),
-		},
-	}
-}
-
-func (b *cliBuilder) editConnectionCommand() *cmd.Command {
-	command := b.connectionEditCommand()
-	command.Name = "connection"
-	command.UsageLine = "dbx edit connection <name> [flags]"
-	command.Short = "Edit a saved connection"
-	return command
-}
-
 func (b *cliBuilder) dropConnectionCommand() *cmd.Command {
 	command := b.connectionDeleteCommand()
 	command.Name = "connection"
 	command.UsageLine = "dbx drop connection <name> [flags]"
 	command.Short = "Drop a saved connection"
-	return command
-}
-
-func (b *cliBuilder) testGroupCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "test",
-		UsageLine: "dbx test <subcommand>",
-		Short:     "Test live resources",
-		SubCommands: []*cmd.Command{
-			b.testConnectionCommand(),
-		},
-	}
-}
-
-func (b *cliBuilder) testConnectionCommand() *cmd.Command {
-	command := b.connectionTestCommand()
-	command.Name = "connection"
-	command.UsageLine = "dbx test connection <name> [flags]"
-	command.Short = "Test a saved connection"
 	return command
 }
 
@@ -375,90 +317,6 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) connectionEditCommand() *cmd.Command {
-	flags := &connectionEditFlags{}
-	return &cmd.Command{
-		Name:        "edit",
-		UsageLine:   "dbx connection edit <name> [flags]",
-		Short:       "Edit a saved connection",
-		Long:        helpEntries["connection edit"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
-		SetFlags: func(f *cmd.FlagSet) {
-			bindOptionalStringFlag(f, &flags.driver, "driver", "database driver")
-			if flag, ok := f.Lookup("driver"); ok {
-				flag.Enum = []string{"mysql"}
-			}
-			bindOptionalStringFlag(f, &flags.mode, "mode", "connection mode")
-			if flag, ok := f.Lookup("mode"); ok {
-				flag.Enum = []string{"direct", "ssh", "proxy", "proxy-ssh"}
-			}
-			bindOptionalStringFlag(f, &flags.host, "host", "database host")
-			bindOptionalIntFlag(f, &flags.port, "port", "database port")
-			bindOptionalStringFlag(f, &flags.user, "user", "database user")
-			bindOptionalStringFlag(f, &flags.passwordEnv, "password-env", "database password environment variable")
-			bindOptionalStringFlag(f, &flags.password, "password", "database password")
-			bindOptionalStringFlag(f, &flags.proxyURL, "proxy-url", "SOCKS5 proxy URL for proxy or proxy-ssh mode")
-			bindOptionalStringFlag(f, &flags.sshHost, "ssh-host", "SSH host")
-			bindOptionalIntFlag(f, &flags.sshPort, "ssh-port", "SSH port")
-			bindOptionalStringFlag(f, &flags.sshUser, "ssh-user", "SSH user")
-			bindOptionalStringFlag(f, &flags.sshPasswordEnv, "ssh-password-env", "SSH password environment variable")
-			bindOptionalStringFlag(f, &flags.sshPassword, "ssh-password", "SSH password")
-			bindOptionalStringFlag(f, &flags.sshPrivateKey, "ssh-private-key", "SSH private key path")
-			bindOptionalIntFlag(f, &flags.connectTimeout, "connect-timeout", "connect timeout in seconds")
-			bindOptionalIntFlag(f, &flags.queryTimeout, "query-timeout", "query timeout in seconds")
-			f.BoolVar(&flags.test, "test", false, "test the connection before saving", "")
-		},
-		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if b.mode == ModeREPL {
-				if len(args) != 1 {
-					return util.WrapLayer("validation", "connection edit", fmt.Errorf("usage: connection edit <name>"))
-				}
-				return b.application.handleConnectionEdit(ctx, args[0])
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "connection edit", fmt.Errorf("usage: dbx connection edit <name> [flags]"))
-			}
-
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "edit connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
-				cfg, err := application.store.LoadConnection(args[0])
-				if err != nil {
-					return util.WrapLayer("config", "load connection "+args[0], err)
-				}
-				meta.Mode = cfg.Mode
-				if err := b.requireCLIConfirmation("edit connection"); err != nil {
-					return err
-				}
-
-				if err := applyEditConnectionFlags(cfg, flags); err != nil {
-					return err
-				}
-				meta.Mode = cfg.Mode
-				if flags.test {
-					if err := application.testConnection(ctx, cfg); err != nil {
-						return err
-					}
-				}
-				if err := application.store.SaveConnection(cfg); err != nil {
-					return util.WrapLayer("config", "save connection "+cfg.Name, err)
-				}
-
-				result := &ConnectResult{
-					OK:         true,
-					Connection: cfg.Name,
-					Message:    application.store.ConnectionConfigPath(cfg.Name),
-				}
-				return b.writeOutput(result, func() error {
-					if flags.test {
-						fmt.Fprintln(b.out, "Connection successful.")
-					}
-					fmt.Fprintf(b.out, "Saved: %s\n", application.store.ConnectionConfigPath(cfg.Name))
-					return nil
-				})
-			})
-		},
-	}
-}
-
 func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "delete",
@@ -564,68 +422,6 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) connectionTestCommand() *cmd.Command {
-	var verbose bool
-	return &cmd.Command{
-		Name:        "test",
-		UsageLine:   "dbx connection test <name>",
-		Short:       "Test a saved connection",
-		Long:        helpEntries["connection test"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
-		SetFlags: func(f *cmd.FlagSet) {
-			f.BoolVar(&verbose, "verbose", false, "include per-layer diagnostic details", "")
-		},
-		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if b.mode == ModeREPL {
-				switch len(args) {
-				case 1:
-					return b.application.handleConnectionTest(ctx, args[0], verbose)
-				default:
-					return util.WrapLayer("validation", "test connection", fmt.Errorf("usage: test connection <name> [--verbose]"))
-				}
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "test connection", fmt.Errorf("usage: dbx test connection <name>"))
-			}
-
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "test connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
-				cfg, err := application.store.LoadConnection(args[0])
-				if err != nil {
-					return util.WrapLayer("config", "load connection "+args[0], err)
-				}
-				meta.Mode = cfg.Mode
-
-				result, diagErr := application.diagnoseConnection(ctx, cfg, diagnosticOptions{
-					Verbose:    verbose,
-					ConfigPath: application.store.ConnectionConfigPath(args[0]),
-				})
-				if diagErr != nil {
-					result.Error = errorResult(diagErr)
-				}
-				if writeErr := b.writeOutput(result, func() error {
-					application.printDiagnosticResult(result, verbose)
-					if diagErr == nil {
-						fmt.Fprintln(b.out, "Connection successful.")
-						return nil
-					}
-					fmt.Fprintln(b.err, diagErr.Error())
-					return nil
-				}); writeErr != nil {
-					return writeErr
-				}
-				if diagErr != nil {
-					failed := false
-					meta.Success = &failed
-					return util.MarkOutputHandled(diagErr)
-				}
-				succeeded := true
-				meta.Success = &succeeded
-				return nil
-			})
-		},
-	}
-}
-
 func buildCreateConnectionConfig(name string, flags *connectionCreateFlags) (*config.ConnectionConfig, error) {
 	if err := util.ValidateIdentifier(name); err != nil {
 		return nil, util.WrapLayer("validation", "validate connection name", err)
@@ -672,121 +468,10 @@ func buildCreateConnectionConfig(name string, flags *connectionCreateFlags) (*co
 	return cfg, nil
 }
 
-func applyEditConnectionFlags(cfg *config.ConnectionConfig, flags *connectionEditFlags) error {
-	if flags.driver.Set {
-		cfg.Driver = flags.driver.Value
-	}
-	if flags.mode.Set {
-		cfg.Mode = flags.mode.Value
-		if cfg.Mode == "direct" {
-			cfg.Proxy = nil
-			cfg.SSH = nil
-		}
-		if cfg.Mode == "ssh" {
-			cfg.Proxy = nil
-		}
-		if cfg.Mode == "proxy" {
-			cfg.SSH = nil
-		}
-		if cfg.Mode == "proxy" && cfg.Proxy == nil {
-			cfg.Proxy = &config.ProxyConfig{}
-		}
-		if cfg.Mode == "proxy-ssh" && cfg.Proxy == nil {
-			cfg.Proxy = &config.ProxyConfig{}
-		}
-		if cfg.UsesSSH() && cfg.SSH == nil {
-			cfg.SSH = &config.SSHConfig{}
-		}
-	}
-	if flags.host.Set {
-		cfg.Host = flags.host.Value
-	}
-	if flags.port.Set {
-		cfg.Port = flags.port.Value
-	}
-	if flags.user.Set {
-		cfg.User = flags.user.Value
-	}
-	if flags.passwordEnv.Set {
-		cfg.PasswordEnv = flags.passwordEnv.Value
-		cfg.Password = ""
-		cfg.PasswordPrompt = false
-	}
-	if flags.password.Set {
-		cfg.Password = flags.password.Value
-		cfg.PasswordEnv = ""
-		cfg.PasswordPrompt = false
-	}
-	if flags.proxyURL.Set {
-		if cfg.Proxy == nil {
-			cfg.Proxy = &config.ProxyConfig{}
-		}
-		cfg.Proxy.URL = flags.proxyURL.Value
-	}
-	if flags.connectTimeout.Set || flags.queryTimeout.Set {
-		cfg.ApplyDefaults()
-	}
-	if flags.connectTimeout.Set {
-		cfg.Timeout.ConnectSeconds = flags.connectTimeout.Value
-	}
-	if flags.queryTimeout.Set {
-		cfg.Timeout.QuerySeconds = flags.queryTimeout.Value
-	}
-
-	if cfg.UsesSSH() {
-		if cfg.SSH == nil {
-			cfg.SSH = &config.SSHConfig{}
-		}
-		if flags.sshHost.Set {
-			cfg.SSH.Host = flags.sshHost.Value
-		}
-		if flags.sshPort.Set {
-			cfg.SSH.Port = flags.sshPort.Value
-		}
-		if flags.sshUser.Set {
-			cfg.SSH.User = flags.sshUser.Value
-		}
-		if flags.sshPrivateKey.Set {
-			cfg.SSH.PrivateKey = flags.sshPrivateKey.Value
-			if cfg.SSH.PrivateKey != "" {
-				cfg.SSH.PasswordEnv = ""
-				cfg.SSH.Password = ""
-			}
-		}
-		if flags.sshPasswordEnv.Set {
-			cfg.SSH.PasswordEnv = flags.sshPasswordEnv.Value
-			cfg.SSH.PrivateKey = ""
-			cfg.SSH.Password = ""
-		}
-		if flags.sshPassword.Set {
-			cfg.SSH.Password = flags.sshPassword.Value
-			cfg.SSH.PrivateKey = ""
-			cfg.SSH.PasswordEnv = ""
-		}
-	}
-	if cfg.Mode == "proxy" && editFlagsIncludeSSH(flags) {
-		return util.WrapLayer("validation", "validate connection config", fmt.Errorf("ssh settings are not supported for proxy mode"))
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return util.WrapLayer("validation", "validate connection config", err)
-	}
-	return nil
-}
-
 func createFlagsIncludeSSH(flags *connectionCreateFlags) bool {
 	return strings.TrimSpace(flags.sshHost) != "" ||
 		strings.TrimSpace(flags.sshUser) != "" ||
 		strings.TrimSpace(flags.sshPasswordEnv) != "" ||
 		strings.TrimSpace(flags.sshPassword) != "" ||
 		strings.TrimSpace(flags.sshPrivateKey) != ""
-}
-
-func editFlagsIncludeSSH(flags *connectionEditFlags) bool {
-	return flags.sshHost.Set ||
-		flags.sshPort.Set ||
-		flags.sshUser.Set ||
-		flags.sshPasswordEnv.Set ||
-		flags.sshPassword.Set ||
-		flags.sshPrivateKey.Set
 }

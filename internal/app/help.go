@@ -16,37 +16,29 @@ var helpEntries = func() map[string]helpEntry {
 		"": {
 			title: "dbx commands",
 			body: strings.TrimSpace(`
-help                  Show command help
-help <command>        Show help for a command
+Core commands:
+  connect <name>       Connect to a saved connection
+  use database <name>  Select the current database
+  doctor               Inspect the selected connection
+  audit log            Show audit history
+  exit                 Exit the shell
 
-connect <name>        Connect to a saved connection
-use database <name>   Select the current database
+Examples:
+  connect
+  connect prod
 
-show connections       Show saved connections
-show connection <name> Show one saved connection
-show context           Show the current operational context
-show databases         Show databases on the active connection
-show tables            Show tables in the selected database
-show table <name>      Show table details
-show columns <table>   Show table columns
-show rows <table>      Show table rows
-show templates         Show available templates
+  show
+  show connections
+  show tables
+  show templates --tag readonly
 
-create connection <name> Create or overwrite a saved connection
-create database <name> Create a database
-create user <name>    Create a MySQL user
+  create
+  create connection prod --host 10.0.1.20 --user root
+  create database appdb
 
-drop connection <name> Drop a saved connection
-drop database <name>  Drop a database
-drop user <name>      Drop a MySQL user
-
-run template <name>   Run or validate a template
-run sql <sql-or-file> Run raw SQL or a SQL file
-
-doctor                Inspect the selected connection
-
-audit log             Show audit history
-exit                  Exit the shell`),
+  run
+  run template seed-users --validate
+  run sql @schema.sql`),
 		},
 		"connect": {
 			title: "connect",
@@ -55,6 +47,25 @@ Connect to a saved connection.
 
 Usage:
   connect <name>`),
+		},
+		"show": {
+			title: "show",
+			body: strings.TrimSpace(`
+Inspect saved configuration and database state.
+
+Usage:
+  dbx show <subcommand>
+
+Subcommands:
+  connections
+  connection <name>
+  context
+  databases
+  tables
+  table <name>
+  columns <table>
+  rows <table>
+  templates [query] [--tag value]`),
 		},
 		"connections": {
 			title: "show connections",
@@ -102,6 +113,19 @@ Show a saved connection with secrets redacted.
 Usage:
   show connection <name>`),
 		},
+		"create": {
+			title: "create",
+			body: strings.TrimSpace(`
+Create saved connections and database resources.
+
+Usage:
+  dbx create <subcommand>
+
+Subcommands:
+  connection <name>
+  database <name>
+  user <name>`),
+		},
 		"audit log": {
 			title: "audit log",
 			body: strings.TrimSpace(`
@@ -142,6 +166,19 @@ Show rows from a table.
 
 Usage:
   show rows <table> [--limit n]`),
+		},
+		"drop": {
+			title: "drop",
+			body: strings.TrimSpace(`
+Drop saved connections and database resources.
+
+Usage:
+  dbx drop <subcommand>
+
+Subcommands:
+  connection <name>
+  database <name>
+  user <name>`),
 		},
 		"drop user": {
 			title: "drop user",
@@ -190,6 +227,18 @@ Show resolved workflow templates.
 
 Usage:
   show templates [query] [--tag value]`),
+		},
+		"run": {
+			title: "run",
+			body: strings.TrimSpace(`
+Run database workflows and SQL entrypoints.
+
+Usage:
+  dbx run <subcommand>
+
+Subcommands:
+  template <name>
+  sql <sql-or-file>`),
 		},
 		"template run": {
 			title: "run template",
@@ -272,9 +321,6 @@ Aliases:
 
 func printHelpTopic(prompt printer, topic string) error {
 	topic = normalizeHelpTopic(topic)
-	if topic == "" {
-		topic = ""
-	}
 
 	if entry, ok := helpEntries[topic]; ok {
 		if entry.title != "" {
