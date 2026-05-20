@@ -10,5 +10,5 @@ golang.org/x/sys v0.44.0 h1:ildZl3J4uzeKP07r2F++Op7E9B29JRUy+a27EibtBTQ=
 golang.org/x/sys v0.44.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/term v0.43.0 h1:S4RLU2sB31O/NCl+zFN9Aru9A/Cq2aqKpTZJ6B+DwT4=
 golang.org/x/term v0.43.0/go.mod h1:lrhlHNdQJHO+1qVYiHfFKVuVioJIheAc3fBSMFYEIsk=
-pkg.gostartkit.com/cmd v0.1.9 h1:XQ6bD2dPp1kM9SK6kN1fU9rbmbNNQ8AX9Xv93C/RkpI=
-pkg.gostartkit.com/cmd v0.1.9/go.mod h1:A0z687tAw9HGHkRiEZJFdAMTM+Zp+vIQU3wgqJPNtCk=
+pkg.gostartkit.com/cmd v0.1.10 h1:zm2KS5qw4wyPLSU0mB9Hcab4GO40pY539vjnRV5nM68=
+pkg.gostartkit.com/cmd v0.1.10/go.mod h1:A0z687tAw9HGHkRiEZJFdAMTM+Zp+vIQU3wgqJPNtCk=
