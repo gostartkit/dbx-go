@@ -15,17 +15,19 @@ func TestREPLCommandSpecsIncludeSharedAndOverlayCommands(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"/",
 		"connect",
-		"conn",
-		"connection create",
+		"create connection",
+		"edit connection",
+		"drop connection",
+		"show connection",
+		"show connections",
 		"show databases",
-		"template run",
-		"use",
-		"dry-run on",
-		"ls db",
-		"test conn",
-		"doctor conn",
+		"show template",
+		"run template",
+		"use database",
+		"test connection",
+		"doctor connection",
+		"clear",
 		"exit",
 	} {
 		if _, ok := have[normalizeHelpTopic(want)]; !ok {
@@ -68,10 +70,24 @@ func TestHelpCompletionContainsHelpTopics(t *testing.T) {
 		have[suggestion.Value] = struct{}{}
 	}
 
-	for _, want := range []string{"aliases", "connection test", "show templates", "template run"} {
+	for _, want := range []string{"test connection", "show templates", "run template", "show connection"} {
 		if _, ok := have[want]; !ok {
 			t.Fatalf("missing help topic %q", want)
 		}
+	}
+}
+
+func TestSharedCommandPathsAndAliasesAreUnique(t *testing.T) {
+	t.Parallel()
+
+	spec := (&cliBuilder{
+		mode:    ModeREPL,
+		globals: &cliGlobals{Format: "text"},
+	}).buildApp().Spec()
+
+	seen := map[string]string{}
+	for _, command := range spec.Commands {
+		assertUniquePaths(t, seen, "", command)
 	}
 }
 
@@ -83,5 +99,27 @@ func collectSpecPaths(dst map[string]struct{}, prefix string, spec cmd.CommandSp
 	}
 	for _, subCommand := range spec.SubCommands {
 		collectSpecPaths(dst, path, subCommand)
+	}
+}
+
+func assertUniquePaths(t *testing.T, seen map[string]string, prefix string, spec cmd.CommandSpec) {
+	t.Helper()
+
+	path := normalizeHelpTopic(prefix + " " + spec.Name)
+	if other, ok := seen[path]; ok {
+		t.Fatalf("duplicate command path %q for %q and %q", path, other, spec.Name)
+	}
+	seen[path] = spec.Name
+
+	for _, alias := range spec.Aliases {
+		aliasPath := normalizeHelpTopic(prefix + " " + alias)
+		if other, ok := seen[aliasPath]; ok {
+			t.Fatalf("duplicate alias path %q for %q and %q", aliasPath, other, spec.Name)
+		}
+		seen[aliasPath] = spec.Name
+	}
+
+	for _, subCommand := range spec.SubCommands {
+		assertUniquePaths(t, seen, path, subCommand)
 	}
 }

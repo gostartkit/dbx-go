@@ -84,7 +84,7 @@ func TestHandleLineShowDatabasesParsesCanonicalCommand(t *testing.T) {
 	}
 }
 
-func TestHandleLineListDatabasesParsesAlias(t *testing.T) {
+func TestHandleLineShowDatabasesParsesSharedCommand(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -107,7 +107,7 @@ func TestHandleLineListDatabasesParsesAlias(t *testing.T) {
 	app.session.Connection = sampleConnection("prod")
 	app.session.DB = &sql.DB{}
 
-	exit, err := app.handleLine(context.Background(), "list databases")
+	exit, err := app.handleLine(context.Background(), "show databases")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestHandleLineShowVariablesParsesCommand(t *testing.T) {
 	}
 }
 
-func TestHandleLineContextAlias(t *testing.T) {
+func TestHandleLineContextParsesSharedCommand(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
@@ -348,7 +348,7 @@ func TestHandleLineContextAlias(t *testing.T) {
 	app.session.Connection = sampleConnection("prod")
 	app.session.Database = "app_prod"
 
-	exit, err := app.handleLine(context.Background(), "ctx")
+	exit, err := app.handleLine(context.Background(), "context")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
@@ -710,18 +710,15 @@ func TestHelpIncludesOperationalCommands(t *testing.T) {
 	}
 }
 
-func TestHelpListDatabasesShowsCanonicalTopic(t *testing.T) {
+func TestHelpShowDatabasesUsesCanonicalTopic(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	if err := printHelpTopic(simplePrinter{writer: &out}, "list databases"); err != nil {
+	if err := printHelpTopic(simplePrinter{writer: &out}, "show databases"); err != nil {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 	if !strings.Contains(out.String(), "show databases") {
 		t.Fatalf("expected canonical help topic: %q", out.String())
-	}
-	if strings.Contains(out.String(), "title: list databases") {
-		t.Fatalf("unexpected legacy help title: %q", out.String())
 	}
 }
 

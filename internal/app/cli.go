@@ -109,25 +109,23 @@ func (b *cliBuilder) buildApp() *cmd.App {
 	}
 	cli.Commands = []*cmd.Command{
 		b.connectCommand(),
-		b.columnsCommand(),
-		b.connectionsCommand(),
-		b.countCommand(),
 		b.auditGroupCommand(),
-		b.connectionGroupCommand(),
 		b.createGroupCommand(),
 		b.describeCommand(),
-		b.listGroupCommand(),
+		b.doctorGroupCommand(),
+		b.dropGroupCommand(),
+		b.editGroupCommand(),
 		b.peekCommand(),
+		b.countCommand(),
+		b.renameGroupCommand(),
 		b.runGroupCommand(),
 		b.sampleCommand(),
 		b.showGroupCommand(),
-		b.templateGroupCommand(),
-		b.templatesCommand(),
-		b.dropGroupCommand(),
+		b.testGroupCommand(),
 		b.truncateGroupCommand(),
-		b.renameGroupCommand(),
+		b.useGroupCommand(),
+		b.validateGroupCommand(),
 		b.contextCommand(),
-		b.statusCommand(),
 	}
 	if b.mode == ModeREPL {
 		cli.Commands = append(replOverlayCommands(b), cli.Commands...)

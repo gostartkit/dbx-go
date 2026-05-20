@@ -31,20 +31,9 @@ func (b *cliBuilder) createGroupCommand() *cmd.Command {
 		UsageLine: "dbx create <subcommand>",
 		Short:     "Create database resources",
 		SubCommands: []*cmd.Command{
+			b.createConnectionCommand(),
 			b.createDatabaseCommand(),
 			b.createUserCommand(),
-		},
-	}
-}
-
-func (b *cliBuilder) listGroupCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "list",
-		UsageLine: "dbx list <subcommand>",
-		Short:     "List database resources",
-		SubCommands: []*cmd.Command{
-			b.listDatabasesCommand(),
-			b.listUsersCommand(),
 		},
 	}
 }
@@ -53,29 +42,24 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "show",
 		UsageLine: "dbx show <subcommand>",
-		Short:     "Show database resources",
+		Short:     "Show resources",
 		SubCommands: []*cmd.Command{
+			b.showConnectionCommand(),
+			b.showConnectionsCommand(),
 			b.showColumnsCommand(),
 			b.showCreateGroupCommand(),
 			b.showDatabasesCommand(),
-			b.showDBsCommand(),
 			b.showForeignKeysCommand(),
-			b.showFksCommand(),
-			b.showIndexCommand(),
 			b.showIndexesCommand(),
-			b.showProcessesCommand(),
 			b.showProcesslistCommand(),
 			b.showTableGroupCommand(),
 			b.showTablesCommand(),
+			b.showTemplateCommand(),
 			b.showTemplatesCommand(),
-			b.showTriggerCommand(),
 			b.showTriggersCommand(),
 			b.showGrantsCommand(),
 			b.showUsersCommand(),
-			b.showUserGroupCommand(),
 			b.showVariablesCommand(),
-			b.showVarsCommand(),
-			b.showViewCommand(),
 			b.showViewsCommand(),
 		},
 	}
@@ -85,8 +69,9 @@ func (b *cliBuilder) dropGroupCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "drop",
 		UsageLine: "dbx drop <subcommand>",
-		Short:     "Drop database resources",
+		Short:     "Drop resources",
 		SubCommands: []*cmd.Command{
+			b.dropConnectionCommand(),
 			b.dropDatabaseCommand(),
 			b.dropUserCommand(),
 		},
@@ -119,38 +104,6 @@ func (b *cliBuilder) showDatabasesCommand() *cmd.Command {
 			})
 		},
 	}
-}
-
-func (b *cliBuilder) showDBsCommand() *cmd.Command {
-	command := b.showDatabasesCommand()
-	command.Name = "dbs"
-	command.UsageLine = "dbx show dbs [flags]"
-	command.Short = "Alias for show databases"
-	return command
-}
-
-func (b *cliBuilder) showIndexCommand() *cmd.Command {
-	command := b.showIndexesCommand()
-	command.Name = "index"
-	command.UsageLine = "dbx show index <table>"
-	command.Short = "Alias for show indexes"
-	return command
-}
-
-func (b *cliBuilder) showProcessesCommand() *cmd.Command {
-	command := b.showProcesslistCommand()
-	command.Name = "processes"
-	command.UsageLine = "dbx show processes"
-	command.Short = "Alias for show processlist"
-	return command
-}
-
-func (b *cliBuilder) showVarsCommand() *cmd.Command {
-	command := b.showVariablesCommand()
-	command.Name = "vars"
-	command.UsageLine = "dbx show vars [pattern]"
-	command.Short = "Alias for show variables"
-	return command
 }
 
 func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
@@ -189,14 +142,6 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) listDatabasesCommand() *cmd.Command {
-	command := b.showDatabasesCommand()
-	command.Name = "databases"
-	command.UsageLine = "dbx list databases [flags]"
-	command.Short = "Alias for show databases"
-	return command
-}
-
 func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 	flags := &planOnlyFlags{inputs: inputValues{}}
 	return &cmd.Command{
@@ -221,6 +166,46 @@ func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "drop database", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
 				return b.runDropDatabase(ctx, application, args[0], flags, meta)
+			})
+		},
+	}
+}
+
+func (b *cliBuilder) useGroupCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "use",
+		UsageLine: "dbx use <subcommand>",
+		Short:     "Select session-scoped resources",
+		SubCommands: []*cmd.Command{
+			b.useDatabaseCommand(),
+		},
+	}
+}
+
+func (b *cliBuilder) useDatabaseCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:        "database",
+		UsageLine:   "dbx use database <name>",
+		Short:       "Select the current database",
+		Long:        helpEntries["use"].body,
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true, Completion: b.completeDatabases}},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) != 1 {
+				return util.WrapLayer("validation", "use database", fmt.Errorf("usage: dbx use database <name>"))
+			}
+			if b.mode == ModeREPL {
+				return b.application.handleUseDatabase(ctx, args[0])
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "use database"}, func(application *Application, meta *auditMetadata) error {
+				result, err := application.useDatabaseForCLI(ctx, b.globals.Connection, args[0])
+				if err != nil {
+					return err
+				}
+				meta.Connection = result.Connection
+				return b.writeOutput(result, func() error {
+					fmt.Fprintf(b.out, "Using database: %s\n", result.Database)
+					return nil
+				})
 			})
 		},
 	}

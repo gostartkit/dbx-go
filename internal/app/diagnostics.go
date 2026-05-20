@@ -64,7 +64,7 @@ func (a *Application) diagnoseConnection(ctx context.Context, cfg *config.Connec
 }
 
 func (a *Application) handleConnectionTest(ctx context.Context, name string, verbose bool) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "connection test"}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "test connection"}, func(meta *auditMetadata) error {
 		cfg, configPath, err := a.resolveConnectionForTest(ctx, name)
 		if err != nil {
 			return err
@@ -105,7 +105,7 @@ func (a *Application) resolveConnectionForTest(ctx context.Context, name string)
 		return nil, "", util.WrapLayer("config", "list configured connections", err)
 	}
 	if len(connections) == 0 {
-		return nil, "", util.WrapLayer("config", "connection test", fmt.Errorf("no saved connections; run connection create"))
+		return nil, "", util.WrapLayer("config", "test connection", fmt.Errorf("no saved connections; run create connection <name>"))
 	}
 
 	selected, err := a.promptForConnectionSelection(ctx, connections)

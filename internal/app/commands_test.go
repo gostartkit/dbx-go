@@ -63,8 +63,8 @@ func (p *testPrinter) Println(args ...any) {
 func TestNormalizeHelpTopic(t *testing.T) {
 	t.Parallel()
 
-	got := normalizeHelpTopic("  connection   create  ")
-	if got != "connection create" {
+	got := normalizeHelpTopic("  create   connection  ")
+	if got != "create connection" {
 		t.Fatalf("normalizeHelpTopic = %q", got)
 	}
 }
@@ -73,12 +73,12 @@ func TestPrintHelpTopic(t *testing.T) {
 	t.Parallel()
 
 	var prompt testPrinter
-	if err := printHelpTopic(&prompt, "connection create"); err != nil {
+	if err := printHelpTopic(&prompt, "create connection"); err != nil {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 
 	joined := strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "Create a new saved connection.") {
+	if !strings.Contains(joined, "Create a saved connection.") {
 		t.Fatalf("help output missing expected text: %q", joined)
 	}
 	if !strings.Contains(joined, "~/.config/dbx/{name}/config.json") {
@@ -94,21 +94,21 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 	joined := strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "List resolved workflow templates") {
+	if !strings.Contains(joined, "Show resolved workflow templates") {
 		t.Fatalf("help output missing show templates text: %q", joined)
 	}
 
 	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "template show"); err != nil {
+	if err := printHelpTopic(&prompt, "show template"); err != nil {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 	joined = strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "Describe a resolved workflow template by name.") {
+	if !strings.Contains(joined, "Show a resolved workflow template by name.") {
 		t.Fatalf("help output missing describe template text: %q", joined)
 	}
 
 	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "template run"); err != nil {
+	if err := printHelpTopic(&prompt, "run template"); err != nil {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 	joined = strings.Join(prompt.lines, "\n")
@@ -117,7 +117,7 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 	}
 
 	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "template validate"); err != nil {
+	if err := printHelpTopic(&prompt, "validate template"); err != nil {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 	joined = strings.Join(prompt.lines, "\n")

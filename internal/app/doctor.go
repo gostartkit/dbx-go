@@ -16,8 +16,8 @@ import (
 )
 
 func (a *Application) handleConnectionDoctor(ctx context.Context, name string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "connection doctor"}, func(meta *auditMetadata) error {
-		selected, err := a.resolveConnectionNameForSelection(ctx, name, "connection doctor")
+	return a.auditCommand(ctx, auditMetadata{Command: "doctor connection"}, func(meta *auditMetadata) error {
+		selected, err := a.resolveConnectionNameForSelection(ctx, name, "doctor connection")
 		if err != nil {
 			return err
 		}
@@ -106,7 +106,7 @@ func (a *Application) doctorConnection(name string) (*DoctorResult, error) {
 	if result.OK {
 		return result, nil
 	}
-	return result, fmt.Errorf("connection doctor found static configuration issues")
+	return result, fmt.Errorf("doctor connection found static configuration issues")
 }
 
 func (a *Application) resolveConnectionNameForSelection(ctx context.Context, name string, action string) (string, error) {
@@ -119,7 +119,7 @@ func (a *Application) resolveConnectionNameForSelection(ctx context.Context, nam
 		return "", util.WrapLayer("config", "list configured connections", err)
 	}
 	if len(connections) == 0 {
-		return "", util.WrapLayer("config", action, fmt.Errorf("no saved connections; run connection create"))
+		return "", util.WrapLayer("config", action, fmt.Errorf("no saved connections; run create connection <name>"))
 	}
 
 	selected, err := a.promptForConnectionSelection(ctx, connections)

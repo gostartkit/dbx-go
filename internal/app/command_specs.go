@@ -91,11 +91,5 @@ func helpCompletionTopics() []Suggestion {
 		}
 		add(spec.Path, spec.Description)
 	}
-	for topic, entry := range helpEntries {
-		if topic == "" {
-			continue
-		}
-		add(topic, entry.title+" help")
-	}
 	return suggestions
 }

@@ -22,27 +22,24 @@ type templateDescribeFlags struct {
 	verbose bool
 }
 
-func (b *cliBuilder) templateGroupCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "template",
-		UsageLine: "dbx template <subcommand>",
-		Short:     "Template workflow commands",
-		SubCommands: []*cmd.Command{
-			b.templateRunCommand(),
-			b.templateShowCommand(),
-			b.templateDescribeCommand(),
-			b.templateValidateCommand(),
-		},
-	}
-}
-
 func (b *cliBuilder) runGroupCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "run",
 		UsageLine: "dbx run <subcommand>",
-		Short:     "Compatibility aliases for runnable workflows",
+		Short:     "Run workflows",
 		SubCommands: []*cmd.Command{
 			b.runTemplateCommand(),
+		},
+	}
+}
+
+func (b *cliBuilder) validateGroupCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "validate",
+		UsageLine: "dbx validate <subcommand>",
+		Short:     "Validate resources",
+		SubCommands: []*cmd.Command{
+			b.validateTemplateCommand(),
 		},
 	}
 }
@@ -99,28 +96,12 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) templatesCommand() *cmd.Command {
-	command := b.showTemplatesCommand()
-	command.Name = "templates"
-	command.UsageLine = "dbx templates"
-	command.Short = "Alias for show templates"
-	return command
-}
-
-func (b *cliBuilder) templateShowCommand() *cmd.Command {
-	command := b.templateDescribeCommand()
-	command.Name = "show"
-	command.UsageLine = "dbx template show <name> [flags]"
-	command.Short = "Alias for describe template"
-	return command
-}
-
-func (b *cliBuilder) templateDescribeCommand() *cmd.Command {
+func (b *cliBuilder) showTemplateCommand() *cmd.Command {
 	flags := &templateDescribeFlags{}
 	return &cmd.Command{
-		Name:        "describe",
-		UsageLine:   "dbx template describe <name> [flags]",
-		Short:       "Alias for describe template",
+		Name:        "template",
+		UsageLine:   "dbx show template <name> [flags]",
+		Short:       "Show a workflow template",
 		Long:        helpEntries["describe template"].body,
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true, Completion: b.completeTemplates}},
 		SetFlags: func(f *cmd.FlagSet) {
@@ -129,12 +110,12 @@ func (b *cliBuilder) templateDescribeCommand() *cmd.Command {
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				if len(args) != 1 {
-					return util.WrapLayer("validation", "describe template", fmt.Errorf("usage: describe template <name> [--verbose]"))
+					return util.WrapLayer("validation", "show template", fmt.Errorf("usage: show template <name> [--verbose]"))
 				}
 				return b.application.handleDescribeTemplate(ctx, args[0], flags.verbose)
 			}
 			if len(args) != 1 {
-				return util.WrapLayer("validation", "describe template", fmt.Errorf("usage: dbx template describe <name> [flags]"))
+				return util.WrapLayer("validation", "show template", fmt.Errorf("usage: dbx show template <name> [flags]"))
 			}
 			return b.runDescribeTemplate(ctx, args[0], flags)
 		},
@@ -142,18 +123,10 @@ func (b *cliBuilder) templateDescribeCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) runTemplateCommand() *cmd.Command {
-	command := b.templateRunCommand()
-	command.Name = "template"
-	command.UsageLine = "dbx run template <name> [flags]"
-	command.Short = "Alias for template run"
-	return command
-}
-
-func (b *cliBuilder) templateRunCommand() *cmd.Command {
 	flags := &templateRunFlags{inputs: inputValues{}}
 	return &cmd.Command{
-		Name:        "run",
-		UsageLine:   "dbx template run <name> [flags]",
+		Name:        "template",
+		UsageLine:   "dbx run template <name> [flags]",
 		Short:       "Run a workflow template",
 		Long:        helpEntries["template run"].body,
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true, Completion: b.completeTemplates}},
@@ -165,38 +138,38 @@ func (b *cliBuilder) templateRunCommand() *cmd.Command {
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				if len(args) != 1 {
-					return util.WrapLayer("validation", "template run", fmt.Errorf("usage: template run <name> [flags]"))
+					return util.WrapLayer("validation", "run template", fmt.Errorf("usage: run template <name> [flags]"))
 				}
 				return b.application.handleTemplateRun(ctx, args[0], flags.preview, flags.verbose, b.globals.DryRun)
 			}
 			if len(args) != 1 {
-				return util.WrapLayer("validation", "template run", fmt.Errorf("usage: dbx template run <name> [flags]"))
+				return util.WrapLayer("validation", "run template", fmt.Errorf("usage: dbx run template <name> [flags]"))
 			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "template run", DryRun: b.globals.DryRun || flags.preview}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "run template", DryRun: b.globals.DryRun || flags.preview}, func(application *Application, meta *auditMetadata) error {
 				return b.runTemplateWorkflow(ctx, application, args[0], flags, meta)
 			})
 		},
 	}
 }
 
-func (b *cliBuilder) templateValidateCommand() *cmd.Command {
+func (b *cliBuilder) validateTemplateCommand() *cmd.Command {
 	return &cmd.Command{
-		Name:        "validate",
-		UsageLine:   "dbx template validate <name>",
+		Name:        "template",
+		UsageLine:   "dbx validate template <name>",
 		Short:       "Validate a workflow template",
 		Long:        helpEntries["template validate"].body,
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true, Completion: b.completeTemplates}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				if len(args) != 1 {
-					return util.WrapLayer("validation", "template validate", fmt.Errorf("usage: template validate <name>"))
+					return util.WrapLayer("validation", "validate template", fmt.Errorf("usage: validate template <name>"))
 				}
 				return b.application.handleTemplateValidate(ctx, args[0])
 			}
 			if len(args) != 1 {
-				return util.WrapLayer("validation", "template validate", fmt.Errorf("usage: dbx template validate <name>"))
+				return util.WrapLayer("validation", "validate template", fmt.Errorf("usage: dbx validate template <name>"))
 			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "template validate"}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "validate template"}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := application.templateScopeConfig(b.globals.Connection)
 				if err != nil {
 					return err
@@ -219,7 +192,7 @@ func (b *cliBuilder) templateValidateCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) runDescribeTemplate(ctx context.Context, name string, flags *templateDescribeFlags) error {
-	return b.withAuditedApplication(ctx, auditMetadata{Command: "describe template"}, func(application *Application, meta *auditMetadata) error {
+	return b.withAuditedApplication(ctx, auditMetadata{Command: "show template"}, func(application *Application, meta *auditMetadata) error {
 		cfg, err := application.templateScopeConfig(b.globals.Connection)
 		if err != nil {
 			return err
@@ -249,7 +222,7 @@ func (b *cliBuilder) runTemplateWorkflow(ctx context.Context, application *Appli
 		meta.Mode = cfg.Mode
 	}
 	if !flags.preview {
-		if err := b.requireCLIConfirmation("template run"); err != nil {
+		if err := b.requireCLIConfirmation("run template"); err != nil {
 			return err
 		}
 	}

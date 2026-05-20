@@ -23,7 +23,7 @@ func TestCLIConnectionCreateGeneratesConfig(t *testing.T) {
 	app, stdout, stderr := newCLIApp(t, "", root)
 
 	err := app.Run(context.Background(), []string{
-		"connection", "create", "prod",
+		"create", "connection", "prod",
 		"--yes",
 		"--mode", "ssh",
 		"--host", "10.0.1.20",
@@ -69,7 +69,7 @@ func TestCLIConnectionCreateProxySSHGeneratesConfig(t *testing.T) {
 	app, stdout, stderr := newCLIApp(t, "", root)
 
 	err := app.Run(context.Background(), []string{
-		"connection", "create", "prod_proxy",
+		"create", "connection", "prod_proxy",
 		"--yes",
 		"--mode", "proxy-ssh",
 		"--host", "10.0.1.20",
@@ -110,7 +110,7 @@ func TestCLIConnectionCreateProxyGeneratesConfig(t *testing.T) {
 	app, stdout, stderr := newCLIApp(t, "", root)
 
 	err := app.Run(context.Background(), []string{
-		"connection", "create", "prod_proxy",
+		"create", "connection", "prod_proxy",
 		"--yes",
 		"--mode", "proxy",
 		"--host", "10.0.1.20",
@@ -150,7 +150,7 @@ func TestCLIConnectionCreateSavesWhenTestFails(t *testing.T) {
 	})
 
 	err := app.Run(context.Background(), []string{
-		"connection", "create", "prod",
+		"create", "connection", "prod",
 		"--yes",
 		"--mode", "direct",
 		"--host", "127.0.0.1",
@@ -186,7 +186,7 @@ func TestCLIConnectionCreateSavesWhenTestFails(t *testing.T) {
 	if result.Warning != "connection test failed" {
 		t.Fatalf("warning = %q", result.Warning)
 	}
-	if result.EditCommand != "connection edit prod" {
+	if result.EditCommand != "edit connection prod" {
 		t.Fatalf("edit command = %q", result.EditCommand)
 	}
 	if strings.Contains(stdout.String(), "secret123") || strings.Contains(stderr.String(), "secret123") {
@@ -208,7 +208,7 @@ func TestCLIConnectionEditPreservesUnspecifiedFields(t *testing.T) {
 
 	app, _, stderr := newCLIApp(t, "", root)
 	err := app.Run(context.Background(), []string{
-		"connection", "edit", "prod",
+		"edit", "connection", "prod",
 		"--yes",
 		"--host", "10.0.1.30",
 		"--query-timeout", "60",
@@ -250,7 +250,7 @@ func TestCLIConnectionTestParsesName(t *testing.T) {
 		ConfigDir: root,
 		Connector: connector,
 	})
-	err := app.Run(context.Background(), []string{"connection", "test", "prod", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"test", "connection", "prod", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -293,7 +293,7 @@ func TestCLIConnectionTestVerboseJSONIncludesDetails(t *testing.T) {
 		Connector: connector,
 	})
 
-	err := app.Run(context.Background(), []string{"connection", "test", "prod", "--verbose", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"test", "connection", "prod", "--verbose", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -317,7 +317,7 @@ func TestCLIConnectionCreateValidationFailureStillFails(t *testing.T) {
 	app, _, stderr := newCLIApp(t, "", root)
 
 	err := app.Run(context.Background(), []string{
-		"connection", "create", "prod",
+		"create", "connection", "prod",
 		"--yes",
 		"--mode", "direct",
 		"--user", "root",
@@ -347,7 +347,7 @@ func TestCLIConnectionCreateWriteFailureStillFails(t *testing.T) {
 
 	app, _, stderr := newCLIApp(t, "", root)
 	err := app.Run(context.Background(), []string{
-		"connection", "create", "prod",
+		"create", "connection", "prod",
 		"--yes",
 		"--mode", "direct",
 		"--host", "127.0.0.1",
@@ -381,7 +381,7 @@ func TestCLIConnectionCreateOverwriteProtectedWithoutForce(t *testing.T) {
 
 	app, _, stderr := newCLIApp(t, "", root)
 	err := app.Run(context.Background(), []string{
-		"connection", "create", "prod",
+		"create", "connection", "prod",
 		"--mode", "direct",
 		"--host", "127.0.0.1",
 		"--port", "3306",
@@ -431,7 +431,7 @@ func TestCLIConnectionTestJSONFailureNonZero(t *testing.T) {
 		ConfigDir: root,
 		Connector: connector,
 	})
-	err := app.Run(context.Background(), []string{"connection", "test", "prod_proxy", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"test", "connection", "prod_proxy", "--format", "json", "--config-dir", root})
 	if err == nil {
 		t.Fatalf("expected failure exit status")
 	}
@@ -485,7 +485,7 @@ func TestCLIConnectionShowJSONRedactsProxyModeSecrets(t *testing.T) {
 	}
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"connection", "show", "prod_proxy", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "connection", "prod_proxy", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -515,7 +515,7 @@ func TestCLIConnectionDeleteConfirmation(t *testing.T) {
 	}
 
 	app, _, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"connection", "delete", "prod", "--yes", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"drop", "connection", "prod", "--yes", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -640,7 +640,7 @@ func TestCLIConnectionShowJSONRedactsSecrets(t *testing.T) {
 	}
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"connection", "show", "prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "connection", "prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -663,7 +663,7 @@ func TestCLIConnectionShowJSONRedactsSecrets(t *testing.T) {
 	}
 }
 
-func TestCLIStatusParsesGlobalFlagsAfterCommand(t *testing.T) {
+func TestCLIContextParsesGlobalFlagsAfterCommand(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -676,21 +676,21 @@ func TestCLIStatusParsesGlobalFlagsAfterCommand(t *testing.T) {
 	}
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"status", "--connection", "prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"context", "--connection", "prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
-	var result StatusResult
+	var result ContextResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("Unmarshal returned error: %v", err)
 	}
-	if result.ConnectionName != "prod" || !result.SelectedByFlag {
+	if result.Connection != "prod" || result.Mode == "" {
 		t.Fatalf("unexpected status result: %+v", result)
 	}
 }
 
-func TestCLIStatusIncludesDatabaseFlag(t *testing.T) {
+func TestCLIContextIncludesDatabaseFlag(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -706,12 +706,12 @@ func TestCLIStatusIncludesDatabaseFlag(t *testing.T) {
 		ConfigDir: root,
 		Connector: &databaseSelectionConnector{databases: []string{"app_prod", "app_demo"}},
 	})
-	err := app.Run(context.Background(), []string{"status", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"context", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
-	var result StatusResult
+	var result ContextResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("Unmarshal returned error: %v", err)
 	}
@@ -741,7 +741,7 @@ func TestCLIShowDatabasesCanonical(t *testing.T) {
 	}
 }
 
-func TestCLIShowDBsAlias(t *testing.T) {
+func TestCLIShowDatabasesDryRunJSON(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -753,28 +753,7 @@ func TestCLIShowDBsAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"show", "dbs", "--connection", "prod", "--template", "builtin_list_databases", "--dry-run", "--format", "json", "--config-dir", root})
-	if err != nil {
-		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"command": "show databases"`) {
-		t.Fatalf("stdout missing canonical command: %q", stdout.String())
-	}
-}
-
-func TestCLIListDatabasesCompatibilityAlias(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	store := config.NewStore(root)
-	if err := store.EnsureLayout(); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
-		t.Fatal(err)
-	}
-	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"list", "databases", "--connection", "prod", "--template", "builtin_list_databases", "--dry-run", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "databases", "--connection", "prod", "--template", "builtin_list_databases", "--dry-run", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -1020,7 +999,7 @@ func TestCLIJSONErrorIncludesCode(t *testing.T) {
 
 	root := t.TempDir()
 	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{ConfigDir: root})
-	err := app.Run(context.Background(), []string{"connection", "show", "missing", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "connection", "missing", "--format", "json", "--config-dir", root})
 	if err == nil {
 		t.Fatalf("expected error")
 	}

@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 
@@ -42,18 +41,7 @@ func (r staticCompletionResolver) Users() []string {
 }
 
 func replOverlayCommands(b *cliBuilder) []*cmd.Command {
-	testFlags := struct {
-		verbose bool
-	}{}
 	return []*cmd.Command{
-		{
-			Name:      "/",
-			UsageLine: "/",
-			Short:     "Show command help",
-			Run: func(context.Context, *cmd.Command, []string) error {
-				return b.application.handleHelp("")
-			},
-		},
 		{
 			Name:      "exit",
 			Aliases:   []string{"quit", "q"},
@@ -64,141 +52,12 @@ func replOverlayCommands(b *cliBuilder) []*cmd.Command {
 			},
 		},
 		{
-			Name:        "use",
-			UsageLine:   "use <database>",
-			Short:       "Select the current database",
-			Positionals: []cmd.PositionalArg{{Name: "database", Usage: "database name", Required: true, Completion: b.completeDatabases}},
-			Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-				if len(args) != 1 {
-					return fmt.Errorf("usage: use <database>")
-				}
-				return b.application.handleUseDatabase(ctx, args[0])
-			},
-		},
-		{
-			Name:      "dry-run",
-			Aliases:   []string{"dry"},
-			UsageLine: "dry-run <on|off>",
-			Short:     "Control session dry-run mode",
-			SubCommands: []*cmd.Command{
-				{
-					Name:      "on",
-					UsageLine: "dry-run on",
-					Short:     "Enable dry-run mode",
-					Run: func(context.Context, *cmd.Command, []string) error {
-						b.application.dryRun = true
-						b.application.prompt.Println("Dry-run mode is on.")
-						return nil
-					},
-				},
-				{
-					Name:      "off",
-					UsageLine: "dry-run off",
-					Short:     "Disable dry-run mode",
-					Run: func(context.Context, *cmd.Command, []string) error {
-						b.application.dryRun = false
-						b.application.prompt.Println("Dry-run mode is off.")
-						return nil
-					},
-				},
-			},
-		},
-		{
-			Name:      "ls",
-			UsageLine: "ls [db]",
-			Short:     "List tables or databases",
-			Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-				if len(args) != 0 {
-					return fmt.Errorf("usage: ls [db]")
-				}
-				return b.application.handleShowTables(ctx)
-			},
-			SubCommands: []*cmd.Command{
-				{
-					Name:      "db",
-					UsageLine: "ls db",
-					Short:     "List databases",
-					Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-						if len(args) != 0 {
-							return fmt.Errorf("usage: ls db")
-						}
-						return b.application.handleShowDatabases(ctx)
-					},
-				},
-			},
-		},
-		{
-			Name:        "test",
-			UsageLine:   "test [name] [--verbose]",
-			Short:       "Test a saved connection",
-			Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}},
-			SetFlags: func(f *cmd.FlagSet) {
-				f.BoolVar(&testFlags.verbose, "verbose", false, "show detailed timing and targets", "")
-			},
-			Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-				name := ""
-				if len(args) > 1 {
-					return fmt.Errorf("usage: test [name] [--verbose]")
-				}
-				if len(args) == 1 {
-					name = args[0]
-				}
-				return b.application.handleConnectionTest(ctx, name, testFlags.verbose)
-			},
-			SubCommands: []*cmd.Command{
-				{
-					Name:        "conn",
-					UsageLine:   "test conn [name] [--verbose]",
-					Short:       "Alias for connection test",
-					Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}},
-					SetFlags: func(f *cmd.FlagSet) {
-						f.BoolVar(&testFlags.verbose, "verbose", false, "show detailed timing and targets", "")
-					},
-					Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-						name := ""
-						if len(args) > 1 {
-							return fmt.Errorf("usage: test conn [name] [--verbose]")
-						}
-						if len(args) == 1 {
-							name = args[0]
-						}
-						return b.application.handleConnectionTest(ctx, name, testFlags.verbose)
-					},
-				},
-			},
-		},
-		{
-			Name:        "doctor",
-			UsageLine:   "doctor [name]",
-			Short:       "Inspect a saved connection statically",
-			Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}},
-			Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-				if len(args) > 1 {
-					return fmt.Errorf("usage: doctor [name]")
-				}
-				name := ""
-				if len(args) == 1 {
-					name = args[0]
-				}
-				return b.application.handleConnectionDoctor(ctx, name)
-			},
-			SubCommands: []*cmd.Command{
-				{
-					Name:        "conn",
-					UsageLine:   "doctor conn [name]",
-					Short:       "Alias for connection doctor",
-					Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}},
-					Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-						if len(args) > 1 {
-							return fmt.Errorf("usage: doctor conn [name]")
-						}
-						name := ""
-						if len(args) == 1 {
-							name = args[0]
-						}
-						return b.application.handleConnectionDoctor(ctx, name)
-					},
-				},
+			Name:      "clear",
+			UsageLine: "clear",
+			Short:     "Clear the terminal output",
+			Run: func(context.Context, *cmd.Command, []string) error {
+				b.application.prompt.Printf("\033[H\033[2J")
+				return nil
 			},
 		},
 	}
@@ -394,11 +253,27 @@ func dynamicCompletionDescription(args []string, value string, ctx CompletionCon
 	}
 
 	switch strings.Join(args, " ") {
-	case "connect", "connection show", "connection delete", "connection edit", "connection test", "connection doctor", "test", "test conn", "doctor", "doctor conn":
+	case "connect", "show connection", "edit connection", "drop connection", "test connection", "doctor connection":
 		for _, connection := range ctx.Connections {
 			if connection.Name == value {
 				return strings.TrimSpace(connection.Driver + " " + connection.Mode)
 			}
+		}
+	case "use database":
+		if value != "" {
+			return "database"
+		}
+	case "show template", "run template", "validate template":
+		if value != "" {
+			return "template"
+		}
+	case "show grants":
+		if value != "" {
+			return "user"
+		}
+	case "show columns", "show indexes", "show foreign keys", "show create table", "show table status", "describe", "count rows", "peek rows", "sample rows", "truncate table":
+		if value != "" {
+			return "table"
 		}
 	}
 

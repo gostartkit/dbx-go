@@ -21,19 +21,11 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		}
 	}
 
-	resolved := resolveAlias(line)
-	switch {
-	case resolved == "":
+	if line == "" {
 		return false, nil
-	case resolved == "/":
-		return false, a.handleHelp("")
-	case resolved == "help":
-		return false, a.handleHelp("")
-	case strings.HasPrefix(resolved, "help "):
-		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(resolved, "help ")))
 	}
 
-	err := a.replCommandApp().RunLine(ctx, resolved)
+	err := a.replCommandApp().RunLine(ctx, line)
 	if errors.Is(err, errREPLExit) {
 		return true, nil
 	}
@@ -51,7 +43,7 @@ func (a *Application) handleConnect(ctx context.Context) error {
 			return util.WrapLayer("config", "list configured connections", err)
 		}
 		if len(connections) == 0 {
-			a.prompt.Println("No saved connections. Run: connection create")
+			a.prompt.Println("No saved connections. Run: create connection <name>")
 			return nil
 		}
 
@@ -64,7 +56,7 @@ func (a *Application) handleConnect(ctx context.Context) error {
 }
 
 func (a *Application) handleConnections(ctx context.Context) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "connections"}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show connections"}, func(meta *auditMetadata) error {
 		connections, err := a.store.ListConnections()
 		if err != nil {
 			return util.WrapLayer("config", "list configured connections", err)
@@ -121,7 +113,7 @@ func (a *Application) handleStatus(ctx context.Context) error {
 }
 
 func (a *Application) handleUseDatabase(ctx context.Context, database string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "use"}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "use database"}, func(meta *auditMetadata) error {
 		cfg, db, err := a.requireConnection(ctx)
 		if err != nil {
 			return err

@@ -11,15 +11,16 @@ func TestCalculateCompletionRootCommands(t *testing.T) {
 
 	values := suggestionValues(calculateCompletion("", CompletionContext{}))
 	assertSuggestionsContainAll(t, values, []string{
-		"/",
+		"clear",
 		"connect",
-		"connection",
 		"create",
+		"edit",
 		"drop",
+		"run",
 		"show",
-		"template",
+		"test",
 		"use",
-		"dry-run",
+		"validate",
 		"exit",
 	})
 }
@@ -43,12 +44,12 @@ func TestCalculateCompletionDynamicValues(t *testing.T) {
 		t.Fatalf("expected connection description, got %#v", connectCompletion.Suggestions[1])
 	}
 
-	useCompletion := calculateCompletion("use ", CompletionContext{
+	useCompletion := calculateCompletion("use database ", CompletionContext{
 		Databases: []string{"app_demo", "app_prod"},
 	})
 	assertSuggestionsContainAll(t, suggestionValues(useCompletion), []string{"app_demo", "app_prod"})
 
-	templateCompletion := calculateCompletion("template run ", CompletionContext{
+	templateCompletion := calculateCompletion("run template ", CompletionContext{
 		Templates: []string{"readonly_user", "create_database_with_user"},
 	})
 	assertSuggestionsContainAll(t, suggestionValues(templateCompletion), []string{"create_database_with_user", "readonly_user"})
@@ -58,7 +59,7 @@ func TestCalculateCompletionHelpTopics(t *testing.T) {
 	t.Parallel()
 
 	values := suggestionValues(calculateCompletion("help ", CompletionContext{}))
-	assertSuggestionsContainAll(t, values, []string{"aliases", "connection test", "show templates", "template run"})
+	assertSuggestionsContainAll(t, values, []string{"test connection", "show templates", "run template", "show connection"})
 }
 
 func TestCalculateCompletionReplacementRanges(t *testing.T) {

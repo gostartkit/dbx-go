@@ -39,7 +39,7 @@ func (a *Application) handleShowTemplates(ctx context.Context, filters templateL
 }
 
 func (a *Application) handleTemplateValidate(ctx context.Context, name string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "template validate"}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "validate template"}, func(meta *auditMetadata) error {
 		cfg, err := a.templateScopeConfig("")
 		if err != nil {
 			return err
@@ -59,7 +59,7 @@ func (a *Application) handleTemplateValidate(ctx context.Context, name string) e
 }
 
 func (a *Application) handleDescribeTemplate(ctx context.Context, name string, verbose bool) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "describe template"}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show template"}, func(meta *auditMetadata) error {
 		cfg, err := a.templateScopeConfig("")
 		if err != nil {
 			return err
@@ -80,7 +80,7 @@ func (a *Application) handleDescribeTemplate(ctx context.Context, name string, v
 
 func (a *Application) handleTemplateRun(ctx context.Context, name string, preview bool, verbose bool, dryRunFlag bool) error {
 	effectiveDryRun := a.dryRun || dryRunFlag
-	return a.auditCommand(ctx, auditMetadata{Command: "template run", DryRun: effectiveDryRun || preview}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "run template", DryRun: effectiveDryRun || preview}, func(meta *auditMetadata) error {
 		cfg, err := a.requireTemplateRunConnection(ctx)
 		if err != nil {
 			return err
@@ -115,7 +115,7 @@ func (a *Application) handleTemplateRun(ctx context.Context, name string, previe
 			return runErr
 		}
 
-		confirmed, err := a.confirmExecutionIfNeeded(ctx, "template run")
+		confirmed, err := a.confirmExecutionIfNeeded(ctx, "run template")
 		if err != nil {
 			return err
 		}

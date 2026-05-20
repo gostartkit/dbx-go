@@ -142,6 +142,21 @@ func (a *Application) applyCLIDatabaseSelection(ctx context.Context, cfg *config
 	return a.setRuntimeDatabaseSelection(ctx, cfg, nil, database, false)
 }
 
+func (a *Application) useDatabaseForCLI(ctx context.Context, connectionName string, database string) (*UseDatabaseResult, error) {
+	cfg, err := a.resolveConnectionConfig(connectionName)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.setRuntimeDatabaseSelection(ctx, cfg, nil, database, true); err != nil {
+		return nil, err
+	}
+	return &UseDatabaseResult{
+		OK:         true,
+		Connection: cfg.Name,
+		Database:   a.session.Database,
+	}, nil
+}
+
 func (a *Application) selectTemplateForCLI(command string, cfg *config.ConnectionConfig, templateName string) (*tpl.Template, error) {
 	if strings.TrimSpace(templateName) != "" {
 		selected, err := a.templates.ResolveNamed(command, cfg, templateName)

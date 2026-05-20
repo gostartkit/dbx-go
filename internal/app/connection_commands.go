@@ -58,7 +58,7 @@ func (a *Application) connectByName(ctx context.Context, name string, meta *audi
 }
 
 func (a *Application) handleConnectionCreate(ctx context.Context) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "connection create"}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "create connection"}, func(meta *auditMetadata) error {
 		a.prompt.Println("Create Connection")
 
 		name, err := a.ask(ctx, "Connection name", "")
@@ -87,7 +87,7 @@ func (a *Application) handleConnectionCreate(ctx context.Context) error {
 }
 
 func (a *Application) handleConnectionEdit(ctx context.Context, name string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "connection edit", Connection: name}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "edit connection", Connection: name}, func(meta *auditMetadata) error {
 		cfg, err := a.store.LoadConnection(name)
 		if err != nil {
 			return util.WrapLayer("config", "load connection "+name, err)
@@ -140,7 +140,7 @@ func (a *Application) handleConnectionEdit(ctx context.Context, name string) err
 }
 
 func (a *Application) handleConnectionDelete(ctx context.Context, name string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "connection delete", Connection: name}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "drop connection", Connection: name}, func(meta *auditMetadata) error {
 		if !a.store.ConnectionExists(name) {
 			return util.WrapLayer("config", "delete connection "+name, os.ErrNotExist)
 		}
@@ -192,7 +192,7 @@ func (a *Application) deleteConnectionByName(name string) error {
 }
 
 func (a *Application) handleConnectionShow(ctx context.Context, name string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "connection show", Connection: name}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show connection", Connection: name}, func(meta *auditMetadata) error {
 		cfg, err := a.store.LoadConnection(name)
 		if err != nil {
 			return util.WrapLayer("config", "load connection "+name, err)
@@ -498,7 +498,7 @@ func (a *Application) printSavedConnection(name string) {
 func (a *Application) printConnectionEditHint(name string) {
 	a.prompt.Println()
 	a.prompt.Println("You can update it with:")
-	a.prompt.Printf("  connection edit %s\n", name)
+	a.prompt.Printf("  edit connection %s\n", name)
 }
 
 func (a *Application) testConnection(ctx context.Context, cfg *config.ConnectionConfig) error {

@@ -10,738 +10,459 @@ type helpEntry struct {
 	body  string
 }
 
-var helpEntries = map[string]helpEntry{
-	"": {
-		title: "Available commands",
-		body: strings.TrimSpace(`
-/                     Show all commands
+var helpEntries = func() map[string]helpEntry {
+	entries := map[string]helpEntry{
+		"": {
+			title: "dbx commands",
+			body: strings.TrimSpace(`
 help                  Show command help
 help <command>        Show help for a command
-help aliases          Show supported aliases
 
-connect               Connect to a saved connection
-connect <name>        Connect to a specific saved connection
-connections           List saved connections
-audit log             Show recent audit entries
+connect <name>        Connect to a saved connection
+show connections      Show saved connections
+show connection <name> Show one saved connection
+create connection <name> Create a saved connection
+edit connection <name> Edit a saved connection
+drop connection <name> Drop a saved connection
+test connection <name> Test a saved connection
+doctor connection <name> Inspect a saved connection statically
 
-connection create     Create a new saved connection
-connection edit <name> Edit a saved connection
-connection delete <name> Delete a saved connection
-connection show <name> Show a saved connection
-connection test [name] [verbose] Test a saved connection
-connection doctor [name] Inspect a saved connection statically
+show databases        Show databases on the active connection
+show tables           Show tables in the selected database
+show columns <table>  Show table columns
+describe <table>      Describe a table
+show indexes <table>  Show table indexes
+show foreign keys <table> Show table foreign keys
+show create table <table> Show CREATE TABLE output
+show table status [table] Show table status
+show grants <user> [host] Show grants for a MySQL user
+show processlist      Show active MySQL processes
+show variables [pattern] Show MySQL variables
+show triggers         Show triggers
+show views            Show views
+show users            Show MySQL users
 
-create database       Create a database from a template
-show databases        List databases on the active connection
-drop database         Drop a database from a template
-create user           Create a MySQL user
-count rows            Count rows in a table
-peek rows             Peek bounded rows from a table
-sample rows           Sample bounded rows from a table
-show users            List MySQL users
-drop user             Drop a MySQL user
-show tables           List tables in the current database
-show columns          Show columns for a table in the current database
-describe [table]      Describe a table in the current database
-show indexes <table>  Show indexes for a table in the current database
-show create table     Show CREATE TABLE for a table
-show foreign keys     Show foreign keys for a table in the current database
-show table status     Show compact table status
-show grants <user>    Show MySQL grants for a user
-show processlist      Show the active MySQL processlist
-show triggers         Show triggers in the current database
-show variables [name] Show MySQL system variables
-show views            Show views in the current database
-show templates        List resolved workflow templates
-describe template     Describe a workflow template
-template run          Run a workflow template
-template validate     Validate a workflow template
-truncate table        Delete all rows from a table
-rename table          Rename a table
-use <database>        Select a database for the active REPL session
+create database <name> Create a database
+drop database <name>  Drop a database
+create user <name>    Create a MySQL user
+drop user <name>      Drop a MySQL user
+count rows <table>    Count table rows
+peek rows <table>     Peek table rows
+sample rows <table>   Sample table rows
+truncate table <table> Truncate a table
+rename table <from> <to> Rename a table
 
-status                Show the current session status
-context               Show the active REPL context
-dry-run on            Preview SQL without executing it
-dry-run off           Disable dry-run mode
-exit                  Exit dbx`),
-	},
-	"connection": {
-		title: "connection",
-		body: strings.TrimSpace(`
-Manage saved connections.
+show templates        Show available templates
+show template <name>  Show one template
+run template <name>   Run a template
+validate template <name> Validate a template
 
-Subcommands:
-  connection create
-  connection edit <name>
-  connection delete <name>
-  connection show <name>
-  connection test [name] [verbose]
-  connection doctor [name]
-
-Examples:
-  connection create
-  connection edit prod
-  connection show dev
-  connection test prod
-  connection test prod verbose
-  connection doctor prod`),
-	},
-	"connection create": {
-		title: "connection create",
-		body: strings.TrimSpace(`
-Create a new saved connection.
-
-This command:
-  - creates ~/.config/dbx/{name}/config.json
-  - supports direct, ssh, proxy, and proxy-ssh modes
-  - optionally tests the connection
-  - optionally connects immediately
-
-Examples:
-  connection create`),
-	},
-	"connection edit": {
-		title: "connection edit",
-		body: strings.TrimSpace(`
-Edit an existing saved connection.
-
-This command:
-  - loads the current config
-  - prompts field-by-field with defaults
-  - preserves unspecified values
-  - rewrites config.json safely
-
-Example:
-  connection edit prod`),
-	},
-	"connection delete": {
-		title: "connection delete",
-		body: strings.TrimSpace(`
-Delete a saved connection.
-
-This command:
-  - asks for confirmation
-  - removes ~/.config/dbx/{name}/
-  - clears the session if that connection is active
-
-Example:
-  connection delete prod`),
-	},
-	"connection show": {
-		title: "connection show",
-		body: strings.TrimSpace(`
-Show a saved connection summary.
-
-Secrets are redacted in the output.
-
-Example:
-  connection show prod`),
-	},
-	"connection test": {
-		title: "connection test",
-		body: strings.TrimSpace(`
-Test a saved connection and report which layer succeeds or fails.
-
-This command checks:
-  - config
-  - proxy when mode is proxy or proxy-ssh
-  - ssh when mode is ssh or proxy-ssh
-  - mysql
-
-Examples:
-  connection test
-  connection test prod
-  connection test prod verbose
-  dbx connection test prod --verbose`),
-	},
-	"connection doctor": {
-		title: "connection doctor",
-		body: strings.TrimSpace(`
-Inspect a saved connection statically without opening the network path.
-
-This command checks:
-  - config structure
-  - password source setup
-  - proxy URL shape for proxy and proxy-ssh
-  - SSH auth and private key files
-  - known_hosts file presence and plain host matches
-
-Examples:
-  connection doctor
-  connection doctor prod`),
-	},
-	"connect": {
-		title: "connect",
-		body: strings.TrimSpace(`
+use database <name>   Select the current database
+context               Show the current operational context
+clear                 Clear terminal output
+exit                  Exit the REPL`),
+		},
+		"connect": {
+			title: "connect",
+			body: strings.TrimSpace(`
 Connect to a saved connection.
 
 Usage:
-  connect
-  connect <name>
+  connect <name>`),
+		},
+		"connections": {
+			title: "show connections",
+			body: strings.TrimSpace(`
+Show all saved connections.
 
-When no name is provided, dbx prompts for a selection.`),
-	},
-	"connections": {
-		title: "connections",
-		body: strings.TrimSpace(`
-List all saved connections.
+Usage:
+  show connections`),
+		},
+		"connection": {
+			title: "connection commands",
+			body: strings.TrimSpace(`
+Connection commands use a single verb-first style.
 
-Example:
-  connections`),
-	},
-	"audit log": {
-		title: "audit log",
-		body: strings.TrimSpace(`
-Show recent local audit log entries.
+Commands:
+  show connections
+  show connection <name>
+  create connection <name>
+  edit connection <name>
+  drop connection <name>
+  test connection <name>
+  doctor connection <name>`),
+		},
+		"connection create": {
+			title: "create connection",
+			body: strings.TrimSpace(`
+Create a saved connection.
 
-Audit entries are stored at:
+This command writes:
+  ~/.config/dbx/{name}/config.json
+
+Usage:
+  create connection <name> [flags]`),
+		},
+		"connection edit": {
+			title: "edit connection",
+			body: strings.TrimSpace(`
+Edit a saved connection in place.
+
+Usage:
+  edit connection <name> [flags]`),
+		},
+		"connection delete": {
+			title: "drop connection",
+			body: strings.TrimSpace(`
+Drop a saved connection after confirmation.
+
+Usage:
+  drop connection <name> [flags]`),
+		},
+		"connection show": {
+			title: "show connection",
+			body: strings.TrimSpace(`
+Show a saved connection with secrets redacted.
+
+Usage:
+  show connection <name>`),
+		},
+		"connection test": {
+			title: "test connection",
+			body: strings.TrimSpace(`
+Test a saved connection and report each layer.
+
+Checks:
+  config
+  proxy when required
+  ssh when required
+  mysql
+
+Usage:
+  test connection <name> [--verbose]`),
+		},
+		"connection doctor": {
+			title: "doctor connection",
+			body: strings.TrimSpace(`
+Inspect a saved connection statically without opening the network path.
+
+Checks:
+  config structure
+  password sources
+  proxy URL shape
+  SSH auth settings
+  known_hosts presence
+
+Usage:
+  doctor connection <name>`),
+		},
+		"audit log": {
+			title: "audit log",
+			body: strings.TrimSpace(`
+Show recent audit entries from:
   ~/.config/dbx/logs/audit.jsonl
 
-Examples:
-  audit log
-  dbx audit log --format json`),
-	},
-	"create database": {
-		title: "create database",
-		body: strings.TrimSpace(`
+Usage:
+  audit log`),
+		},
+		"create database": {
+			title: "create database",
+			body: strings.TrimSpace(`
 Create a database from the resolved template.
 
-This command:
-  - collects identifier and template inputs
-  - previews the execution plan
-  - requires confirmation before execution
+Usage:
+  create database <name> [flags]`),
+		},
+		"drop database": {
+			title: "drop database",
+			body: strings.TrimSpace(`
+Drop a database from the resolved template.
 
-Example:
-  create database`),
-	},
-	"create user": {
-		title: "create user",
-		body: strings.TrimSpace(`
+Usage:
+  drop database <name> [flags]`),
+		},
+		"create user": {
+			title: "create user",
+			body: strings.TrimSpace(`
 Create a MySQL user from the resolved template.
 
-This command:
-  - collects username, host, and password details
-  - can grant access to the current REPL database
-  - previews the execution plan
-  - requires confirmation before execution
-
-Examples:
-  create user
-  create user analytics-ro`),
-	},
-	"count rows": {
-		title: "count rows",
-		body: strings.TrimSpace(`
-Count rows in a table in the current database context.
+Usage:
+  create user <name> [flags]`),
+		},
+		"drop user": {
+			title: "drop user",
+			body: strings.TrimSpace(`
+Drop a MySQL user from the resolved template.
 
 Usage:
-  count rows users
-  count users
-
-Aliases:
-  count <table>
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation`),
-	},
-	"peek rows": {
-		title: "peek rows",
-		body: strings.TrimSpace(`
-Peek a bounded number of rows from a table in the current database context.
+  drop user <name> [flags]`),
+		},
+		"count rows": {
+			title: "count rows",
+			body: strings.TrimSpace(`
+Count rows in a table.
 
 Usage:
-  peek rows users
-  peek users
-  peek rows users 20
-
-Aliases:
-  peek <table>
-
-This command:
-  - defaults the limit to 10
-  - caps the limit at 100
-  - requires an active connection
-  - requires a selected database
-  - may display application data
-  - does not require confirmation`),
-	},
-	"sample rows": {
-		title: "sample rows",
-		body: strings.TrimSpace(`
-Sample a bounded number of rows from a table in the current database context.
+  count rows <table>`),
+		},
+		"peek rows": {
+			title: "peek rows",
+			body: strings.TrimSpace(`
+Peek a bounded number of rows from a table.
 
 Usage:
-  sample rows users
-  sample users
-  sample rows users 10
+  peek rows <table> [--limit value]`),
+		},
+		"sample rows": {
+			title: "sample rows",
+			body: strings.TrimSpace(`
+Sample a bounded number of rows from a table.
 
-Aliases:
-  sample <table>
+Usage:
+  sample rows <table> [--limit value]`),
+		},
+		"show databases": {
+			title: "show databases",
+			body: strings.TrimSpace(`
+Show databases on the selected connection.
 
-This command:
-  - defaults the limit to 10
-  - caps the limit at 100
-  - uses ORDER BY RAND() and can be expensive on large tables
-  - requires an active connection
-  - requires a selected database
-  - may display application data
-  - does not require confirmation`),
-	},
-	"show databases": {
-		title: "show databases",
-		body: strings.TrimSpace(`
-List databases on the active connection.
+Usage:
+  show databases [flags]`),
+		},
+		"show tables": {
+			title: "show tables",
+			body: strings.TrimSpace(`
+Show tables in the selected database.
 
-Aliases:
-  list databases
-  show dbs
-  ls db
-
-Example:
-  show databases`),
-	},
-	"show users": {
-		title: "show users",
-		body: strings.TrimSpace(`
-List MySQL user accounts on the active connection.
-
-Aliases:
-  list users
-  show user accounts
-
-Example:
-  show users`),
-	},
-	"show tables": {
-		title: "show tables",
-		body: strings.TrimSpace(`
-List tables in the current database context.
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation
-
-Example:
+Usage:
   show tables`),
-	},
-	"show columns": {
-		title: "show columns",
-		body: strings.TrimSpace(`
-Show columns for a table in the current database context.
+		},
+		"show columns": {
+			title: "show columns",
+			body: strings.TrimSpace(`
+Show columns for a table in the selected database.
 
 Usage:
-  show columns users
-
-Aliases:
-  columns users
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation`),
-	},
-	"show indexes": {
-		title: "show indexes",
-		body: strings.TrimSpace(`
-Show indexes for a table in the current database context.
+  show columns <table>`),
+		},
+		"show foreign keys": {
+			title: "show foreign keys",
+			body: strings.TrimSpace(`
+Show foreign keys for a table in the selected database.
 
 Usage:
-  show indexes users
-  show indexes on users
-
-Aliases:
-  show index
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - reuses the current table completion cache
-  - does not require confirmation`),
-	},
-	"show create table": {
-		title: "show create table",
-		body: strings.TrimSpace(`
-Show the CREATE TABLE DDL for a table in the current database context.
+  show foreign keys <table>`),
+		},
+		"show indexes": {
+			title: "show indexes",
+			body: strings.TrimSpace(`
+Show indexes for a table in the selected database.
 
 Usage:
-  show create table users
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation`),
-	},
-	"show foreign keys": {
-		title: "show foreign keys",
-		body: strings.TrimSpace(`
-Show foreign keys for a table in the current database context.
+  show indexes <table>`),
+		},
+		"show create table": {
+			title: "show create table",
+			body: strings.TrimSpace(`
+Show CREATE TABLE for a table in the selected database.
 
 Usage:
-  show foreign keys organization_members
-
-Aliases:
-  show fks organization_members
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation`),
-	},
-	"show table status": {
-		title: "show table status",
-		body: strings.TrimSpace(`
-Show compact status information for tables in the current database context.
+  show create table <table>`),
+		},
+		"show table status": {
+			title: "show table status",
+			body: strings.TrimSpace(`
+Show table status for one table or all tables.
 
 Usage:
-  show table status
-  show table status users
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation`),
-	},
-	"describe": {
-		title: "describe",
-		body: strings.TrimSpace(`
-Describe a table in the current database context.
+  show table status [table]`),
+		},
+		"show grants": {
+			title: "show grants",
+			body: strings.TrimSpace(`
+Show grants for a MySQL user.
 
 Usage:
-  describe users
-  describe table users
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation`),
-	},
-	"show grants": {
-		title: "show grants",
-		body: strings.TrimSpace(`
-Show MySQL grants for a user.
+  show grants <user> [host]`),
+		},
+		"show processlist": {
+			title: "show processlist",
+			body: strings.TrimSpace(`
+Show the active MySQL processlist.
 
 Usage:
-  show grants analytics-ro
-  show grants analytics-ro localhost
-
-This command:
-  - defaults the host to %
-  - does not require confirmation`),
-	},
-	"show processlist": {
-		title: "show processlist",
-		body: strings.TrimSpace(`
-Show the active MySQL processlist for the selected connection.
-
-Aliases:
-  show processes
-
-This command:
-  - requires an active connection
-  - truncates long query text in text output
-  - does not require confirmation
-
-Example:
   show processlist`),
-	},
-	"show triggers": {
-		title: "show triggers",
-		body: strings.TrimSpace(`
-Show triggers in the current database context.
+		},
+		"show triggers": {
+			title: "show triggers",
+			body: strings.TrimSpace(`
+Show triggers in the selected database.
 
 Usage:
-  show triggers
-
-Aliases:
-  show trigger
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation`),
-	},
-	"show variables": {
-		title: "show variables",
-		body: strings.TrimSpace(`
+  show triggers`),
+		},
+		"show variables": {
+			title: "show variables",
+			body: strings.TrimSpace(`
 Show MySQL system variables.
 
 Usage:
-  show variables
-  show variables max_connections
-  show variables innodb%
+  show variables [pattern]`),
+		},
+		"show views": {
+			title: "show views",
+			body: strings.TrimSpace(`
+Show views in the selected database.
+
+Usage:
+  show views`),
+		},
+		"show users": {
+			title: "show users",
+			body: strings.TrimSpace(`
+Show MySQL users.
+
+Usage:
+  show users`),
+		},
+		"describe": {
+			title: "describe",
+			body: strings.TrimSpace(`
+Describe a table in the selected database.
+
+Usage:
+  describe <table>`),
+		},
+		"show templates": {
+			title: "show templates",
+			body: strings.TrimSpace(`
+Show resolved workflow templates.
+
+Usage:
+  show templates [query] [--tag value]`),
+		},
+		"describe template": {
+			title: "show template",
+			body: strings.TrimSpace(`
+Show a resolved workflow template by name.
+
+Usage:
+  show template <name> [--verbose]`),
+		},
+		"template run": {
+			title: "run template",
+			body: strings.TrimSpace(`
+Run a workflow template.
+
+Usage:
+  run template <name> [--preview] [--verbose]`),
+		},
+		"template validate": {
+			title: "validate template",
+			body: strings.TrimSpace(`
+Validate a workflow template definition.
+
+Usage:
+  validate template <name>`),
+		},
+		"truncate table": {
+			title: "truncate table",
+			body: strings.TrimSpace(`
+Truncate a table in the selected database.
+
+Usage:
+  truncate table <table>`),
+		},
+		"rename table": {
+			title: "rename table",
+			body: strings.TrimSpace(`
+Rename a table in the selected database.
+
+Usage:
+  rename table <from> <to>`),
+		},
+		"use": {
+			title: "use database",
+			body: strings.TrimSpace(`
+Select the current database.
+
+Usage:
+  use database <name>`),
+		},
+		"context": {
+			title: "context",
+			body: strings.TrimSpace(`
+Show the current connection, database, and dry-run mode.
+
+Usage:
+  context`),
+		},
+		"status": {
+			title: "status",
+			body: strings.TrimSpace(`
+Legacy status summary for internal compatibility.
+
+Prefer:
+  context`),
+		},
+		"exit": {
+			title: "exit",
+			body: strings.TrimSpace(`
+Exit the REPL.
 
 Aliases:
-  show vars
+  quit
+  q`),
+		},
+		"clear": {
+			title: "clear",
+			body: strings.TrimSpace(`
+Clear terminal output.`),
+		},
+	}
 
-This command:
-  - supports exact names and LIKE patterns
-  - requires an active connection
-  - does not require confirmation`),
-	},
-	"show views": {
-		title: "show views",
-		body: strings.TrimSpace(`
-Show views in the current database context.
+	entries["show connections"] = entries["connections"]
+	entries["create connection"] = entries["connection create"]
+	entries["edit connection"] = entries["connection edit"]
+	entries["drop connection"] = entries["connection delete"]
+	entries["show connection"] = entries["connection show"]
+	entries["test connection"] = entries["connection test"]
+	entries["doctor connection"] = entries["connection doctor"]
+	entries["show template"] = entries["describe template"]
+	entries["run template"] = entries["template run"]
+	entries["validate template"] = entries["template validate"]
+	entries["use database"] = entries["use"]
 
-Usage:
-  show views
-
-Aliases:
-  show view
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - does not require confirmation`),
-	},
-	"show templates": {
-		title: "show templates",
-		body: strings.TrimSpace(`
-List resolved workflow templates from builtin, global, and current connection scope.
-
-Usage:
-  show templates
-  show templates database
-  show templates tag readonly
-
-Aliases:
-  templates
-
-This command:
-  - does not require a selected database
-  - uses precedence connection > global > builtin
-  - supports substring filtering by name, command, category, or tag
-  - supports exact tag filtering with show templates tag <tag>
-  - does not require confirmation
-
-Examples:
-  show templates
-  show templates database
-  show templates tag readonly
-  dbx --connection prod show templates`),
-	},
-	"describe template": {
-		title: "describe template",
-		body: strings.TrimSpace(`
-Describe a resolved workflow template by name.
-
-Usage:
-  describe template create_database_with_user
-
-Aliases:
-  template show <name>
-  template describe <name>
-
-This command:
-  - shows scope, category, tags, command match, transaction flag, inputs, and actions
-  - does not show SQL by default
-  - supports --verbose in the CLI for redacted SQL preview
-  - does not require confirmation`),
-	},
-	"template run": {
-		title: "template run",
-		body: strings.TrimSpace(`
-Run a workflow template through the existing safe template execution pipeline.
-
-Usage:
-  template run create_database_with_user
-  dbx --connection prod template run create_database_with_user --input database=app_prod --preview
-
-Aliases:
-  run template <name>
-
-This command:
-  - collects and validates typed inputs
-  - prints a redacted input summary before preview or execution
-  - supports --preview and --dry-run without execution
-  - requires confirmation in the REPL unless preview/dry-run
-  - requires --yes in the CLI unless preview/dry-run
-  - redacts secret inputs in previews, SQL, and JSON output`),
-	},
-	"template validate": {
-		title: "template validate",
-		body: strings.TrimSpace(`
-Validate a workflow template definition without executing it.
-
-Usage:
-  template validate create_database_with_user
-  dbx template validate create_database_with_user --format json
-
-This command:
-  - validates template version, match command, inputs, and actions
-  - does not execute SQL
-  - does not require confirmation`),
-	},
-	"use": {
-		title: "use",
-		body: strings.TrimSpace(`
-Select a database for the active REPL session.
-
-This command:
-  - validates the database name
-  - verifies that the database exists
-  - updates the session prompt and saved session state
-
-Example:
-  use app_prod`),
-	},
-	"drop database": {
-		title: "drop database",
-		body: strings.TrimSpace(`
-Drop a database from the resolved template.
-
-This command:
-  - prompts for a database choice
-  - previews the execution plan
-  - stops on first execution failure
-
-Example:
-  drop database`),
-	},
-	"drop user": {
-		title: "drop user",
-		body: strings.TrimSpace(`
-Drop a MySQL user from the resolved template.
-
-This command:
-  - prompts for the username and host when needed
-  - previews the execution plan
-  - requires confirmation before execution
-
-Example:
-  drop user analytics-ro`),
-	},
-	"truncate table": {
-		title: "truncate table",
-		body: strings.TrimSpace(`
-Delete all rows from a table in the current database context.
-
-Usage:
-  truncate table auth_sessions
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - requires typed table-name confirmation in the REPL
-  - requires --yes in the CLI unless --dry-run is active`),
-	},
-	"rename table": {
-		title: "rename table",
-		body: strings.TrimSpace(`
-Rename a table in the current database context.
-
-Usage:
-  rename table users_tmp users
-
-This command:
-  - requires an active connection
-  - requires a selected database
-  - requires confirmation in the REPL
-  - requires --yes in the CLI unless --dry-run is active`),
-	},
-	"status": {
-		title: "status",
-		body: strings.TrimSpace(`
-Show the current session status.
-
-This includes:
-  - active connection name
-  - selected database when set
-  - connection mode and address
-  - timeout settings
-  - dry-run state`),
-	},
-	"context": {
-		title: "context",
-		body: strings.TrimSpace(`
-Show the active REPL context in a compact form.
-
-This includes:
-  - selected connection
-  - selected database
-  - connection mode
-  - dry-run state
-
-Aliases:
-  ctx`),
-	},
-	"dry-run": {
-		title: "dry-run",
-		body: strings.TrimSpace(`
-Control session-scoped dry-run mode.
-
-Usage:
-  dry-run on
-  dry-run off`),
-	},
-	"aliases": {
-		title: "aliases",
-		body: strings.TrimSpace(`
-Supported aliases:
-  q        -> exit
-  quit     -> exit
-  conn     -> connect
-  cx       -> connect
-  conns    -> connections
-  count <table> -> count rows <table>
-  ctx      -> context
-  columns <table> -> show columns <table>
-  ls db    -> show databases
-  peek <table> -> peek rows <table>
-  sample <table> -> sample rows <table>
-  list databases -> show databases
-  show dbs -> show databases
-  templates -> show templates
-  show fks <table> -> show foreign keys <table>
-  show index -> show indexes
-  show processes -> show processlist
-  show trigger -> show triggers
-  show vars -> show variables
-  show view -> show views
-  template show <name> -> describe template <name>
-  template describe <name> -> describe template <name>
-  run template <name> -> template run <name>
-  list users -> show users
-  show user accounts -> show users
-  desc table -> describe table
-  create db -> create database
-  drop db   -> drop database
-  test conn -> connection test
-  doctor conn -> connection doctor
-  dry on    -> dry-run on
-  dry off   -> dry-run off`),
-	},
-	"exit": {
-		title: "exit",
-		body: strings.TrimSpace(`
-Exit the REPL gracefully.`),
-	},
-}
+	return entries
+}()
 
 func printHelpTopic(prompt printer, topic string) error {
 	topic = normalizeHelpTopic(topic)
-	entry, ok := helpEntries[topic]
-	if !ok {
-		aliased := resolveAlias(topic)
-		if aliased != topic {
-			entry, ok = helpEntries[aliased]
-		}
-	}
-	if !ok {
-		return fmt.Errorf("unknown help topic %q; use / or help", topic)
+	if topic == "" {
+		topic = ""
 	}
 
-	if entry.title != "" {
-		prompt.Println(entry.title)
+	if entry, ok := helpEntries[topic]; ok {
+		if entry.title != "" {
+			prompt.Println(entry.title)
+		}
+		if entry.body != "" {
+			prompt.Println(entry.body)
+		}
+		return nil
 	}
-	if entry.body != "" {
-		prompt.Println(entry.body)
+
+	if spec, ok := commandSpecByPath(topic); ok {
+		if spec.Path != "" {
+			prompt.Println(spec.Path)
+		}
+		if spec.Description != "" {
+			prompt.Println(spec.Description)
+		}
+		return nil
 	}
-	return nil
+
+	return fmt.Errorf("unknown help topic %q; use help", topic)
 }
 
 func normalizeHelpTopic(topic string) string {

@@ -35,7 +35,7 @@ func TestHandleLineConnectionDoctorParsesName(t *testing.T) {
 		t.Fatalf("NewWithOptions returned error: %v", err)
 	}
 
-	exit, err := app.handleLine(context.Background(), "connection doctor prod")
+	exit, err := app.handleLine(context.Background(), "doctor connection prod")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestHelpConnectionIncludesDoctor(t *testing.T) {
 	t.Parallel()
 
 	entry := helpEntries["connection"].body
-	if !strings.Contains(entry, "connection doctor") {
+	if !strings.Contains(entry, "doctor connection") {
 		t.Fatalf("connection help missing doctor command: %q", entry)
 	}
 }
@@ -534,7 +534,7 @@ func TestCLIConnectionDoctorParsesName(t *testing.T) {
 		ConfigDir: root,
 		Connector: connector,
 	})
-	err := app.Run(context.Background(), []string{"connection", "doctor", "prod", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"doctor", "connection", "prod", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -567,7 +567,7 @@ func TestCLIConnectionDoctorJSON(t *testing.T) {
 	writeRawConnectionConfig(t, store, "prod", raw)
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"connection", "doctor", "prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"doctor", "connection", "prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -607,7 +607,7 @@ func TestCLIConnectionDoctorJSONFailNonZero(t *testing.T) {
 	writeRawConnectionConfig(t, store, "prod", raw)
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"connection", "doctor", "prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"doctor", "connection", "prod", "--format", "json", "--config-dir", root})
 	if err == nil {
 		t.Fatalf("expected non-zero failure")
 	}

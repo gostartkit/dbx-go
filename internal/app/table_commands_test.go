@@ -540,7 +540,7 @@ func TestHelpIncludesNewTableCommands(t *testing.T) {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 	joined = out.String()
-	if !strings.Contains(joined, "truncate table") || !strings.Contains(joined, "--yes in the CLI") {
+	if !strings.Contains(joined, "truncate table") || !strings.Contains(joined, "Usage:") {
 		t.Fatalf("unexpected help output: %q", joined)
 	}
 }

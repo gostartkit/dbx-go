@@ -446,6 +446,12 @@ type ContextResult struct {
 	DryRun     bool   `json:"dry_run,omitempty"`
 }
 
+type UseDatabaseResult struct {
+	OK         bool   `json:"ok"`
+	Connection string `json:"connection,omitempty"`
+	Database   string `json:"database,omitempty"`
+}
+
 func summarizeConnection(cfg config.ConnectionConfig) ConnectionSummary {
 	summary := ConnectionSummary{
 		Name:    cfg.Name,

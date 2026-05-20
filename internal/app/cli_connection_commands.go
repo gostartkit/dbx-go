@@ -55,7 +55,6 @@ type connectionEditFlags struct {
 func (b *cliBuilder) connectCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "connect",
-		Aliases:     []string{"conn", "cx"},
 		UsageLine:   "dbx connect <name>",
 		Short:       "Connect to a saved connection",
 		Long:        helpEntries["connect"].body,
@@ -104,7 +103,6 @@ func (b *cliBuilder) connectCommand() *cmd.Command {
 func (b *cliBuilder) connectionsCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "connections",
-		Aliases:   []string{"conns"},
 		UsageLine: "dbx connections",
 		Short:     "List saved connections",
 		Long:      helpEntries["connections"].body,
@@ -115,7 +113,7 @@ func (b *cliBuilder) connectionsCommand() *cmd.Command {
 				}
 				return b.application.handleConnections(ctx)
 			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "connections"}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show connections"}, func(application *Application, meta *auditMetadata) error {
 				if err := b.requireNoArgs(args); err != nil {
 					return util.WrapLayer("validation", "connections", err)
 				}
@@ -151,21 +149,93 @@ func (b *cliBuilder) connectionsCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) connectionGroupCommand() *cmd.Command {
+func (b *cliBuilder) showConnectionsCommand() *cmd.Command {
+	command := b.connectionsCommand()
+	command.Name = "connections"
+	command.UsageLine = "dbx show connections"
+	command.Short = "Show saved connections"
+	return command
+}
+
+func (b *cliBuilder) showConnectionCommand() *cmd.Command {
+	command := b.connectionShowCommand()
+	command.Name = "connection"
+	command.UsageLine = "dbx show connection <name>"
+	command.Short = "Show a saved connection"
+	return command
+}
+
+func (b *cliBuilder) createConnectionCommand() *cmd.Command {
+	command := b.connectionCreateCommand()
+	command.Name = "connection"
+	command.UsageLine = "dbx create connection <name> [flags]"
+	command.Short = "Create a saved connection"
+	return command
+}
+
+func (b *cliBuilder) editGroupCommand() *cmd.Command {
 	return &cmd.Command{
-		Name:      "connection",
-		UsageLine: "dbx connection <subcommand>",
-		Short:     "Manage saved connections",
-		Long:      helpEntries["connection"].body,
+		Name:      "edit",
+		UsageLine: "dbx edit <subcommand>",
+		Short:     "Edit saved resources",
 		SubCommands: []*cmd.Command{
-			b.connectionCreateCommand(),
-			b.connectionDoctorCommand(),
-			b.connectionEditCommand(),
-			b.connectionDeleteCommand(),
-			b.connectionShowCommand(),
-			b.connectionTestCommand(),
+			b.editConnectionCommand(),
 		},
 	}
+}
+
+func (b *cliBuilder) editConnectionCommand() *cmd.Command {
+	command := b.connectionEditCommand()
+	command.Name = "connection"
+	command.UsageLine = "dbx edit connection <name> [flags]"
+	command.Short = "Edit a saved connection"
+	return command
+}
+
+func (b *cliBuilder) dropConnectionCommand() *cmd.Command {
+	command := b.connectionDeleteCommand()
+	command.Name = "connection"
+	command.UsageLine = "dbx drop connection <name> [flags]"
+	command.Short = "Drop a saved connection"
+	return command
+}
+
+func (b *cliBuilder) testGroupCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "test",
+		UsageLine: "dbx test <subcommand>",
+		Short:     "Test live resources",
+		SubCommands: []*cmd.Command{
+			b.testConnectionCommand(),
+		},
+	}
+}
+
+func (b *cliBuilder) testConnectionCommand() *cmd.Command {
+	command := b.connectionTestCommand()
+	command.Name = "connection"
+	command.UsageLine = "dbx test connection <name> [flags]"
+	command.Short = "Test a saved connection"
+	return command
+}
+
+func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "doctor",
+		UsageLine: "dbx doctor <subcommand>",
+		Short:     "Inspect configuration statically",
+		SubCommands: []*cmd.Command{
+			b.doctorConnectionCommand(),
+		},
+	}
+}
+
+func (b *cliBuilder) doctorConnectionCommand() *cmd.Command {
+	command := b.connectionDoctorCommand()
+	command.Name = "connection"
+	command.UsageLine = "dbx doctor connection <name>"
+	command.Short = "Inspect a saved connection statically"
+	return command
 }
 
 func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
@@ -210,14 +280,14 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 				return util.WrapLayer("validation", "connection create", fmt.Errorf("usage: dbx connection create <name> [flags]"))
 			}
 
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection create"}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "create connection"}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := buildCreateConnectionConfig(args[0], flags)
 				if err != nil {
 					return err
 				}
 				meta.Connection = cfg.Name
 				meta.Mode = cfg.Mode
-				if err := b.requireCLIConfirmation("connection create"); err != nil {
+				if err := b.requireCLIConfirmation("create connection"); err != nil {
 					return err
 				}
 				if application.store.ConnectionExists(cfg.Name) && !flags.force {
@@ -242,7 +312,7 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 					OK:          true,
 					Connection:  cfg.Name,
 					Saved:       true,
-					EditCommand: "connection edit " + cfg.Name,
+					EditCommand: "edit connection " + cfg.Name,
 					Path:        application.store.ConnectionConfigPath(cfg.Name),
 				}
 				if flags.test {
@@ -316,13 +386,13 @@ func (b *cliBuilder) connectionEditCommand() *cmd.Command {
 				return util.WrapLayer("validation", "connection edit", fmt.Errorf("usage: dbx connection edit <name> [flags]"))
 			}
 
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection edit", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "edit connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := application.store.LoadConnection(args[0])
 				if err != nil {
 					return util.WrapLayer("config", "load connection "+args[0], err)
 				}
 				meta.Mode = cfg.Mode
-				if err := b.requireCLIConfirmation("connection edit"); err != nil {
+				if err := b.requireCLIConfirmation("edit connection"); err != nil {
 					return err
 				}
 
@@ -373,11 +443,11 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection delete", fmt.Errorf("usage: dbx connection delete <name>"))
 			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection delete", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "drop connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
 					meta.Mode = cfg.Mode
 				}
-				if err := b.requireCLIConfirmation("connection delete"); err != nil {
+				if err := b.requireCLIConfirmation("drop connection"); err != nil {
 					return err
 				}
 				if err := application.deleteConnectionByName(args[0]); err != nil {
@@ -410,7 +480,7 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 				return util.WrapLayer("validation", "connection show", fmt.Errorf("usage: dbx connection show <name>"))
 			}
 
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection show", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				result, err := application.showConnection(args[0])
 				if err != nil {
 					return err
@@ -475,19 +545,17 @@ func (b *cliBuilder) connectionTestCommand() *cmd.Command {
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				switch len(args) {
-				case 0:
-					return b.application.handleConnectionTest(ctx, "", verbose)
 				case 1:
 					return b.application.handleConnectionTest(ctx, args[0], verbose)
 				default:
-					return util.WrapLayer("validation", "connection test", fmt.Errorf("usage: connection test [name] [--verbose]"))
+					return util.WrapLayer("validation", "test connection", fmt.Errorf("usage: test connection <name> [--verbose]"))
 				}
 			}
 			if len(args) != 1 {
-				return util.WrapLayer("validation", "connection test", fmt.Errorf("usage: dbx connection test <name>"))
+				return util.WrapLayer("validation", "test connection", fmt.Errorf("usage: dbx test connection <name>"))
 			}
 
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection test", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "test connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := application.store.LoadConnection(args[0])
 				if err != nil {
 					return util.WrapLayer("config", "load connection "+args[0], err)
@@ -535,19 +603,17 @@ func (b *cliBuilder) connectionDoctorCommand() *cmd.Command {
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				switch len(args) {
-				case 0:
-					return b.application.handleConnectionDoctor(ctx, "")
 				case 1:
 					return b.application.handleConnectionDoctor(ctx, args[0])
 				default:
-					return util.WrapLayer("validation", "connection doctor", fmt.Errorf("usage: connection doctor [name]"))
+					return util.WrapLayer("validation", "doctor connection", fmt.Errorf("usage: doctor connection <name>"))
 				}
 			}
 			if len(args) != 1 {
-				return util.WrapLayer("validation", "connection doctor", fmt.Errorf("usage: dbx connection doctor <name>"))
+				return util.WrapLayer("validation", "doctor connection", fmt.Errorf("usage: dbx doctor connection <name>"))
 			}
 
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "connection doctor", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "doctor connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
 					meta.Mode = cfg.Mode
 				}

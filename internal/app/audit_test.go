@@ -105,7 +105,7 @@ func TestAuditLogRedactsSecretsAndDoesNotFailCommandOnWriteError(t *testing.T) {
 		t.Fatal(err)
 	}
 	app, stdout, stderr = newCLIAppWithOptions(t, "", Options{ConfigDir: root})
-	err = app.Run(context.Background(), []string{"connections", "--config-dir", root})
+	err = app.Run(context.Background(), []string{"show", "connections", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("audit write failure should not fail command: %v\nstderr=%s", err, stderr.String())
 	}

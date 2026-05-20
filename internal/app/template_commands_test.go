@@ -179,7 +179,7 @@ func TestDescribeTemplateJSONOutput(t *testing.T) {
 }`)
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"describe", "template", "readonly_user", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "template", "readonly_user", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -227,7 +227,7 @@ func TestTemplateRunPreviewParsesInputsAndRedactsSecrets(t *testing.T) {
 		"--config-dir", root,
 		"--connection", "prod",
 		"--format", "json",
-		"template", "run", "create_database_with_user",
+		"run", "template", "create_database_with_user",
 		"--input", "database=app_prod",
 		"--input", "password-env=APP_PASSWORD",
 		"--preview",
@@ -280,7 +280,7 @@ func TestTemplateRunPreviewAndDryRunDoNotExecute(t *testing.T) {
 	err := previewApp.Run(context.Background(), []string{
 		"--config-dir", root,
 		"--connection", "prod",
-		"template", "run", "readonly_user",
+		"run", "template", "readonly_user",
 		"--input", "username=analytics-ro",
 		"--preview",
 	})
@@ -299,7 +299,7 @@ func TestTemplateRunPreviewAndDryRunDoNotExecute(t *testing.T) {
 		"--config-dir", root,
 		"--connection", "prod",
 		"--dry-run",
-		"template", "run", "readonly_user",
+		"run", "template", "readonly_user",
 		"--input", "username=analytics-ro",
 	})
 	if err != nil {
@@ -352,7 +352,7 @@ func TestTemplateRunRequiresConfirmationInREPLAndCLI(t *testing.T) {
 	err = cliApp.Run(context.Background(), []string{
 		"--config-dir", root,
 		"--connection", "prod",
-		"template", "run", "create_database_with_user",
+		"run", "template", "create_database_with_user",
 		"--input", "database=app_demo",
 		"--input", "password=secret123",
 	})
@@ -415,7 +415,7 @@ func TestTemplateRunRejectsMissingRequiredInputAndExtraArgs(t *testing.T) {
 		"--config-dir", root,
 		"--connection", "prod",
 		"--format", "json",
-		"template", "run", "readonly_user",
+		"run", "template", "readonly_user",
 		"--preview",
 	})
 	if err == nil || !strings.Contains(err.Error(), "missing required template input") {
@@ -584,7 +584,7 @@ func TestTemplateRunPreviewShowsRedactedInputSummaryAndCategory(t *testing.T) {
 	err := app.Run(context.Background(), []string{
 		"--config-dir", root,
 		"--connection", "prod",
-		"template", "run", "create_database_with_user",
+		"run", "template", "create_database_with_user",
 		"--input", "database=greenhn_prod",
 		"--input", "password=super-secret",
 		"--preview",
@@ -625,7 +625,7 @@ func TestTemplateValidateSuccessAndJSONOutput(t *testing.T) {
 }`)
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"template", "validate", "create_database_with_user", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"validate", "template", "create_database_with_user", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -654,7 +654,7 @@ func TestTemplateValidateFailures(t *testing.T) {
 }`)
 
 	app, _, stderr := newCLIAppWithOptions(t, "", Options{ConfigDir: root})
-	err := app.Run(context.Background(), []string{"template", "validate", "bad", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"validate", "template", "bad", "--config-dir", root})
 	if err == nil || (!strings.Contains(err.Error(), "unsupported match command") && !strings.Contains(err.Error(), "select input")) {
 		t.Fatalf("expected validation failure, got %v\nstderr=%s", err, stderr.String())
 	}

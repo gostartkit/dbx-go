@@ -185,7 +185,7 @@ func TestHandleLineConnectionTestParsesName(t *testing.T) {
 		t.Fatalf("NewWithOptions returned error: %v", err)
 	}
 
-	exit, err := app.handleLine(context.Background(), "connection test prod")
+	exit, err := app.handleLine(context.Background(), "test connection prod")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestHandleLineConnectionTestParsesVerboseName(t *testing.T) {
 		t.Fatalf("NewWithOptions returned error: %v", err)
 	}
 
-	exit, err := app.handleLine(context.Background(), "connection test prod --verbose")
+	exit, err := app.handleLine(context.Background(), "test connection prod --verbose")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestHandleLineConnectionTestRequiresExplicitNameInSharedTree(t *testing.T) 
 		t.Fatalf("NewWithOptions returned error: %v", err)
 	}
 
-	exit, err := app.handleLine(context.Background(), "connection test --verbose")
+	exit, err := app.handleLine(context.Background(), "test connection --verbose")
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
@@ -266,7 +266,7 @@ func TestHelpConnectionIncludesTest(t *testing.T) {
 	t.Parallel()
 
 	entry := helpEntries["connection"].body
-	if !strings.Contains(entry, "connection test") {
+	if !strings.Contains(entry, "test connection") {
 		t.Fatalf("connection help missing test command: %q", entry)
 	}
 }
@@ -274,8 +274,8 @@ func TestHelpConnectionIncludesTest(t *testing.T) {
 func TestHelpConnectionTestMentionsVerbose(t *testing.T) {
 	t.Parallel()
 
-	entry := helpEntries["connection test"].body
-	if !strings.Contains(entry, "--verbose") || !strings.Contains(entry, "connection test prod verbose") {
+	entry := helpEntries["test connection"].body
+	if !strings.Contains(entry, "--verbose") || !strings.Contains(entry, "test connection <name>") {
 		t.Fatalf("connection test help missing verbose usage: %q", entry)
 	}
 }

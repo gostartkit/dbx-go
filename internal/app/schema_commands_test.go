@@ -48,7 +48,7 @@ func TestHandleLineShowColumnsParsesCommand(t *testing.T) {
 	}
 }
 
-func TestHandleLineColumnsAliasParsesCommand(t *testing.T) {
+func TestHandleLineShowColumnsUsesSharedCommand(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -72,7 +72,7 @@ func TestHandleLineColumnsAliasParsesCommand(t *testing.T) {
 	app.session.Database = "app_prod"
 	app.session.DB = &sql.DB{}
 
-	exit, err := app.handleLine(context.Background(), "columns users")
+	exit, err := app.handleLine(context.Background(), "show columns users")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestHandleLineShowForeignKeysParsesCommand(t *testing.T) {
 	}
 }
 
-func TestHandleLineShowFksAliasParsesCommand(t *testing.T) {
+func TestHandleLineShowForeignKeysUsesSharedCommand(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -144,7 +144,7 @@ func TestHandleLineShowFksAliasParsesCommand(t *testing.T) {
 	app.session.Database = "app_prod"
 	app.session.DB = &sql.DB{}
 
-	exit, err := app.handleLine(context.Background(), "show fks organization_members")
+	exit, err := app.handleLine(context.Background(), "show foreign keys organization_members")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestCLIShowColumnsJSON(t *testing.T) {
 	}
 }
 
-func TestCLIColumnsAliasJSON(t *testing.T) {
+func TestCLIShowColumnsUsesCanonicalPath(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -354,7 +354,7 @@ func TestCLIColumnsAliasJSON(t *testing.T) {
 		ConfigDir: root,
 		Connector: &databaseSelectionConnector{databases: []string{"app_prod"}},
 	})
-	err := app.Run(context.Background(), []string{"columns", "users", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "columns", "users", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -398,7 +398,7 @@ func TestCLIShowForeignKeysJSON(t *testing.T) {
 	}
 }
 
-func TestCLIShowFksAliasJSON(t *testing.T) {
+func TestCLIShowForeignKeysUsesCanonicalPath(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -414,7 +414,7 @@ func TestCLIShowFksAliasJSON(t *testing.T) {
 		ConfigDir: root,
 		Connector: &databaseSelectionConnector{databases: []string{"app_prod"}},
 	})
-	err := app.Run(context.Background(), []string{"show", "fks", "organization_members", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "foreign", "keys", "organization_members", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}

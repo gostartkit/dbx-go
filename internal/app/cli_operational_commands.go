@@ -157,7 +157,6 @@ func (b *cliBuilder) showVariablesCommand() *cmd.Command {
 func (b *cliBuilder) contextCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "context",
-		Aliases:   []string{"ctx"},
 		UsageLine: "dbx context",
 		Short:     "Show the current operational context",
 		Long:      helpEntries["context"].body,
@@ -197,47 +196,24 @@ func (b *cliBuilder) contextCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) describeCommand() *cmd.Command {
-	flags := &templateDescribeFlags{}
 	return &cmd.Command{
 		Name:        "describe",
 		UsageLine:   "dbx describe <table>",
 		Short:       "Describe a table in the selected database",
 		Long:        helpEntries["describe"].body,
-		Positionals: []cmd.PositionalArg{{Name: "target", Usage: "table name or template", Required: true}, {Name: "name", Usage: "template name"}},
-		SetFlags: func(f *cmd.FlagSet) {
-			f.BoolVar(&flags.verbose, "verbose", false, "include redacted SQL preview for template descriptions", "")
-		},
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
-				switch len(args) {
-				case 0:
-					return b.application.handleDescribeTable(ctx, "")
-				case 1:
-					return b.application.handleDescribeTable(ctx, args[0])
-				default:
-					return util.WrapLayer("validation", "describe", fmt.Errorf("usage: describe [table]"))
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "describe", fmt.Errorf("usage: describe <table>"))
 				}
+				return b.application.handleDescribeTable(ctx, args[0])
 			}
-			if len(args) >= 2 && args[0] == "template" {
-				if len(args) != 2 {
-					return util.WrapLayer("validation", "describe template", fmt.Errorf("usage: dbx describe template <name> [flags]"))
-				}
-				return b.runDescribeTemplate(ctx, args[1], flags)
-			}
-			table := ""
-			switch len(args) {
-			case 1:
-				table = args[0]
-			case 2:
-				if args[0] != "table" {
-					return util.WrapLayer("validation", "describe", fmt.Errorf("usage: dbx describe <table>"))
-				}
-				table = args[1]
-			default:
+			if len(args) != 1 {
 				return util.WrapLayer("validation", "describe", fmt.Errorf("usage: dbx describe <table>"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "describe table", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
-				return b.runDescribeTable(ctx, application, table, meta)
+				return b.runDescribeTable(ctx, application, args[0], meta)
 			})
 		},
 	}
