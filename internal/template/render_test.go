@@ -76,8 +76,8 @@ func TestBuiltinMySQLSQLGeneration(t *testing.T) {
 			wantSQL: "CREATE DATABASE IF NOT EXISTS `greenhn-dev` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
 		},
 		{
-			name:    "list databases",
-			command: "list databases",
+			name:    "show databases",
+			command: "show databases",
 			values:  map[string]string{},
 			wantSQL: "SHOW DATABASES",
 		},

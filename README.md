@@ -90,7 +90,7 @@ connection doctor [name]
 status
 context
 create database
-list databases
+show databases
 drop database
 create user
 show users
@@ -124,9 +124,9 @@ dbx connection test <name> [--verbose]
 dbx connection doctor <name>
 
 dbx create database <name> [flags]
-dbx list databases [flags]
 dbx show databases [flags]
 dbx show dbs [flags]
+dbx list databases [flags]
 dbx drop database <name> [flags]
 dbx create user <name> [flags]
 dbx show users [flags]
@@ -248,9 +248,9 @@ quit          -> exit
 conn          -> connect
 cx            -> connect
 conns         -> connections
-ls db         -> list databases
-show databases -> list databases
-show dbs      -> list databases
+list databases -> show databases
+show dbs      -> show databases
+ls db         -> show databases
 show index    -> show indexes
 show processes -> show processlist
 show vars     -> show variables
@@ -271,7 +271,7 @@ Use `help aliases` inside the REPL to display the alias list.
 
 ## Confirmation Behavior
 
-Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `list databases`, `show databases`, `show dbs`, and `show users`.
+Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, and `show users`.
 
 Mutating commands require confirmation in the REPL unless dry-run is active. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
 
@@ -1129,10 +1129,10 @@ Example dry-run JSON output:
 }
 ```
 
-List databases for scripts:
+Show databases for scripts:
 
 ```bash
-dbx --connection prod list databases --format json
+dbx --connection prod show databases --format json
 ```
 
 Show users for scripts:

@@ -81,7 +81,7 @@ func TestResolveFallsBackToBuiltin(t *testing.T) {
 	}
 
 	service := NewService(store)
-	tpl, err := service.Resolve("list databases", cfg)
+	tpl, err := service.Resolve("show databases", cfg)
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}

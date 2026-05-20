@@ -65,9 +65,9 @@ var rootSuggestions = []Suggestion{
 	{Value: "context", Description: "show current REPL context", Category: "command"},
 	{Value: "create database", Description: "create a database", Category: "command"},
 	{Value: "create user", Description: "create a MySQL user", Category: "command"},
-	{Value: "list databases", Description: "list databases", Category: "command"},
-	{Value: "show databases", Description: "alias for list databases", Category: "alias"},
-	{Value: "show dbs", Description: "alias for list databases", Category: "alias"},
+	{Value: "show databases", Description: "list databases on the active connection", Category: "command"},
+	{Value: "show dbs", Description: "alias for show databases", Category: "alias"},
+	{Value: "list databases", Description: "alias for show databases", Category: "alias"},
 	{Value: "show tables", Description: "list tables in current database", Category: "command"},
 	{Value: "show indexes", Description: "show indexes for a table", Category: "command"},
 	{Value: "show users", Description: "list MySQL users", Category: "command"},
@@ -406,14 +406,14 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 		}
 	case "list":
 		return []Suggestion{
-			{Value: "databases", Description: "list databases", Category: "subcommand"},
+			{Value: "databases", Description: "alias for show databases", Category: "alias"},
 			{Value: "users", Description: "alias for show users", Category: "alias"},
 		}
 	case "show":
 		if len(req.Fields) == 1 {
 			return []Suggestion{
-				{Value: "databases", Description: "list databases", Category: "subcommand"},
-				{Value: "dbs", Description: "alias for list databases", Category: "alias"},
+				{Value: "databases", Description: "list databases on the active connection", Category: "subcommand"},
+				{Value: "dbs", Description: "alias for show databases", Category: "alias"},
 				{Value: "index", Description: "alias for show indexes", Category: "alias"},
 				{Value: "indexes", Description: "show indexes for a table", Category: "subcommand"},
 				{Value: "processes", Description: "alias for show processlist", Category: "alias"},
@@ -431,8 +431,8 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 		}
 		if len(req.Fields) == 2 {
 			return []Suggestion{
-				{Value: "databases", Description: "list databases", Category: "subcommand"},
-				{Value: "dbs", Description: "alias for list databases", Category: "alias"},
+				{Value: "databases", Description: "list databases on the active connection", Category: "subcommand"},
+				{Value: "dbs", Description: "alias for show databases", Category: "alias"},
 				{Value: "index", Description: "alias for show indexes", Category: "alias"},
 				{Value: "indexes", Description: "show indexes for a table", Category: "subcommand"},
 				{Value: "processes", Description: "alias for show processlist", Category: "alias"},
@@ -459,7 +459,7 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "connection doctor", Description: "connection doctor help", Category: "topic"},
 			{Value: "create database", Description: "create database help", Category: "topic"},
 			{Value: "create user", Description: "create user help", Category: "topic"},
-			{Value: "list databases", Description: "list databases help", Category: "topic"},
+			{Value: "show databases", Description: "show databases help", Category: "topic"},
 			{Value: "show tables", Description: "show tables help", Category: "topic"},
 			{Value: "show indexes", Description: "show indexes help", Category: "topic"},
 			{Value: "show users", Description: "show users help", Category: "topic"},

@@ -83,6 +83,11 @@ func TestCalculateCompletionIncludesConnectionDescriptionsAndHint(t *testing.T) 
 		t.Fatalf("description = %q", completion.Suggestions[0].Description)
 	}
 
+	showCompletion := calculateCompletion("show ", CompletionContext{})
+	if len(showCompletion.Suggestions) == 0 || showCompletion.Suggestions[0].Value != "databases" {
+		t.Fatalf("show suggestions = %#v", showCompletion.Suggestions)
+	}
+
 	hintCompletion := calculateCompletion("crea", CompletionContext{})
 	if hintCompletion.Hint == "" {
 		t.Fatalf("expected inline hint, got empty")

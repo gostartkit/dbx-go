@@ -720,6 +720,27 @@ func TestCLIStatusIncludesDatabaseFlag(t *testing.T) {
 	}
 }
 
+func TestCLIShowDatabasesCanonical(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"show", "databases", "--connection", "prod", "--template", "builtin_list_databases", "--dry-run", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"command": "show databases"`) {
+		t.Fatalf("stdout missing canonical command: %q", stdout.String())
+	}
+}
+
 func TestCLIShowDBsAlias(t *testing.T) {
 	t.Parallel()
 
@@ -736,7 +757,28 @@ func TestCLIShowDBsAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), `"command": "list databases"`) {
+	if !strings.Contains(stdout.String(), `"command": "show databases"`) {
+		t.Fatalf("stdout missing canonical command: %q", stdout.String())
+	}
+}
+
+func TestCLIListDatabasesCompatibilityAlias(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"list", "databases", "--connection", "prod", "--template", "builtin_list_databases", "--dry-run", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"command": "show databases"`) {
 		t.Fatalf("stdout missing canonical command: %q", stdout.String())
 	}
 }

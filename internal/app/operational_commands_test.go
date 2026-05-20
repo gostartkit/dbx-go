@@ -49,6 +49,76 @@ func TestHandleLineShowTablesParsesCommand(t *testing.T) {
 	}
 }
 
+func TestHandleLineShowDatabasesParsesCanonicalCommand(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	app, err := NewWithOptions(strings.NewReader(""), &out, &out, Options{
+		ConfigDir: root,
+		Connector: &readOnlyConnector{queryStrings: []string{"app_prod", "app_demo"}},
+	})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+	app.session.Connection = sampleConnection("prod")
+	app.session.DB = &sql.DB{}
+
+	exit, err := app.handleLine(context.Background(), "show databases")
+	if err != nil {
+		t.Fatalf("handleLine returned error: %v", err)
+	}
+	if exit {
+		t.Fatalf("expected REPL to continue")
+	}
+	if !strings.Contains(out.String(), "app_prod") {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
+
+func TestHandleLineListDatabasesParsesAlias(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	app, err := NewWithOptions(strings.NewReader(""), &out, &out, Options{
+		ConfigDir: root,
+		Connector: &readOnlyConnector{queryStrings: []string{"app_prod", "app_demo"}},
+	})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+	app.session.Connection = sampleConnection("prod")
+	app.session.DB = &sql.DB{}
+
+	exit, err := app.handleLine(context.Background(), "list databases")
+	if err != nil {
+		t.Fatalf("handleLine returned error: %v", err)
+	}
+	if exit {
+		t.Fatalf("expected REPL to continue")
+	}
+	if !strings.Contains(out.String(), "app_prod") {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
+
 func TestHandleLineDescribeParsesAlias(t *testing.T) {
 	t.Parallel()
 
@@ -637,6 +707,21 @@ func TestHelpIncludesOperationalCommands(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "show indexes") {
 		t.Fatalf("unexpected help output: %q", out.String())
+	}
+}
+
+func TestHelpListDatabasesShowsCanonicalTopic(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	if err := printHelpTopic(simplePrinter{writer: &out}, "list databases"); err != nil {
+		t.Fatalf("printHelpTopic returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "show databases") {
+		t.Fatalf("expected canonical help topic: %q", out.String())
+	}
+	if strings.Contains(out.String(), "title: list databases") {
+		t.Fatalf("unexpected legacy help title: %q", out.String())
 	}
 }
 

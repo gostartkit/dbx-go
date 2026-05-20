@@ -101,9 +101,9 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 		wantOut string
 	}{
 		{
-			name: "list databases",
+			name: "show databases",
 			run: func(app *Application) error {
-				return app.handleListDatabases(context.Background())
+				return app.handleShowDatabases(context.Background())
 			},
 			wantOut: "Databases:",
 		},

@@ -23,7 +23,7 @@ func Builtins() []Template {
 			Version: 1,
 			Name:    "builtin_list_databases",
 			Match: Match{
-				Command: "list databases",
+				Command: "show databases",
 				Driver:  "mysql",
 			},
 			Actions: []Action{
@@ -34,7 +34,7 @@ func Builtins() []Template {
 				},
 			},
 			Layer:  "builtin",
-			Source: "builtin:list databases",
+			Source: "builtin:show databases",
 		},
 		{
 			Version: 1,

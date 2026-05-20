@@ -84,18 +84,32 @@ func (b *cliBuilder) dropGroupCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) showDatabasesCommand() *cmd.Command {
-	command := b.listDatabasesCommand()
-	command.Name = "databases"
-	command.UsageLine = "dbx show databases [flags]"
-	command.Short = "Alias for list databases"
-	return command
+	flags := &planOnlyFlags{inputs: inputValues{}}
+	return &cmd.Command{
+		Name:      "databases",
+		UsageLine: "dbx show databases [flags]",
+		Short:     "Show databases on a connection",
+		Long:      helpEntries["show databases"].body,
+		SetFlags: func(f *cmd.FlagSet) {
+			f.StringVar(&flags.template, "template", "", "template name", "")
+			bindInputFlag(f, flags.inputs)
+		},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if err := b.requireNoArgs(args); err != nil {
+				return util.WrapLayer("validation", "show databases", err)
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show databases", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runShowDatabases(ctx, application, flags, meta)
+			})
+		},
+	}
 }
 
 func (b *cliBuilder) showDBsCommand() *cmd.Command {
-	command := b.listDatabasesCommand()
+	command := b.showDatabasesCommand()
 	command.Name = "dbs"
 	command.UsageLine = "dbx show dbs [flags]"
-	command.Short = "Alias for list databases"
+	command.Short = "Alias for show databases"
 	return command
 }
 
@@ -154,25 +168,11 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) listDatabasesCommand() *cmd.Command {
-	flags := &planOnlyFlags{inputs: inputValues{}}
-	return &cmd.Command{
-		Name:      "databases",
-		UsageLine: "dbx list databases [flags]",
-		Short:     "List databases on a connection",
-		Long:      helpEntries["list databases"].body,
-		SetFlags: func(f *cmd.FlagSet) {
-			f.StringVar(&flags.template, "template", "", "template name", "")
-			bindInputFlag(f, flags.inputs)
-		},
-		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if err := b.requireNoArgs(args); err != nil {
-				return util.WrapLayer("validation", "list databases", err)
-			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "list databases", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
-				return b.runListDatabases(ctx, application, flags, meta)
-			})
-		},
-	}
+	command := b.showDatabasesCommand()
+	command.Name = "databases"
+	command.UsageLine = "dbx list databases [flags]"
+	command.Short = "Alias for show databases"
+	return command
 }
 
 func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
@@ -325,7 +325,7 @@ func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Applica
 	})
 }
 
-func (b *cliBuilder) runListDatabases(ctx context.Context, application *Application, flags *planOnlyFlags, meta *auditMetadata) error {
+func (b *cliBuilder) runShowDatabases(ctx context.Context, application *Application, flags *planOnlyFlags, meta *auditMetadata) error {
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
 		return err
@@ -338,7 +338,7 @@ func (b *cliBuilder) runListDatabases(ctx context.Context, application *Applicat
 		return err
 	}
 
-	selectedTemplate, err := application.selectTemplateForCLI("list databases", cfg, flags.template)
+	selectedTemplate, err := application.selectTemplateForCLI("show databases", cfg, flags.template)
 	if err != nil {
 		return err
 	}
@@ -355,7 +355,7 @@ func (b *cliBuilder) runListDatabases(ctx context.Context, application *Applicat
 		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
 		if result != nil {
 			result.Connection = cfg.Name
-			result.Command = "list databases"
+			result.Command = "show databases"
 			applyPreviewSQL(result, previewPlan)
 		}
 		return b.writeOutput(result, func() error {
@@ -391,6 +391,10 @@ func (b *cliBuilder) runListDatabases(ctx context.Context, application *Applicat
 		}
 		return nil
 	})
+}
+
+func (b *cliBuilder) runListDatabases(ctx context.Context, application *Application, flags *planOnlyFlags, meta *auditMetadata) error {
+	return b.runShowDatabases(ctx, application, flags, meta)
 }
 
 func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Application, name string, flags *planOnlyFlags, meta *auditMetadata) error {

@@ -171,7 +171,7 @@ connection test [name] [verbose]
 connection doctor [name]
 
 create database
-list databases
+show databases
 drop database
 create user
 show users
@@ -243,9 +243,9 @@ dbx connection test <name> [--verbose]
 dbx connection doctor <name>
 
 dbx create database <name> [flags]
-dbx list databases [flags]
 dbx show databases [flags]
 dbx show dbs [flags]
+dbx list databases [flags]
 dbx drop database <name> [flags]
 dbx create user <name> [flags]
 dbx show users [flags]

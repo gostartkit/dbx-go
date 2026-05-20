@@ -32,7 +32,7 @@ connection test [name] [verbose] Test a saved connection
 connection doctor [name] Inspect a saved connection statically
 
 create database       Create a database from a template
-list databases        List databases on the active connection
+show databases        List databases on the active connection
 drop database         Drop a database from a template
 create user           Create a MySQL user
 show users            List MySQL users
@@ -215,13 +215,18 @@ Examples:
   create user
   create user analytics-ro`),
 	},
-	"list databases": {
-		title: "list databases",
+	"show databases": {
+		title: "show databases",
 		body: strings.TrimSpace(`
 List databases on the active connection.
 
+Aliases:
+  list databases
+  show dbs
+  ls db
+
 Example:
-  list databases`),
+  show databases`),
 	},
 	"show users": {
 		title: "show users",
@@ -411,9 +416,9 @@ Supported aliases:
   cx       -> connect
   conns    -> connections
   ctx      -> context
-  ls db    -> list databases
-  show databases -> list databases
-  show dbs -> list databases
+  ls db    -> show databases
+  list databases -> show databases
+  show dbs -> show databases
   show index -> show indexes
   show processes -> show processlist
   show vars -> show variables
@@ -437,6 +442,12 @@ Exit the REPL gracefully.`),
 func printHelpTopic(prompt printer, topic string) error {
 	topic = normalizeHelpTopic(topic)
 	entry, ok := helpEntries[topic]
+	if !ok {
+		aliased := resolveAlias(topic)
+		if aliased != topic {
+			entry, ok = helpEntries[aliased]
+		}
+	}
 	if !ok {
 		return fmt.Errorf("unknown help topic %q; use / or help", topic)
 	}

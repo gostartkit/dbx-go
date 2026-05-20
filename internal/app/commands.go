@@ -100,8 +100,10 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleStatus(ctx)
 	case "create database":
 		return false, a.handleCreateDatabase(ctx)
+	case "show databases":
+		return false, a.handleShowDatabases(ctx)
 	case "list databases":
-		return false, a.handleListDatabases(ctx)
+		return false, a.handleShowDatabases(ctx)
 	case "show users":
 		return false, a.handleShowUsers(ctx)
 	case "show tables":
@@ -304,8 +306,8 @@ func (a *Application) handleCreateDatabase(ctx context.Context) error {
 	})
 }
 
-func (a *Application) handleListDatabases(ctx context.Context) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "list databases", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+func (a *Application) handleShowDatabases(ctx context.Context) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show databases", DryRun: a.dryRun}, func(meta *auditMetadata) error {
 		cfg, db, err := a.requireConnection(ctx)
 		if err != nil {
 			return err
@@ -313,14 +315,14 @@ func (a *Application) handleListDatabases(ctx context.Context) error {
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 
-		template, err := a.templates.Resolve("list databases", cfg)
+		template, err := a.templates.Resolve("show databases", cfg)
 		if err != nil {
-			return util.WrapLayer("template", "resolve list databases template", err)
+			return util.WrapLayer("template", "resolve show databases template", err)
 		}
 
 		plan, err := tpl.BuildPlan(template, cfg, map[string]string{})
 		if err != nil {
-			return util.WrapLayer("template", "build list databases execution plan", err)
+			return util.WrapLayer("template", "build show databases execution plan", err)
 		}
 
 		if a.dryRun {
@@ -349,6 +351,10 @@ func (a *Application) handleListDatabases(ctx context.Context) error {
 		}
 		return nil
 	})
+}
+
+func (a *Application) handleListDatabases(ctx context.Context) error {
+	return a.handleShowDatabases(ctx)
 }
 
 func (a *Application) handleDropDatabase(ctx context.Context) error {
