@@ -13,9 +13,13 @@ import (
 
 func (a *Application) clearDatabaseSelection() {
 	a.session.Database = ""
+	a.clearDatabaseCompletion()
+	a.clearTableCompletion()
+}
+
+func (a *Application) clearDatabaseCompletion() {
 	a.completionDBs = nil
 	a.completionDBsConn = ""
-	a.clearTableCompletion()
 }
 
 func (a *Application) clearUserCompletion() {

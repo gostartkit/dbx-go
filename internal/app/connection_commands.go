@@ -123,6 +123,9 @@ func (a *Application) handleConnectionEdit(ctx context.Context, name string) err
 		if err := a.store.SaveConnection(cfg); err != nil {
 			return util.WrapLayer("config", "save connection "+cfg.Name, err)
 		}
+		a.clearDatabaseCompletion()
+		a.clearTableCompletion()
+		a.clearUserCompletion()
 		a.prompt.Printf("Saved: %s\n", a.store.ConnectionConfigPath(cfg.Name))
 
 		connectNow, err := a.confirm(ctx, "Connect now?", true)
@@ -166,6 +169,9 @@ func (a *Application) deleteConnectionByName(name string) error {
 	if err := a.store.DeleteConnection(name); err != nil {
 		return util.WrapLayer("config", "delete connection "+name, err)
 	}
+	a.clearDatabaseCompletion()
+	a.clearTableCompletion()
+	a.clearUserCompletion()
 
 	if a.session.Connection != nil && a.session.Connection.Name == name {
 		if err := a.session.Reset(); err != nil {

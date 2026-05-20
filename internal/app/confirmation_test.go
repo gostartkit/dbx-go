@@ -258,6 +258,74 @@ func TestCreateDatabaseConfirmsWhenNotDryRun(t *testing.T) {
 	}
 }
 
+func TestCreateDatabaseClearsDatabaseCompletionCache(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	app, err := NewWithOptions(strings.NewReader("greenhn-dev\nutf8mb4\nutf8mb4_unicode_ci\n"), &out, &out, Options{
+		ConfigDir: root,
+		Connector: &readOnlyConnector{},
+	})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+	app.session.Connection = sampleConnection("prod")
+	app.session.DB = &sql.DB{}
+	app.dryRun = true
+	app.completionDBs = []string{"app_prod", "analytics_v2"}
+	app.completionDBsConn = "prod"
+
+	if err := app.handleCreateDatabase(context.Background()); err != nil {
+		t.Fatalf("handleCreateDatabase returned error: %v", err)
+	}
+	if len(app.completionDBs) != 0 || app.completionDBsConn != "" {
+		t.Fatalf("database completion cache not cleared: %+v", app)
+	}
+}
+
+func TestDropDatabaseClearsDatabaseCompletionCache(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	app, err := NewWithOptions(strings.NewReader("analytics_v2\n"), &out, &out, Options{
+		ConfigDir: root,
+		Connector: &readOnlyConnector{queryStrings: []string{"app_prod", "analytics_v2"}},
+	})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+	app.session.Connection = sampleConnection("prod")
+	app.session.DB = &sql.DB{}
+	app.dryRun = true
+	app.completionDBs = []string{"app_prod", "analytics_v2"}
+	app.completionDBsConn = "prod"
+
+	if err := app.handleDropDatabase(context.Background()); err != nil {
+		t.Fatalf("handleDropDatabase returned error: %v", err)
+	}
+	if len(app.completionDBs) != 0 || app.completionDBsConn != "" {
+		t.Fatalf("database completion cache not cleared: %+v", app)
+	}
+}
+
 func TestCreateUserConfirmsWhenNotDryRun(t *testing.T) {
 	t.Parallel()
 

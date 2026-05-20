@@ -284,8 +284,7 @@ func (a *Application) handleCreateDatabase(ctx context.Context) error {
 			return err
 		}
 
-		a.completionDBs = nil
-		a.completionDBsConn = ""
+		a.clearDatabaseCompletion()
 		a.prompt.Printf("Database %s created.\n", databaseName)
 		return nil
 	})
@@ -409,8 +408,7 @@ func (a *Application) handleDropDatabase(ctx context.Context) error {
 				return util.WrapLayer("config", "save session", err)
 			}
 		} else {
-			a.completionDBs = nil
-			a.completionDBsConn = ""
+			a.clearDatabaseCompletion()
 		}
 		a.prompt.Printf("Database %s dropped.\n", databaseName)
 		return nil

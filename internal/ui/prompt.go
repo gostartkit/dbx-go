@@ -50,6 +50,8 @@ type CompletionSession struct {
 	BaseInput   string
 	Suggestions []Suggestion
 	Index       int
+	CommonInput string
+	ListShown   bool
 }
 
 func NewPrompt(in io.Reader, out io.Writer) *Prompt {
@@ -273,6 +275,14 @@ func (p *Prompt) applyCompletion(current string) string {
 	}
 
 	if p.session != nil && len(p.session.Suggestions) > 0 {
+		if !p.session.ListShown {
+			p.PrintSystemOutput(func(w io.Writer) {
+				p.printSuggestionsTo(w, p.session.Suggestions)
+				fmt.Fprintln(w)
+			})
+			p.session.ListShown = true
+			return current
+		}
 		selected := p.session.current()
 		p.session.advance()
 		return applySuggestion(p.session.BaseInput, selected)
@@ -291,6 +301,13 @@ func (p *Prompt) applyCompletion(current string) string {
 	}
 
 	p.session = newCompletionSession(current, completion.Suggestions)
+	if common := commonSuggestionResult(current, p.session.Suggestions); common != "" && common != current {
+		p.session.CommonInput = common
+		if matched := matchingSuggestionIndex(p.session.BaseInput, p.session.Suggestions, common); matched >= 0 {
+			p.session.Index = (matched + 1) % len(p.session.Suggestions)
+		}
+		return common
+	}
 	selected := p.session.current()
 	p.session.advance()
 	return applySuggestion(p.session.BaseInput, selected)
@@ -434,6 +451,9 @@ func containsSuggestionResult(session *CompletionSession, current string) bool {
 	if session == nil {
 		return false
 	}
+	if session.CommonInput != "" && current == session.CommonInput {
+		return true
+	}
 	for _, suggestion := range session.Suggestions {
 		if applySuggestion(session.BaseInput, suggestion) == current {
 			return true
@@ -462,6 +482,36 @@ func applySuggestion(base string, suggestion Suggestion) string {
 		to = len(base)
 	}
 	return base[:from] + replacement + base[to:]
+}
+
+func commonSuggestionResult(base string, suggestions []Suggestion) string {
+	if len(suggestions) < 2 {
+		return ""
+	}
+
+	prefix := applySuggestion(base, suggestions[0])
+	for _, suggestion := range suggestions[1:] {
+		value := applySuggestion(base, suggestion)
+		for !strings.HasPrefix(value, prefix) {
+			if prefix == "" {
+				return ""
+			}
+			prefix = prefix[:len(prefix)-1]
+		}
+	}
+	if len(prefix) <= len(base) {
+		return ""
+	}
+	return prefix
+}
+
+func matchingSuggestionIndex(base string, suggestions []Suggestion, current string) int {
+	for idx, suggestion := range suggestions {
+		if applySuggestion(base, suggestion) == current {
+			return idx
+		}
+	}
+	return -1
 }
 
 func (p *Prompt) printSuggestions(suggestions []Suggestion) {

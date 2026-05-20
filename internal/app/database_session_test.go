@@ -211,12 +211,28 @@ func TestActivateConnectionClearsDatabaseSelection(t *testing.T) {
 	}
 	app.session.Connection = sampleConnection("old")
 	app.session.Database = "old_db"
+	app.completionDBs = []string{"old_db"}
+	app.completionDBsConn = "old"
+	app.completionTables = []string{"users"}
+	app.completionTablesConn = "old"
+	app.completionTablesDB = "old_db"
+	app.completionUsers = []string{"app_user"}
+	app.completionUsersConn = "old"
 
 	if err := app.activateConnection(context.Background(), sampleConnection("prod"), true); err != nil {
 		t.Fatalf("activateConnection returned error: %v", err)
 	}
 	if app.session.Database != "" {
 		t.Fatalf("database = %q, want cleared", app.session.Database)
+	}
+	if len(app.completionDBs) != 0 || app.completionDBsConn != "" {
+		t.Fatalf("database completion cache not cleared: %+v", app)
+	}
+	if len(app.completionTables) != 0 || app.completionTablesConn != "" || app.completionTablesDB != "" {
+		t.Fatalf("table completion cache not cleared: %+v", app)
+	}
+	if len(app.completionUsers) != 0 || app.completionUsersConn != "" {
+		t.Fatalf("user completion cache not cleared: %+v", app)
 	}
 
 	sessionFile, err := app.store.LoadSession()

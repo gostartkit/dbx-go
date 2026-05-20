@@ -104,13 +104,13 @@ func TestPromptApplyCompletionCyclesSuggestions(t *testing.T) {
 	if got := prompt.applyCompletion("conn"); got != "connect" {
 		t.Fatalf("first completion = %q", got)
 	}
-	if got := prompt.applyCompletion("connect"); got != "connections" {
-		t.Fatalf("second completion = %q", got)
+	if got := prompt.applyCompletion("connect"); got != "connect" {
+		t.Fatalf("second completion should keep current input while listing candidates, got %q", got)
 	}
-	if got := prompt.applyCompletion("connections"); got != "connection create" {
+	if got := prompt.applyCompletion("connect"); got != "connections" {
 		t.Fatalf("third completion = %q", got)
 	}
-	if got := prompt.applyCompletion("connection create"); got != "connect" {
+	if got := prompt.applyCompletion("connections"); got != "connection create" {
 		t.Fatalf("fourth completion = %q", got)
 	}
 }
@@ -165,6 +165,9 @@ func TestPromptApplyCompletionUsesOriginalBaseInputAcrossCycle(t *testing.T) {
 
 	if got := prompt.applyCompletion("conn"); got != "connect" {
 		t.Fatalf("first completion = %q", got)
+	}
+	if got := prompt.applyCompletion("connect"); got != "connect" {
+		t.Fatalf("second tab should list candidates before cycling, got %q", got)
 	}
 	if got := prompt.applyCompletion("connect"); got != "connections" {
 		t.Fatalf("expected cycle to continue from original base input, got %q", got)
@@ -269,14 +272,94 @@ func TestPromptApplyCompletionCyclesArgumentCandidatesWithPrefixPreserved(t *tes
 		}
 	}
 
-	if got := prompt.applyCompletion("use "); got != "use db1" {
-		t.Fatalf("first completion = %q", got)
+	if got := prompt.applyCompletion("use "); got != "use db" {
+		t.Fatalf("first completion should expand to common prefix, got %q", got)
+	}
+	if got := prompt.applyCompletion("use db"); got != "use db" {
+		t.Fatalf("second completion should keep current input while listing candidates, got %q", got)
+	}
+	if got := prompt.applyCompletion("use db"); got != "use db1" {
+		t.Fatalf("third completion = %q", got)
 	}
 	if got := prompt.applyCompletion("use db1"); got != "use db2" {
-		t.Fatalf("second completion = %q", got)
+		t.Fatalf("fourth completion = %q", got)
 	}
 	if got := prompt.applyCompletion("use db2"); got != "use db3" {
-		t.Fatalf("third completion = %q", got)
+		t.Fatalf("fifth completion = %q", got)
+	}
+}
+
+func TestPromptApplyCompletionUsesCommonPrefixForCommands(t *testing.T) {
+	t.Parallel()
+
+	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
+	prompt.completer = func(string) Completion {
+		return Completion{
+			Prefix: "con",
+			Suggestions: []Suggestion{
+				{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 3},
+				{Value: "connections", Replacement: "connections", ReplaceFrom: 0, ReplaceTo: 3},
+				{Value: "connection create", Replacement: "connection create", ReplaceFrom: 0, ReplaceTo: 3},
+			},
+		}
+	}
+
+	if got := prompt.applyCompletion("con"); got != "connect" {
+		t.Fatalf("completion = %q", got)
+	}
+	if prompt.session == nil || prompt.session.CommonInput != "connect" {
+		t.Fatalf("unexpected session: %#v", prompt.session)
+	}
+}
+
+func TestPromptApplyCompletionUsesCommonPrefixForArguments(t *testing.T) {
+	t.Parallel()
+
+	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
+	prompt.completer = func(string) Completion {
+		return Completion{
+			Prefix: "gr",
+			Suggestions: []Suggestion{
+				{Value: "greenhn-dev", Replacement: "greenhn-dev", ReplaceFrom: 4, ReplaceTo: 6},
+				{Value: "greenhn-prod", Replacement: "greenhn-prod", ReplaceFrom: 4, ReplaceTo: 6},
+			},
+		}
+	}
+
+	if got := prompt.applyCompletion("use gr"); got != "use greenhn-" {
+		t.Fatalf("completion = %q", got)
+	}
+}
+
+func TestPromptApplyCompletionDoubleTabPrintsCandidateListAndRedraws(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	prompt := NewPrompt(strings.NewReader(""), &out)
+	prompt.isTerm = func() bool { return true }
+	prompt.rawActive = true
+	prompt.label = "dbx(prod)> "
+	prompt.current = "use db1"
+	prompt.completer = func(string) Completion {
+		return Completion{
+			Suggestions: []Suggestion{
+				{Value: "db1", Replacement: "db1", ReplaceFrom: 4, ReplaceTo: 7},
+				{Value: "db2", Replacement: "db2", ReplaceFrom: 4, ReplaceTo: 7},
+			},
+		}
+	}
+	prompt.session = newCompletionSession("use ", []Suggestion{
+		{Value: "db1", Replacement: "db1", ReplaceFrom: 4, ReplaceTo: 4},
+		{Value: "db2", Replacement: "db2", ReplaceFrom: 4, ReplaceTo: 4},
+	})
+
+	if got := prompt.applyCompletion("use db1"); got != "use db1" {
+		t.Fatalf("completion = %q", got)
+	}
+
+	want := "\r\033[2K\r\ndb1\r\ndb2\r\n\r\n\r\033[2Kdbx(prod)> use db1"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
 	}
 }
 
