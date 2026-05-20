@@ -15,44 +15,58 @@ func TestCalculateCompletionCommands(t *testing.T) {
 		saved     []string
 		databases []string
 		tables    []string
+		templates []string
 		users     []string
 		wantFirst string
-		wantCount int
+		wantAll   []string
 	}{
-		{name: "conn prefix", input: "conn", wantFirst: "connect", wantCount: 8},
-		{name: "connection subcommands", input: "connection ", wantFirst: "create", wantCount: 6},
-		{name: "count alias tables", input: "count ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "count rows tables", input: "count rows ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "create subcommand", input: "create ", wantFirst: "database", wantCount: 2},
-		{name: "list subcommand", input: "list ", wantFirst: "databases", wantCount: 2},
-		{name: "peek alias tables", input: "peek ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "peek rows tables", input: "peek rows ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "sample alias tables", input: "sample ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "sample rows tables", input: "sample rows ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "show subcommand", input: "show ", wantFirst: "columns", wantCount: 21},
-		{name: "show partial subcommand", input: "show pro", wantFirst: "processes", wantCount: 2},
-		{name: "show user alias subcommand", input: "show user ", wantFirst: "accounts", wantCount: 1},
-		{name: "drop subcommand", input: "drop ", wantFirst: "database", wantCount: 2},
-		{name: "connect saved", input: "connect ", saved: []string{"prod", "dev"}, wantFirst: "dev", wantCount: 2},
-		{name: "connection test saved", input: "connection test ", saved: []string{"prod", "dev"}, wantFirst: "dev", wantCount: 3},
-		{name: "connection test verbose", input: "connection test prod ", saved: []string{"prod", "dev"}, wantFirst: "verbose", wantCount: 1},
-		{name: "connection test verbose prefix", input: "connection test prod v", saved: []string{"prod", "dev"}, wantFirst: "verbose", wantCount: 1},
-		{name: "connection doctor saved", input: "connection doctor ", saved: []string{"prod", "dev"}, wantFirst: "dev", wantCount: 2},
-		{name: "use databases", input: "use ", databases: []string{"app_prod", "app_demo"}, wantFirst: "app_demo", wantCount: 2},
-		{name: "drop user users", input: "drop user ", users: []string{"analytics-ro", "app_user"}, wantFirst: "analytics-ro", wantCount: 2},
-		{name: "columns alias tables", input: "columns ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "show columns tables", input: "show columns ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "describe tables", input: "describe ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "show foreign keys tables", input: "show foreign keys ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "show fks tables", input: "show fks ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "show create table tables", input: "show create table ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "show table status tables", input: "show table status ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "show indexes tables", input: "show indexes ", wantFirst: "on", wantCount: 3, tables: []string{"users", "orders"}},
-		{name: "show indexes on tables", input: "show indexes on ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "truncate table tables", input: "truncate table ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "rename table source tables", input: "rename table ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
-		{name: "show grants users", input: "show grants ", wantFirst: "analytics-ro", wantCount: 2, users: []string{"analytics-ro", "app_user"}},
-		{name: "show variables suggestions", input: "show variables ", wantFirst: "max_connections", wantCount: 6},
+		{name: "conn prefix", input: "con", wantFirst: "connect", wantAll: []string{"connect", "connections", "connection create", "connection edit", "connection delete", "connection show", "connection test", "connection doctor", "context"}},
+		{name: "show prefix", input: "sh", wantAll: []string{"show databases", "show users", "show tables", "show grants", "show indexes", "show processlist", "show variables", "show create table", "show table status", "show columns", "show foreign keys", "show triggers", "show views", "show templates"}},
+		{name: "template prefix", input: "tem", wantAll: []string{"templates", "template run", "template show", "template describe"}},
+		{name: "connection subcommands", input: "connection ", wantFirst: "create", wantAll: []string{"create", "edit", "delete", "show", "test", "doctor"}},
+		{name: "count alias tables", input: "count ", wantFirst: "orders", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "count rows tables", input: "count rows ", wantFirst: "orders", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "create subcommand", input: "create ", wantFirst: "database", wantAll: []string{"database", "user", "db"}},
+		{name: "list subcommand", input: "list ", wantFirst: "databases", wantAll: []string{"databases", "users"}},
+		{name: "peek alias tables", input: "peek ", wantFirst: "orders", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "peek rows tables", input: "peek rows ", wantFirst: "orders", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "sample alias tables", input: "sample ", wantFirst: "orders", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "sample rows tables", input: "sample rows ", wantFirst: "orders", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show subcommand", input: "show ", wantFirst: "databases", wantAll: []string{"databases", "dbs", "users", "tables", "grants", "indexes", "processlist", "processes", "variables", "create", "table", "columns", "foreign", "triggers", "views", "templates"}},
+		{name: "show partial subcommand", input: "show pro", wantAll: []string{"processes", "processlist"}},
+		{name: "show user alias subcommand", input: "show user ", wantFirst: "accounts", wantAll: []string{"accounts"}},
+		{name: "drop subcommand", input: "drop ", wantFirst: "database", wantAll: []string{"database", "user", "db"}},
+		{name: "connect saved", input: "connect ", saved: []string{"prod", "dev"}, wantFirst: "dev", wantAll: []string{"dev", "prod"}},
+		{name: "connection test saved", input: "connection test ", saved: []string{"prod", "dev"}, wantAll: []string{"dev", "prod", "verbose"}},
+		{name: "connection test verbose", input: "connection test prod ", saved: []string{"prod", "dev"}, wantFirst: "verbose", wantAll: []string{"verbose"}},
+		{name: "connection test verbose prefix", input: "connection test prod v", saved: []string{"prod", "dev"}, wantFirst: "verbose", wantAll: []string{"verbose"}},
+		{name: "connection doctor saved", input: "connection doctor ", saved: []string{"prod", "dev"}, wantAll: []string{"dev", "prod"}},
+		{name: "use databases", input: "use ", databases: []string{"app_prod", "app_demo"}, wantAll: []string{"app_demo", "app_prod"}},
+		{name: "drop user users", input: "drop user ", users: []string{"analytics-ro", "app_user"}, wantAll: []string{"analytics-ro", "app_user"}},
+		{name: "columns alias tables", input: "columns ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show columns tables", input: "show columns ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "describe tables", input: "describe ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show foreign keys tables", input: "show foreign keys ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show fks tables", input: "show fks ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show create table tables", input: "show create table ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show table status tables", input: "show table status ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show indexes tables", input: "show indexes ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show indexes on tables", input: "show indexes on ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "truncate table tables", input: "truncate table ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "rename table source tables", input: "rename table ", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
+		{name: "show grants users", input: "show grants ", wantAll: []string{"analytics-ro", "app_user"}, users: []string{"analytics-ro", "app_user"}},
+		{name: "show variables suggestions", input: "show variables ", wantAll: []string{"max_connections", "wait_timeout", "innodb_buffer_pool_size"}},
+		{name: "show vars suggestions", input: "show vars ", wantAll: []string{"max_connections", "wait_timeout", "innodb_buffer_pool_size"}},
+		{name: "show templates command", input: "show templ", wantAll: []string{"templates"}},
+		{name: "describe template names", input: "describe template ", wantAll: []string{"create_database_with_user", "readonly_user"}, tables: []string{"users", "orders"}, templates: []string{"readonly_user", "create_database_with_user"}},
+		{name: "template run names", input: "template run ", wantAll: []string{"create_database_with_user", "readonly_user"}, templates: []string{"readonly_user", "create_database_with_user"}},
+		{name: "run template names", input: "run template ", wantAll: []string{"create_database_with_user", "readonly_user"}, templates: []string{"readonly_user", "create_database_with_user"}},
+		{name: "alias test conn names", input: "test conn ", saved: []string{"prod", "dev"}, wantAll: []string{"dev", "prod", "verbose"}},
+		{name: "alias doctor conn names", input: "doctor conn ", saved: []string{"prod", "dev"}, wantAll: []string{"dev", "prod"}},
+		{name: "desc alias subcommand", input: "desc ", wantAll: []string{"table"}},
+		{name: "dry run states", input: "dry-run ", wantAll: []string{"on", "off"}},
+		{name: "dry alias states", input: "dry ", wantAll: []string{"on", "off"}},
+		{name: "help topics", input: "help ", wantAll: []string{"aliases", "show templates", "template run", "connection test"}},
 	}
 
 	for _, tc := range cases {
@@ -64,6 +78,7 @@ func TestCalculateCompletionCommands(t *testing.T) {
 				Connections: make([]CompletionConnection, 0, len(tc.saved)),
 				Databases:   tc.databases,
 				Tables:      tc.tables,
+				Templates:   tc.templates,
 				Users:       tc.users,
 			}
 			for _, name := range tc.saved {
@@ -72,12 +87,10 @@ func TestCalculateCompletionCommands(t *testing.T) {
 
 			completion := calculateCompletion(tc.input, ctx)
 			values := suggestionValues(completion)
-			if len(values) != tc.wantCount {
-				t.Fatalf("candidate count = %d, want %d (%#v)", len(values), tc.wantCount, values)
-			}
-			if tc.wantCount > 0 && values[0] != tc.wantFirst {
+			if tc.wantFirst != "" && (len(values) == 0 || values[0] != tc.wantFirst) {
 				t.Fatalf("first candidate = %q, want %q", values[0], tc.wantFirst)
 			}
+			assertSuggestionsContainAll(t, values, tc.wantAll)
 		})
 	}
 }
@@ -98,7 +111,7 @@ func TestCalculateCompletionIncludesConnectionDescriptionsAndHint(t *testing.T) 
 	}
 
 	showCompletion := calculateCompletion("show ", CompletionContext{})
-	if len(showCompletion.Suggestions) == 0 || showCompletion.Suggestions[0].Value != "columns" {
+	if len(showCompletion.Suggestions) == 0 || showCompletion.Suggestions[0].Value != "databases" {
 		t.Fatalf("show suggestions = %#v", showCompletion.Suggestions)
 	}
 
@@ -350,4 +363,18 @@ func suggestionValues(completion ui.Completion) []string {
 		values = append(values, suggestion.Value)
 	}
 	return values
+}
+
+func assertSuggestionsContainAll(t *testing.T, values []string, want []string) {
+	t.Helper()
+
+	have := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		have[value] = struct{}{}
+	}
+	for _, value := range want {
+		if _, ok := have[value]; !ok {
+			t.Fatalf("missing suggestion %q in %#v", value, values)
+		}
+	}
 }

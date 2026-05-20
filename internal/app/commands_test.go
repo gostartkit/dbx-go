@@ -85,3 +85,34 @@ func TestPrintHelpTopic(t *testing.T) {
 		t.Fatalf("help output missing config path: %q", joined)
 	}
 }
+
+func TestPrintHelpTemplateTopics(t *testing.T) {
+	t.Parallel()
+
+	var prompt testPrinter
+	if err := printHelpTopic(&prompt, "show templates"); err != nil {
+		t.Fatalf("printHelpTopic returned error: %v", err)
+	}
+	joined := strings.Join(prompt.lines, "\n")
+	if !strings.Contains(joined, "List resolved workflow templates") {
+		t.Fatalf("help output missing show templates text: %q", joined)
+	}
+
+	prompt.lines = nil
+	if err := printHelpTopic(&prompt, "template show"); err != nil {
+		t.Fatalf("printHelpTopic returned error: %v", err)
+	}
+	joined = strings.Join(prompt.lines, "\n")
+	if !strings.Contains(joined, "Describe a resolved workflow template by name.") {
+		t.Fatalf("help output missing describe template text: %q", joined)
+	}
+
+	prompt.lines = nil
+	if err := printHelpTopic(&prompt, "template run"); err != nil {
+		t.Fatalf("printHelpTopic returned error: %v", err)
+	}
+	joined = strings.Join(prompt.lines, "\n")
+	if !strings.Contains(joined, "Run a workflow template") {
+		t.Fatalf("help output missing template run text: %q", joined)
+	}
+}

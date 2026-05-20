@@ -47,6 +47,22 @@ func TestInputEffectiveTypeAndDefaults(t *testing.T) {
 	if len(selectInput.SelectOptions()) != 2 {
 		t.Fatalf("SelectOptions() length = %d", len(selectInput.SelectOptions()))
 	}
+
+	requiredInput := Input{Name: "database"}
+	if !requiredInput.IsRequired() {
+		t.Fatalf("IsRequired() = false, want true when required is omitted")
+	}
+
+	optionalByDefault := Input{Name: "charset", Default: "utf8mb4"}
+	if optionalByDefault.IsRequired() {
+		t.Fatalf("IsRequired() = true, want false when default exists")
+	}
+
+	optionalFlag := false
+	explicitOptional := Input{Name: "password", Required: &optionalFlag}
+	if explicitOptional.IsRequired() {
+		t.Fatalf("IsRequired() = true, want false when required=false")
+	}
 }
 
 func TestTemplateTransactionJSON(t *testing.T) {

@@ -108,6 +108,7 @@ func (a *Application) completeInput(line string) ui.Completion {
 		Connections: connectionSuggestions,
 		Databases:   a.currentCompletionDatabases(),
 		Tables:      a.currentCompletionTables(),
+		Templates:   a.currentCompletionTemplates(),
 		Users:       a.currentCompletionUsers(),
 	})
 }
@@ -260,6 +261,22 @@ func (a *Application) currentCompletionUsers() []string {
 	a.completionUsersConn = a.session.Connection.Name
 	a.completionUsers = append([]string(nil), users...)
 	return append([]string(nil), a.completionUsers...)
+}
+
+func (a *Application) currentCompletionTemplates() []string {
+	cfg, err := a.templateScopeConfig("")
+	if err != nil {
+		return nil
+	}
+	templates, err := a.templates.ListResolved(cfg)
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(templates))
+	for _, candidate := range templates {
+		names = append(names, candidate.Name)
+	}
+	return names
 }
 
 func (a *Application) currentCompletionTables() []string {

@@ -16,6 +16,7 @@ var commandAliases = map[string]string{
 	"list databases":     "show databases",
 	"columns":            "show columns",
 	"show dbs":           "show databases",
+	"templates":          "show templates",
 	"show fks":           "show foreign keys",
 	"show index":         "show indexes",
 	"show processes":     "show processlist",
@@ -99,6 +100,17 @@ func resolveAlias(line string) string {
 			case "view":
 				return "show views"
 			}
+		}
+	case "template":
+		if len(fields) >= 2 {
+			switch fields[1] {
+			case "show", "describe":
+				return strings.Join(append([]string{"describe", "template"}, fields[2:]...), " ")
+			}
+		}
+	case "run":
+		if len(fields) >= 2 && fields[1] == "template" {
+			return strings.Join(append([]string{"template", "run"}, fields[2:]...), " ")
 		}
 	case "q", "quit":
 		return "exit"

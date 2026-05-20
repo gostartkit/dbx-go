@@ -23,6 +23,7 @@ var commandBehaviors = map[string]CommandBehavior{
 	"create database":    {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"create user":        {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"describe":           {ReadOnly: true},
+	"describe template":  {ReadOnly: true},
 	"describe table":     {ReadOnly: true},
 	"drop database":      {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"drop user":          {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
@@ -56,6 +57,12 @@ var commandBehaviors = map[string]CommandBehavior{
 	"show view":          {ReadOnly: true},
 	"show views":         {ReadOnly: true},
 	"status":             {ReadOnly: true},
+	"show templates":     {ReadOnly: true},
+	"template":           {ReadOnly: true},
+	"template describe":  {ReadOnly: true},
+	"template run":       {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
+	"template show":      {ReadOnly: true},
+	"templates":          {ReadOnly: true},
 	"truncate table":     {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 }
 

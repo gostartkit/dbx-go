@@ -14,7 +14,7 @@
 ## Features
 
 - Interactive `dbx>` prompt
-- Context-aware TAB completion for commands, connections, databases, tables, and MySQL users
+- Context-aware TAB completion for commands, aliases, connections, databases, tables, users, templates, and selected static values
 - Lightweight inline hints for common command prefixes
 - Explicit command aliases without changing canonical help output
 - Direct, proxy, SSH, and proxy-SSH MySQL connections
@@ -179,7 +179,7 @@ Global CLI flags:
 
 ## REPL Ergonomics
 
-TAB completion is intentionally lightweight, but it is now operationally context-aware. It does not implement full readline-style editing, but it does understand command position, saved connections, current database context, and operational objects such as tables and MySQL users. Press `TAB` repeatedly to complete or cycle through matching suggestions. A follow-up `TAB` in the same completion session can print the full candidate list. Up and Down arrows navigate persisted command history in the interactive REPL.
+TAB completion is intentionally lightweight, but it is operationally context-aware across commands, aliases, saved connections, databases, tables, users, templates, and selected static values. It does not implement full readline-style editing, but it does understand command position and current REPL context. Press `TAB` repeatedly to complete or cycle through matching suggestions. Press `TAB` twice in the same completion session to list candidates. Up and Down arrows navigate persisted command history in the interactive REPL.
 
 ```text
 dbx> conn<TAB>
@@ -320,6 +320,10 @@ show processes -> show processlist
 show trigger  -> show triggers
 show vars     -> show variables
 show view     -> show views
+templates     -> show templates
+template show <name> -> describe template <name>
+template describe <name> -> describe template <name>
+run template <name> -> template run <name>
 create db     -> create database
 drop db       -> drop database
 list users    -> show users
@@ -337,11 +341,11 @@ Use `help aliases` inside the REPL to display the alias list.
 
 ## Confirmation Behavior
 
-Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, and `show users`.
+Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, `show users`, `show templates`, and `describe template`.
 
 Read-only schema, table, and row inspection commands such as `show columns`, `show foreign keys`, `show create table`, `show table status`, `show triggers`, `show views`, `count rows`, `peek rows`, and `sample rows` also run immediately without confirmation.
 
-Mutating commands require confirmation in the REPL unless dry-run is active. `truncate table` requires typing the table name in the REPL before execution. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
+Mutating commands require confirmation in the REPL unless dry-run is active. `truncate table` requires typing the table name in the REPL before execution. `template run` also requires confirmation unless preview or dry-run is active. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
 
 Examples:
 
@@ -562,6 +566,9 @@ These commands keep `dbx` in its operational REPL lane without turning it into a
 show tables
 describe users
 show indexes users
+show templates
+describe template create_database_with_user
+template run create_database_with_user
 show grants analytics-ro
 show processlist
 show variables innodb%
@@ -592,6 +599,8 @@ Directories:
 ~/.config/dbx/templates/
 ~/.config/dbx/{connection}/templates/
 ```
+
+Templates are safe operational workflows, not a general scripting language. They support typed inputs, previews, and transaction-aware SQL execution, but do not support loops, conditionals, embedded scripts, remote registries, or plugins.
 
 Global template example:
 
@@ -673,6 +682,55 @@ Connection template example:
   ]
 }
 ```
+
+## Template Discovery And Workflow Execution
+
+List resolved templates:
+
+```text
+dbx> show templates
+Templates:
+create_database_default        builtin      create database
+create_database_with_user      global       create database
+prod_app_database              connection   create database
+readonly_user                  global       create user
+```
+
+Describe a workflow template:
+
+```text
+dbx> describe template create_database_with_user
+Template: create_database_with_user
+Scope: global
+Command: create database
+Transaction: true
+
+Inputs:
+  database  identifier  required
+  password  secret      required
+
+Actions:
+  1. Create database
+  2. Create user
+  3. Grant privileges
+```
+
+Run a workflow template interactively:
+
+```text
+dbx> template run create_database_with_user
+```
+
+Preview a workflow template from the CLI without executing it:
+
+```bash
+dbx --connection prod template run create_database_with_user \
+  --input database=greenhn-prod \
+  --input password-env=GREENHN_PASSWORD \
+  --preview
+```
+
+`template run --preview` and `template run --dry-run` never execute SQL and never require confirmation. Secret inputs are redacted from previews, dry-run SQL, JSON output, history, and audit logs.
 
 ## Typical Flow
 
@@ -1210,6 +1268,17 @@ dbx --connection prod \
   --input password=secret123
 ```
 
+Discover and preview workflow templates from the CLI:
+
+```bash
+dbx --connection prod show templates
+dbx --connection prod describe template create_database_with_user --verbose
+dbx --connection prod template run create_database_with_user \
+  --input database=greenhn-prod \
+  --input password-env=GREENHN_PASSWORD \
+  --preview
+```
+
 Example dry-run JSON output:
 
 ```json
@@ -1337,6 +1406,7 @@ connect prod
 - Password prompts are hidden when stdin is a terminal.
 - Secret template values are redacted from previews.
 - `type: "secret"` and legacy `secret: true` inputs are both redacted.
+- Secret template inputs never appear in REPL history, audit logs, dry-run SQL, preview output, or JSON output.
 - SSH access is native through Go SSH libraries, not `exec.Command("ssh")`.
 - Proxy passwords in `proxy.url` are redacted in user-facing output and JSON summaries.
 - Verbose connection test output also redacts proxy passwords and never prints database or SSH passwords.

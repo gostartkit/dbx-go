@@ -10,6 +10,7 @@ import (
 type Template struct {
 	Version     int      `json:"version,omitempty"`
 	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
 	Transaction bool     `json:"transaction,omitempty"`
 	Match       Match    `json:"match"`
 	Inputs      []Input  `json:"inputs,omitempty"`
@@ -55,14 +56,33 @@ type Match struct {
 }
 
 type Input struct {
-	Name       string   `json:"name"`
-	Type       string   `json:"type,omitempty"`
-	Prompt     string   `json:"prompt"`
-	Secret     bool     `json:"secret,omitempty"`
-	Default    any      `json:"default,omitempty"`
-	Options    []string `json:"options,omitempty"`
-	Choices    []string `json:"choices,omitempty"`
-	Identifier bool     `json:"identifier,omitempty"`
+	Name        string   `json:"name"`
+	Type        string   `json:"type,omitempty"`
+	Prompt      string   `json:"prompt"`
+	Description string   `json:"description,omitempty"`
+	Required    *bool    `json:"required,omitempty"`
+	Secret      bool     `json:"secret,omitempty"`
+	Default     any      `json:"default,omitempty"`
+	Options     []string `json:"options,omitempty"`
+	Choices     []string `json:"choices,omitempty"`
+	Identifier  bool     `json:"identifier,omitempty"`
+}
+
+func (i Input) IsRequired() bool {
+	if i.Required != nil {
+		return *i.Required
+	}
+	return i.Default == nil
+}
+
+func (i Input) PromptText() string {
+	if strings.TrimSpace(i.Prompt) != "" {
+		return i.Prompt
+	}
+	if strings.TrimSpace(i.Description) != "" {
+		return i.Description
+	}
+	return i.Name
 }
 
 func (i Input) EffectiveType() string {

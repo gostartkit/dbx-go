@@ -24,6 +24,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 	fields := strings.Fields(resolved)
 
 	switch {
+	case len(fields) >= 3 && fields[0] == "describe" && fields[1] == "template":
+		name, verbose, err := parseDescribeTemplateArgs(fields[2:])
+		if err != nil {
+			return false, util.WrapLayer("validation", "describe template", err)
+		}
+		return false, a.handleDescribeTemplate(ctx, name, verbose)
 	case len(fields) == 2 && fields[0] == "connect":
 		return false, a.handleConnectByName(ctx, fields[1])
 	case len(fields) == 2 && fields[0] == "use":
@@ -113,6 +119,14 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleShowVariables(ctx, fields[2])
 	case len(fields) == 2 && fields[0] == "show" && fields[1] == "views":
 		return false, a.handleShowViews(ctx)
+	case len(fields) == 2 && fields[0] == "show" && fields[1] == "templates":
+		return false, a.handleShowTemplates(ctx)
+	case len(fields) >= 3 && fields[0] == "template" && fields[1] == "run":
+		name, preview, verbose, dryRunFlag, err := parseTemplateRunArgs(fields[2:])
+		if err != nil {
+			return false, util.WrapLayer("validation", "template run", err)
+		}
+		return false, a.handleTemplateRun(ctx, name, preview, verbose, dryRunFlag)
 	case len(fields) == 3 && fields[0] == "truncate" && fields[1] == "table":
 		return false, a.handleTruncateTable(ctx, fields[2])
 	case len(fields) == 4 && fields[0] == "rename" && fields[1] == "table":
@@ -160,8 +174,16 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleShowTriggers(ctx)
 	case "show processlist":
 		return false, a.handleShowProcesslist(ctx)
+	case "show templates":
+		return false, a.handleShowTemplates(ctx)
 	case "show views":
 		return false, a.handleShowViews(ctx)
+	case "templates":
+		return false, a.handleShowTemplates(ctx)
+	case "describe template":
+		return false, util.WrapLayer("validation", "describe template", fmt.Errorf("usage: describe template <name> [--verbose]"))
+	case "template run":
+		return false, util.WrapLayer("validation", "template run", fmt.Errorf("usage: template run <name> [--preview] [--dry-run] [--verbose]"))
 	case "drop database":
 		return false, a.handleDropDatabase(ctx)
 	case "dry-run on":
@@ -504,6 +526,10 @@ func (a *Application) collectTemplateInputs(ctx context.Context, template *tpl.T
 			continue
 		}
 
+		defaultValue := input.DefaultString()
+		if input.Default == nil {
+			defaultValue = ""
+		}
 		var (
 			value string
 			err   error
@@ -511,11 +537,11 @@ func (a *Application) collectTemplateInputs(ctx context.Context, template *tpl.T
 
 		switch input.EffectiveType() {
 		case "select":
-			value, err = a.choose(ctx, input.Prompt, input.SelectOptions(), input.DefaultString())
+			value, err = a.choose(ctx, input.PromptText(), input.SelectOptions(), defaultValue)
 		case "secret":
-			value, err = a.askPassword(ctx, input.Prompt)
+			value, err = a.askPassword(ctx, input.PromptText())
 		case "confirm":
-			confirmed, confirmErr := a.confirm(ctx, input.Prompt, input.DefaultBool())
+			confirmed, confirmErr := a.confirm(ctx, input.PromptText(), input.DefaultBool())
 			if confirmErr != nil {
 				return confirmErr
 			}
@@ -525,7 +551,7 @@ func (a *Application) collectTemplateInputs(ctx context.Context, template *tpl.T
 				value = "false"
 			}
 		case "identifier":
-			value, err = a.ask(ctx, input.Prompt, input.DefaultString())
+			value, err = a.ask(ctx, input.PromptText(), defaultValue)
 			if err == nil {
 				err = util.ValidateIdentifier(value)
 			}
@@ -533,18 +559,21 @@ func (a *Application) collectTemplateInputs(ctx context.Context, template *tpl.T
 			var intValue int
 			defaultInt, ok := input.DefaultInt()
 			if ok {
-				intValue, err = a.askInt(ctx, input.Prompt, defaultInt)
+				intValue, err = a.askInt(ctx, input.PromptText(), defaultInt)
 			} else {
-				intValue, err = a.askInt(ctx, input.Prompt, 0)
+				intValue, err = a.askInt(ctx, input.PromptText(), 0)
 			}
 			if err == nil {
 				value = fmt.Sprintf("%d", intValue)
 			}
 		default:
-			value, err = a.ask(ctx, input.Prompt, input.DefaultString())
+			value, err = a.ask(ctx, input.PromptText(), defaultValue)
 		}
 		if err != nil {
 			return err
+		}
+		if strings.TrimSpace(value) == "" && !input.IsRequired() && input.Default == nil {
+			continue
 		}
 
 		normalized, err := normalizeTemplateInputValue(input, value)

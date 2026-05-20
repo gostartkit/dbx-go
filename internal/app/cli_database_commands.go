@@ -67,6 +67,7 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 			b.showProcesslistCommand(),
 			b.showTableGroupCommand(),
 			b.showTablesCommand(),
+			b.showTemplatesCommand(),
 			b.showTriggerCommand(),
 			b.showTriggersCommand(),
 			b.showGrantsCommand(),

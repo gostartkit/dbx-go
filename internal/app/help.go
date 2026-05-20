@@ -52,6 +52,9 @@ show processlist      Show the active MySQL processlist
 show triggers         Show triggers in the current database
 show variables [name] Show MySQL system variables
 show views            Show views in the current database
+show templates        List resolved workflow templates
+describe template     Describe a workflow template
+template run          Run a workflow template
 truncate table        Delete all rows from a table
 rename table          Rename a table
 use <database>        Select a database for the active REPL session
@@ -494,6 +497,60 @@ This command:
   - requires a selected database
   - does not require confirmation`),
 	},
+	"show templates": {
+		title: "show templates",
+		body: strings.TrimSpace(`
+List resolved workflow templates from builtin, global, and current connection scope.
+
+Aliases:
+  templates
+
+This command:
+  - does not require a selected database
+  - uses precedence connection > global > builtin
+  - does not require confirmation
+
+Examples:
+  show templates
+  dbx --connection prod show templates`),
+	},
+	"describe template": {
+		title: "describe template",
+		body: strings.TrimSpace(`
+Describe a resolved workflow template by name.
+
+Usage:
+  describe template create_database_with_user
+
+Aliases:
+  template show <name>
+  template describe <name>
+
+This command:
+  - shows scope, command match, transaction flag, inputs, and actions
+  - does not show SQL by default
+  - supports --verbose in the CLI for redacted SQL preview
+  - does not require confirmation`),
+	},
+	"template run": {
+		title: "template run",
+		body: strings.TrimSpace(`
+Run a workflow template through the existing safe template execution pipeline.
+
+Usage:
+  template run create_database_with_user
+  dbx --connection prod template run create_database_with_user --input database=app_prod --preview
+
+Aliases:
+  run template <name>
+
+This command:
+  - collects and validates typed inputs
+  - supports --preview and --dry-run without execution
+  - requires confirmation in the REPL unless preview/dry-run
+  - requires --yes in the CLI unless preview/dry-run
+  - redacts secret inputs in previews, SQL, and JSON output`),
+	},
 	"use": {
 		title: "use",
 		body: strings.TrimSpace(`
@@ -613,12 +670,16 @@ Supported aliases:
   sample <table> -> sample rows <table>
   list databases -> show databases
   show dbs -> show databases
+  templates -> show templates
   show fks <table> -> show foreign keys <table>
   show index -> show indexes
   show processes -> show processlist
   show trigger -> show triggers
   show vars -> show variables
   show view -> show views
+  template show <name> -> describe template <name>
+  template describe <name> -> describe template <name>
+  run template <name> -> template run <name>
   list users -> show users
   show user accounts -> show users
   desc table -> describe table

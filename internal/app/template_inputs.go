@@ -100,7 +100,7 @@ func mergeTemplateInputs(template *tpl.Template, values map[string]string, requi
 			merged[input.Name] = defaultValue
 			continue
 		}
-		if requireAll {
+		if requireAll && input.IsRequired() {
 			return nil, util.WrapLayer("validation", "collect template inputs", fmt.Errorf("missing required template input %q", input.Name))
 		}
 	}

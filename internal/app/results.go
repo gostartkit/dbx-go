@@ -17,9 +17,10 @@ type ErrorResult struct {
 type ActionStatus string
 
 const (
-	ActionStatusOK     ActionStatus = "ok"
-	ActionStatusFailed ActionStatus = "failed"
-	ActionStatusDryRun ActionStatus = "dry-run"
+	ActionStatusOK      ActionStatus = "ok"
+	ActionStatusFailed  ActionStatus = "failed"
+	ActionStatusDryRun  ActionStatus = "dry-run"
+	ActionStatusPreview ActionStatus = "preview"
 )
 
 type ActionResult struct {
@@ -42,6 +43,61 @@ type PlanExecutionResult struct {
 	Committed   bool           `json:"committed,omitempty"`
 	RolledBack  bool           `json:"rolled_back,omitempty"`
 	Actions     []ActionResult `json:"actions,omitempty"`
+}
+
+type TemplateSummaryResult struct {
+	Name        string `json:"name"`
+	Scope       string `json:"scope"`
+	Command     string `json:"command"`
+	Description string `json:"description,omitempty"`
+}
+
+type TemplatesCatalogResult struct {
+	OK         bool                    `json:"ok"`
+	Connection string                  `json:"connection,omitempty"`
+	Templates  []TemplateSummaryResult `json:"templates,omitempty"`
+}
+
+type TemplateInputResult struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required"`
+}
+
+type TemplateActionSummaryResult struct {
+	Description string `json:"description"`
+	Type        string `json:"type"`
+	SQL         string `json:"sql,omitempty"`
+}
+
+type TemplateDescriptionResult struct {
+	OK          bool                          `json:"ok"`
+	Connection  string                        `json:"connection,omitempty"`
+	Name        string                        `json:"name"`
+	Scope       string                        `json:"scope"`
+	Command     string                        `json:"command"`
+	Description string                        `json:"description,omitempty"`
+	Transaction bool                          `json:"transaction"`
+	Inputs      []TemplateInputResult         `json:"inputs,omitempty"`
+	Actions     []TemplateActionSummaryResult `json:"actions,omitempty"`
+}
+
+type TemplateRunResult struct {
+	OK          bool              `json:"ok"`
+	Error       *ErrorResult      `json:"error,omitempty"`
+	Connection  string            `json:"connection,omitempty"`
+	Command     string            `json:"command,omitempty"`
+	Template    string            `json:"template,omitempty"`
+	Layer       string            `json:"layer,omitempty"`
+	Source      string            `json:"source,omitempty"`
+	Preview     bool              `json:"preview,omitempty"`
+	DryRun      bool              `json:"dry_run,omitempty"`
+	Transaction bool              `json:"transaction,omitempty"`
+	Committed   bool              `json:"committed,omitempty"`
+	RolledBack  bool              `json:"rolled_back,omitempty"`
+	Inputs      map[string]string `json:"inputs,omitempty"`
+	Actions     []ActionResult    `json:"actions,omitempty"`
 }
 
 type ConnectionSummary struct {

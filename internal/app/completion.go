@@ -14,6 +14,7 @@ type CompletionContext struct {
 	Connections []CompletionConnection
 	Databases   []string
 	Tables      []string
+	Templates   []string
 	Users       []string
 }
 
@@ -86,6 +87,8 @@ var rootSuggestions = []Suggestion{
 	{Value: "show variables", Description: "show MySQL system variables", Category: "command"},
 	{Value: "show views", Description: "show views in current database", Category: "command"},
 	{Value: "show view", Description: "alias for show views", Category: "alias"},
+	{Value: "show templates", Description: "list resolved workflow templates", Category: "command"},
+	{Value: "templates", Description: "alias for show templates", Category: "alias"},
 	{Value: "drop database", Description: "drop a database", Category: "command"},
 	{Value: "drop user", Description: "drop a MySQL user", Category: "command"},
 	{Value: "peek", Description: "alias for peek rows", Category: "alias"},
@@ -95,6 +98,9 @@ var rootSuggestions = []Suggestion{
 	{Value: "truncate table", Description: "delete all rows from a table", Category: "command"},
 	{Value: "rename table", Description: "rename a table", Category: "command"},
 	{Value: "describe", Description: "describe a table", Category: "command"},
+	{Value: "describe template", Description: "describe a workflow template", Category: "command"},
+	{Value: "template", Description: "template workflow commands", Category: "command"},
+	{Value: "template run", Description: "run a workflow template", Category: "command"},
 	{Value: "use", Description: "select the current database", Category: "command"},
 	{Value: "status", Description: "show session status", Category: "command"},
 	{Value: "dry-run on", Description: "enable dry-run mode", Category: "command"},
@@ -108,13 +114,194 @@ var rootSuggestions = []Suggestion{
 	{Value: "show vars", Description: "alias for show variables", Category: "alias"},
 	{Value: "list users", Description: "alias for show users", Category: "alias"},
 	{Value: "show user accounts", Description: "alias for show users", Category: "alias"},
+	{Value: "template show", Description: "alias for describe template", Category: "alias"},
+	{Value: "template describe", Description: "alias for describe template", Category: "alias"},
+	{Value: "run template", Description: "alias for template run", Category: "alias"},
 }
 
 func calculateCompletion(line string, ctx CompletionContext) ui.Completion {
 	req := parseCompletionRequest(line)
-	engine := newCompletionEngine()
-	suggestions := engine.Complete(ctx, req)
+	suggestions := completionSuggestions(ctx, req)
 	return toUICompletion(req, suggestions)
+}
+
+func completionSuggestions(ctx CompletionContext, req completionRequest) []Suggestion {
+	if req.Line == "" || isCommandPrefixRoot(req) {
+		return rootCommandSuggestions()
+	}
+	if len(req.Fields) > 0 && req.Fields[0] == "help" {
+		return completeHelpTopics(req)
+	}
+	return commandRegistrySuggestions(ctx, req)
+}
+
+func rootCommandSuggestions() []Suggestion {
+	seen := map[string]struct{}{}
+	suggestions := make([]Suggestion, 0, len(replCommandSpecs()))
+	for _, spec := range replCommandSpecs() {
+		if spec.Hidden {
+			continue
+		}
+		if _, exists := seen[spec.Path]; exists {
+			continue
+		}
+		seen[spec.Path] = struct{}{}
+		suggestions = append(suggestions, Suggestion{
+			Value:       spec.Path,
+			Description: spec.Description,
+			Category:    spec.Category,
+		})
+	}
+	return suggestions
+}
+
+func completeHelpTopics(req completionRequest) []Suggestion {
+	switch len(req.Fields) {
+	case 1:
+		if req.TrailingSpace {
+			return helpCompletionTopics()
+		}
+		return []Suggestion{{Value: "help", Description: "show command help", Category: "command"}}
+	case 2:
+		return helpCompletionTopics()
+	default:
+		return nil
+	}
+}
+
+func commandRegistrySuggestions(ctx CompletionContext, req completionRequest) []Suggestion {
+	consumed := req.Fields
+	if !req.TrailingSpace && len(req.Fields) > 0 {
+		consumed = req.Fields[:len(req.Fields)-1]
+	}
+
+	seen := map[string]struct{}{}
+	exactSuggestions := make([]Suggestion, 0)
+	pathSuggestions := make([]Suggestion, 0)
+	for _, spec := range replCommandSpecs() {
+		suggestions, exactPath := suggestionsForCommandSpec(spec, ctx, req)
+		target := &pathSuggestions
+		if exactPath && normalizeHelpTopic(spec.Path) == normalizeHelpTopic(strings.Join(consumed, " ")) {
+			target = &exactSuggestions
+		}
+		for _, suggestion := range suggestions {
+			key := suggestion.Value
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			*target = append(*target, suggestion)
+		}
+	}
+	if len(exactSuggestions) > 0 {
+		if req.TrailingSpace {
+			return exactSuggestions
+		}
+		return append(exactSuggestions, pathSuggestions...)
+	}
+	return pathSuggestions
+}
+
+func suggestionsForCommandSpec(spec CommandSpec, ctx CompletionContext, req completionRequest) ([]Suggestion, bool) {
+	tokens := specTokens(spec.Path)
+	if len(tokens) == 0 || len(req.Fields) == 0 {
+		return nil, false
+	}
+
+	consumed := req.Fields
+	if !req.TrailingSpace {
+		consumed = req.Fields[:len(req.Fields)-1]
+	}
+	if len(consumed) > len(tokens)+len(spec.Args) {
+		return nil, false
+	}
+
+	pathMatched := 0
+	for pathMatched < len(consumed) && pathMatched < len(tokens) {
+		if consumed[pathMatched] != tokens[pathMatched] {
+			return nil, false
+		}
+		pathMatched++
+	}
+
+	if pathMatched < len(consumed) {
+		if pathMatched != len(tokens) {
+			return nil, false
+		}
+		return argSuggestions(spec.Args, consumed[len(tokens):], ctx), true
+	}
+
+	if len(consumed) < len(tokens) {
+		next := tokens[len(consumed)]
+		return []Suggestion{{
+			Value:       next,
+			Description: spec.Description,
+			Category:    nextTokenCategory(spec, len(consumed)),
+		}}, false
+	}
+
+	return argSuggestions(spec.Args, nil, ctx), true
+}
+
+func nextTokenCategory(spec CommandSpec, tokenIndex int) string {
+	if tokenIndex == len(specTokens(spec.Path))-1 {
+		if spec.Category == "alias" {
+			return "alias"
+		}
+		return "subcommand"
+	}
+	return "subcommand"
+}
+
+func argSuggestions(args []ArgSpec, supplied []string, ctx CompletionContext) []Suggestion {
+	if len(args) == 0 {
+		return nil
+	}
+	argIndex := len(supplied)
+	if argIndex >= len(args) {
+		return nil
+	}
+
+	suggestions := suggestionsForArg(args[argIndex], ctx)
+	if args[argIndex].Optional && len(supplied) == argIndex {
+		suggestions = append(suggestions, suggestionsForSkippableRemainder(args[argIndex+1:], ctx)...)
+	}
+	return suggestions
+}
+
+func suggestionsForSkippableRemainder(args []ArgSpec, ctx CompletionContext) []Suggestion {
+	suggestions := make([]Suggestion, 0)
+	for _, arg := range args {
+		if arg.Source != commandArgStatic && arg.Source != commandArgVariable {
+			break
+		}
+		suggestions = append(suggestions, suggestionsForArg(arg, ctx)...)
+		if !arg.Optional {
+			break
+		}
+	}
+	return suggestions
+}
+
+func suggestionsForArg(arg ArgSpec, ctx CompletionContext) []Suggestion {
+	switch arg.Source {
+	case commandArgConnection:
+		return connectionSuggestions(ctx)
+	case commandArgDatabase:
+		return stringSuggestions(ctx.Databases, "database")
+	case commandArgTable:
+		return stringSuggestions(ctx.Tables, "table")
+	case commandArgUser:
+		return stringSuggestions(ctx.Users, "user")
+	case commandArgTemplate:
+		return stringSuggestions(ctx.Templates, "template")
+	case commandArgVariable:
+		return commonVariableSuggestions()
+	case commandArgStatic:
+		return stringSuggestionsWithDescription(arg.Values, "static", arg.Name)
+	default:
+		return nil
+	}
 }
 
 func newCompletionEngine() completionEngine {
@@ -135,6 +322,7 @@ func newCompletionEngine() completionEngine {
 			completionProviderFunc(completeRenameTables),
 			completionProviderFunc(completeTruncateTables),
 			completionProviderFunc(completeDescribeTables),
+			completionProviderFunc(completeTemplateNames),
 			completionProviderFunc(completeShowTables),
 			completionProviderFunc(completeCreateDropShowListHelpAuditTree),
 			completionProviderFunc(completeRootCommands),
@@ -448,6 +636,9 @@ func completeDescribeTables(ctx CompletionContext, req completionRequest) []Sugg
 			return stringSuggestions(ctx.Tables, "table")
 		}
 	case 2:
+		if req.Fields[1] == "template" {
+			return nil
+		}
 		if req.Fields[1] == "table" && req.TrailingSpace {
 			return stringSuggestions(ctx.Tables, "table")
 		}
@@ -467,6 +658,71 @@ func completeShowTables(_ CompletionContext, req completionRequest) []Suggestion
 	if len(req.Fields) == 2 && req.Fields[0] == "show" && !req.TrailingSpace && req.Fields[1] == "tables" {
 		return []Suggestion{{Value: "tables", Description: "list tables in current database", Category: "subcommand"}}
 	}
+	return nil
+}
+
+func completeTemplateNames(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 {
+		return nil
+	}
+
+	switch req.Fields[0] {
+	case "templates":
+		if len(req.Fields) == 1 && !req.TrailingSpace {
+			return []Suggestion{{Value: "templates", Description: "alias for show templates", Category: "alias"}}
+		}
+	case "describe":
+		if len(req.Fields) == 1 && req.TrailingSpace {
+			return []Suggestion{{Value: "template", Description: "describe a workflow template", Category: "subcommand"}}
+		}
+		if len(req.Fields) == 2 && req.Fields[1] == "template" {
+			if req.TrailingSpace {
+				return stringSuggestions(ctx.Templates, "template")
+			}
+			return []Suggestion{{Value: "template", Description: "describe a workflow template", Category: "subcommand"}}
+		}
+		if len(req.Fields) == 3 && req.Fields[1] == "template" {
+			return stringSuggestions(ctx.Templates, "template")
+		}
+	case "template":
+		options := []Suggestion{
+			{Value: "describe", Description: "alias for describe template", Category: "subcommand"},
+			{Value: "run", Description: "run a workflow template", Category: "subcommand"},
+			{Value: "show", Description: "alias for describe template", Category: "subcommand"},
+		}
+		if len(req.Fields) == 1 {
+			return options
+		}
+		if len(req.Fields) == 2 {
+			if !req.TrailingSpace {
+				return options
+			}
+			if req.Fields[1] == "run" || req.Fields[1] == "show" || req.Fields[1] == "describe" {
+				return stringSuggestions(ctx.Templates, "template")
+			}
+		}
+		if len(req.Fields) == 3 && (req.Fields[1] == "run" || req.Fields[1] == "show" || req.Fields[1] == "describe") {
+			return stringSuggestions(ctx.Templates, "template")
+		}
+	case "run":
+		if len(req.Fields) == 1 && req.TrailingSpace {
+			return []Suggestion{{Value: "template", Description: "run a workflow template", Category: "subcommand"}}
+		}
+		if len(req.Fields) == 2 && req.Fields[1] == "template" {
+			if req.TrailingSpace {
+				return stringSuggestions(ctx.Templates, "template")
+			}
+			return []Suggestion{{Value: "template", Description: "run a workflow template", Category: "subcommand"}}
+		}
+		if len(req.Fields) == 3 && req.Fields[1] == "template" {
+			return stringSuggestions(ctx.Templates, "template")
+		}
+	case "show":
+		if len(req.Fields) == 2 && !req.TrailingSpace && req.Fields[1] == "templates" {
+			return []Suggestion{{Value: "templates", Description: "list resolved workflow templates", Category: "subcommand"}}
+		}
+	}
+
 	return nil
 }
 
@@ -620,6 +876,16 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 		return []Suggestion{{Value: "rows", Description: "peek bounded rows from a table", Category: "subcommand"}}
 	case "sample":
 		return []Suggestion{{Value: "rows", Description: "sample bounded rows from a table", Category: "subcommand"}}
+	case "template":
+		return []Suggestion{
+			{Value: "run", Description: "run a workflow template", Category: "subcommand"},
+			{Value: "show", Description: "alias for describe template", Category: "alias"},
+			{Value: "describe", Description: "alias for describe template", Category: "alias"},
+		}
+	case "templates":
+		return []Suggestion{{Value: "show templates", Description: "alias for show templates", Category: "alias"}}
+	case "run":
+		return []Suggestion{{Value: "template", Description: "run a workflow template", Category: "subcommand"}}
 	case "show":
 		if len(req.Fields) == 1 {
 			return []Suggestion{
@@ -637,6 +903,7 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 				{Value: "processlist", Description: "show the active MySQL processlist", Category: "subcommand"},
 				{Value: "table", Description: "show table details", Category: "subcommand"},
 				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
+				{Value: "templates", Description: "list resolved workflow templates", Category: "subcommand"},
 				{Value: "trigger", Description: "alias for show triggers", Category: "alias"},
 				{Value: "triggers", Description: "show triggers in current database", Category: "subcommand"},
 				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
@@ -665,6 +932,7 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 				{Value: "processlist", Description: "show the active MySQL processlist", Category: "subcommand"},
 				{Value: "table", Description: "show table details", Category: "subcommand"},
 				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
+				{Value: "templates", Description: "list resolved workflow templates", Category: "subcommand"},
 				{Value: "trigger", Description: "alias for show triggers", Category: "alias"},
 				{Value: "triggers", Description: "show triggers in current database", Category: "subcommand"},
 				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
@@ -708,9 +976,12 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "show triggers", Description: "show triggers help", Category: "topic"},
 			{Value: "show variables", Description: "show variables help", Category: "topic"},
 			{Value: "show views", Description: "show views help", Category: "topic"},
+			{Value: "show templates", Description: "show templates help", Category: "topic"},
 			{Value: "drop database", Description: "drop database help", Category: "topic"},
 			{Value: "drop user", Description: "drop user help", Category: "topic"},
 			{Value: "describe", Description: "describe help", Category: "topic"},
+			{Value: "describe template", Description: "describe template help", Category: "topic"},
+			{Value: "template run", Description: "template run help", Category: "topic"},
 			{Value: "truncate table", Description: "truncate table help", Category: "topic"},
 			{Value: "rename table", Description: "rename table help", Category: "topic"},
 			{Value: "use", Description: "use help", Category: "topic"},
@@ -765,6 +1036,18 @@ func stringSuggestions(values []string, category string) []Suggestion {
 		suggestions = append(suggestions, Suggestion{
 			Value:    value,
 			Category: category,
+		})
+	}
+	return suggestions
+}
+
+func stringSuggestionsWithDescription(values []string, category string, description string) []Suggestion {
+	suggestions := make([]Suggestion, 0, len(values))
+	for _, value := range values {
+		suggestions = append(suggestions, Suggestion{
+			Value:       value,
+			Description: description,
+			Category:    category,
 		})
 	}
 	return suggestions

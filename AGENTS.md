@@ -191,6 +191,9 @@ show processlist
 show triggers
 show variables [name|pattern]
 show views
+show templates
+describe template <name>
+template run <name>
 truncate table <table>
 rename table <from> <to>
 use <database>
@@ -279,6 +282,9 @@ dbx show processlist [flags]
 dbx show triggers [flags]
 dbx show variables [name|pattern] [flags]
 dbx show views [flags]
+dbx show templates [flags]
+dbx describe template <name> [flags]
+dbx template run <name> [flags]
 dbx truncate table <table> [flags]
 dbx rename table <from> <to> [flags]
 
@@ -392,9 +398,14 @@ Current template features include:
 
 - schema version `1`
 - typed inputs: `string`, `secret`, `select`, `confirm`, `identifier`, `int`
+- optional `required` and `description` metadata
 - transaction flag support
 - dry-run execution
 - secret redaction in previews
+
+Templates are safe operational workflows, not a general scripting language.
+Do not add loops, conditionals, embedded scripts, remote registries, or plugin systems.
+Secret inputs must never appear in history, audit logs, dry-run SQL, or JSON output.
 
 Built-in variables include:
 

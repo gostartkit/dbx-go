@@ -31,46 +31,44 @@ func (s *Service) Resolve(command string, cfg *config.ConnectionConfig) (*Templa
 	return &chosen, nil
 }
 
+func (s *Service) ListResolved(cfg *config.ConnectionConfig) ([]Template, error) {
+	templates, err := s.listAll(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved := make([]Template, 0, len(templates))
+	seen := make(map[string]struct{}, len(templates))
+	for _, tpl := range templates {
+		key := strings.ToLower(strings.TrimSpace(tpl.Name))
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		resolved = append(resolved, tpl)
+	}
+
+	slices.SortFunc(resolved, func(a, b Template) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return resolved, nil
+}
+
 func (s *Service) List(command string, cfg *config.ConnectionConfig) ([]Template, error) {
-	layers := []struct {
-		layer     string
-		sourceDir string
-		builtins  []Template
-	}{
-		{
-			layer:     "connection",
-			sourceDir: s.store.ConnectionTemplatesDir(cfg.Name),
-		},
-		{
-			layer:     "global",
-			sourceDir: s.store.GlobalTemplatesDir(),
-		},
-		{
-			layer:    "builtin",
-			builtins: Builtins(),
-		},
+	templates, err := s.listAll(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	matchesFound := make([]Template, 0)
-	for _, layer := range layers {
-		var templates []Template
-		var err error
-		if layer.sourceDir != "" {
-			templates, err = s.loadDir(layer.sourceDir, layer.layer)
-			if err != nil {
-				return nil, fmt.Errorf("load %s templates: %w", layer.layer, err)
-			}
-		} else {
-			templates = layer.builtins
-		}
-
-		for _, tpl := range templates {
-			if matches(tpl, command, cfg.Driver) {
-				matchesFound = append(matchesFound, tpl)
-			}
+	for _, tpl := range templates {
+		if matches(tpl, command, cfg.Driver) {
+			matchesFound = append(matchesFound, tpl)
 		}
 	}
-
 	return matchesFound, nil
 }
 
@@ -88,6 +86,100 @@ func (s *Service) ResolveNamed(command string, cfg *config.ConnectionConfig, nam
 	}
 
 	return nil, fmt.Errorf("template %q not found for command %q and driver %q", name, command, cfg.Driver)
+}
+
+func (s *Service) ResolveNamedAny(cfg *config.ConnectionConfig, name string) (*Template, error) {
+	templates, err := s.listAll(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	target := strings.ToLower(strings.TrimSpace(name))
+	if target == "" {
+		return nil, fmt.Errorf("template name is required")
+	}
+
+	matchesFound := make([]Template, 0)
+	bestRank := 99
+	for _, tpl := range templates {
+		if strings.ToLower(strings.TrimSpace(tpl.Name)) != target {
+			continue
+		}
+		rank := templateLayerRank(tpl.Layer)
+		if rank < bestRank {
+			bestRank = rank
+			matchesFound = []Template{tpl}
+			continue
+		}
+		if rank == bestRank {
+			matchesFound = append(matchesFound, tpl)
+		}
+	}
+
+	if len(matchesFound) == 0 {
+		return nil, fmt.Errorf("template %q not found", name)
+	}
+	if len(matchesFound) > 1 {
+		return nil, fmt.Errorf("multiple templates named %q found at %s scope", name, matchesFound[0].Layer)
+	}
+
+	chosen := matchesFound[0]
+	return &chosen, nil
+}
+
+func (s *Service) listAll(cfg *config.ConnectionConfig) ([]Template, error) {
+	layers := []struct {
+		layer     string
+		sourceDir string
+		builtins  []Template
+	}{
+		{
+			layer:     "connection",
+			sourceDir: s.connectionTemplatesDir(cfg),
+		},
+		{
+			layer:     "global",
+			sourceDir: s.store.GlobalTemplatesDir(),
+		},
+		{
+			layer:    "builtin",
+			builtins: Builtins(),
+		},
+	}
+
+	all := make([]Template, 0)
+	for _, layer := range layers {
+		var templates []Template
+		var err error
+		if layer.sourceDir != "" {
+			templates, err = s.loadDir(layer.sourceDir, layer.layer)
+			if err != nil {
+				return nil, fmt.Errorf("load %s templates: %w", layer.layer, err)
+			}
+		} else {
+			templates = layer.builtins
+		}
+		all = append(all, templates...)
+	}
+	return all, nil
+}
+
+func (s *Service) connectionTemplatesDir(cfg *config.ConnectionConfig) string {
+	if cfg == nil || strings.TrimSpace(cfg.Name) == "" {
+		return ""
+	}
+	return s.store.ConnectionTemplatesDir(cfg.Name)
+}
+
+func templateLayerRank(layer string) int {
+	switch layer {
+	case "connection":
+		return 0
+	case "global":
+		return 1
+	default:
+		return 2
+	}
 }
 
 func (s *Service) loadDir(dir string, layer string) ([]Template, error) {
