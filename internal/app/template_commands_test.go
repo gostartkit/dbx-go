@@ -41,7 +41,7 @@ func TestShowTemplatesListsResolvedScopes(t *testing.T) {
 }`)
 
 	app, out := newReadOnlyTestApp(t, root, &readOnlyConnector{})
-	result, err := app.showTemplatesResult(app.session.Connection)
+	result, err := app.showTemplatesResult(app.session.Connection, templateListFilters{})
 	if err != nil {
 		t.Fatalf("showTemplatesResult returned error: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestConnectionTemplateOverridesGlobalTemplateByName(t *testing.T) {
 }`)
 
 	app, _ := newReadOnlyTestApp(t, root, &readOnlyConnector{})
-	result, err := app.showTemplatesResult(app.session.Connection)
+	result, err := app.showTemplatesResult(app.session.Connection, templateListFilters{})
 	if err != nil {
 		t.Fatalf("showTemplatesResult returned error: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestTemplateInspectionCommandsDoNotAskConfirmation(t *testing.T) {
 }`)
 
 	app, out := newReadOnlyTestApp(t, root, &readOnlyConnector{})
-	if err := app.handleShowTemplates(context.Background()); err != nil {
+	if err := app.handleShowTemplates(context.Background(), templateListFilters{}); err != nil {
 		t.Fatalf("handleShowTemplates returned error: %v", err)
 	}
 	if strings.Contains(out.String(), "Confirm execution?") {
@@ -452,5 +452,243 @@ func TestTemplateCommandsUnsupportedVersionFailsClearly(t *testing.T) {
 	err := app.Run(context.Background(), []string{"show", "templates", "--config-dir", root})
 	if err == nil || !strings.Contains(err.Error(), "unsupported version 2") {
 		t.Fatalf("expected unsupported version error, got %v\nstderr=%s", err, stderr.String())
+	}
+}
+
+func TestShowTemplatesCategoryTagsAndFiltering(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	writeTemplate(t, filepath.Join(store.GlobalTemplatesDir(), "readonly_user.json"), `{
+  "name": "readonly_user",
+  "description": "Create readonly user",
+  "category": "user",
+  "tags": ["readonly", "grant"],
+  "match": {"command": "create user", "driver": "mysql"},
+  "actions": [{"type": "sql", "description": "Create user", "sql": "CREATE USER 'ro'"}]
+}`)
+	writeTemplate(t, filepath.Join(store.GlobalTemplatesDir(), "create_database_with_user.json"), `{
+  "name": "create_database_with_user",
+  "category": "database",
+  "tags": ["grant", "tenant"],
+  "match": {"command": "create database", "driver": "mysql"},
+  "actions": [{"type": "sql", "description": "Create database", "sql": "CREATE DATABASE demo"}]
+}`)
+
+	app, out := newReadOnlyTestApp(t, root, &readOnlyConnector{})
+
+	all, err := app.showTemplatesResult(&config.ConnectionConfig{Driver: "mysql"}, templateListFilters{})
+	if err != nil {
+		t.Fatalf("showTemplatesResult returned error: %v", err)
+	}
+	if len(all.Templates) < 2 {
+		t.Fatalf("template count = %d, want at least 2", len(all.Templates))
+	}
+	foundReadonly := false
+	foundDatabase := false
+	for _, candidate := range all.Templates {
+		if candidate.Name == "readonly_user" && candidate.Category == "user" {
+			foundReadonly = true
+		}
+		if candidate.Name == "create_database_with_user" && candidate.Category == "database" {
+			foundDatabase = true
+		}
+	}
+	if !foundReadonly || !foundDatabase {
+		t.Fatalf("missing categorized templates: %+v", all.Templates)
+	}
+
+	app.printTemplatesCatalog(all)
+	if !strings.Contains(out.String(), "database") || !strings.Contains(out.String(), "[grant,tenant]") {
+		t.Fatalf("unexpected catalog output: %q", out.String())
+	}
+
+	tagged, err := app.showTemplatesResult(&config.ConnectionConfig{Driver: "mysql"}, templateListFilters{Tag: "readonly"})
+	if err != nil {
+		t.Fatalf("tagged showTemplatesResult returned error: %v", err)
+	}
+	if len(tagged.Templates) != 1 || tagged.Templates[0].Name != "readonly_user" {
+		t.Fatalf("unexpected tag filter result: %+v", tagged.Templates)
+	}
+
+	searched, err := app.showTemplatesResult(&config.ConnectionConfig{Driver: "mysql"}, templateListFilters{Query: "database"})
+	if err != nil {
+		t.Fatalf("searched showTemplatesResult returned error: %v", err)
+	}
+	foundSearched := false
+	for _, candidate := range searched.Templates {
+		if candidate.Name == "create_database_with_user" {
+			foundSearched = true
+		}
+	}
+	if !foundSearched {
+		t.Fatalf("unexpected search result: %+v", searched.Templates)
+	}
+}
+
+func TestTemplateCategoryDefaultsToCustom(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	writeTemplate(t, filepath.Join(store.GlobalTemplatesDir(), "readonly_user.json"), `{
+  "name": "readonly_user",
+  "match": {"command": "create user", "driver": "mysql"},
+  "actions": [{"type": "sql", "description": "Create user", "sql": "CREATE USER 'ro'"}]
+}`)
+
+	app, _ := newReadOnlyTestApp(t, root, &readOnlyConnector{})
+	result, err := app.describeTemplateResult(&config.ConnectionConfig{Driver: "mysql"}, "readonly_user", false)
+	if err != nil {
+		t.Fatalf("describeTemplateResult returned error: %v", err)
+	}
+	if result.Category != "custom" {
+		t.Fatalf("Category = %q, want custom", result.Category)
+	}
+}
+
+func TestTemplateRunPreviewShowsRedactedInputSummaryAndCategory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+	writeTemplate(t, filepath.Join(store.GlobalTemplatesDir(), "create_database_with_user.json"), `{
+  "name": "create_database_with_user",
+  "category": "database",
+  "match": {"command": "create database", "driver": "mysql"},
+  "inputs": [
+    {"name": "database", "type": "identifier", "prompt": "Database"},
+    {"name": "environment", "type": "select", "default": "prod", "options": ["dev", "prod"]},
+    {"name": "password", "type": "secret", "prompt": "Password"}
+  ],
+  "actions": [{"type": "sql", "description": "Create database", "sql": "CREATE DATABASE `+"`{{database}}`"+`"}]
+}`)
+
+	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
+		ConfigDir: root,
+		Connector: failingConnector{openErr: context.DeadlineExceeded},
+	})
+	err := app.Run(context.Background(), []string{
+		"--config-dir", root,
+		"--connection", "prod",
+		"template", "run", "create_database_with_user",
+		"--input", "database=greenhn_prod",
+		"--input", "password=super-secret",
+		"--preview",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	output := stdout.String()
+	if strings.Contains(output, "super-secret") {
+		t.Fatalf("preview leaked secret: %q", output)
+	}
+	if !strings.Contains(output, "Scope: global") || !strings.Contains(output, "Category: database") {
+		t.Fatalf("missing plan heading: %q", output)
+	}
+	if !strings.Contains(output, "password: [REDACTED]") {
+		t.Fatalf("missing redacted password summary: %q", output)
+	}
+	if !strings.Contains(output, "environment: prod (default)") {
+		t.Fatalf("missing default marker: %q", output)
+	}
+}
+
+func TestTemplateValidateSuccessAndJSONOutput(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	writeTemplate(t, filepath.Join(store.GlobalTemplatesDir(), "create_database_with_user.json"), `{
+  "name": "create_database_with_user",
+  "category": "database",
+  "tags": ["readonly"],
+  "match": {"command": "create database", "driver": "mysql"},
+  "inputs": [{"name": "database", "type": "identifier", "prompt": "Database"}],
+  "actions": [{"type": "sql", "description": "Create database", "sql": "CREATE DATABASE demo"}]
+}`)
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"template", "validate", "create_database_with_user", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	var result TemplateValidationResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if !result.Valid || result.Category != "database" || result.Command != "create database" {
+		t.Fatalf("unexpected validation result: %+v", result)
+	}
+}
+
+func TestTemplateValidateFailures(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	writeTemplate(t, filepath.Join(store.GlobalTemplatesDir(), "bad.json"), `{
+  "name": "bad",
+  "match": {"command": "not real", "driver": "mysql"},
+  "inputs": [{"name": "role", "type": "select", "prompt": "Role"}],
+  "actions": [{"type": "sql", "description": "Bad", "sql": "SELECT 1"}]
+}`)
+
+	app, _, stderr := newCLIAppWithOptions(t, "", Options{ConfigDir: root})
+	err := app.Run(context.Background(), []string{"template", "validate", "bad", "--config-dir", root})
+	if err == nil || (!strings.Contains(err.Error(), "unsupported match command") && !strings.Contains(err.Error(), "select input")) {
+		t.Fatalf("expected validation failure, got %v\nstderr=%s", err, stderr.String())
+	}
+}
+
+func TestShowTemplatesJSONIncludesCategoryAndTags(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	writeTemplate(t, filepath.Join(store.GlobalTemplatesDir(), "readonly_user.json"), `{
+  "name": "readonly_user",
+  "category": "user",
+  "tags": ["readonly", "grant"],
+  "match": {"command": "create user", "driver": "mysql"},
+  "actions": [{"type": "sql", "description": "Create user", "sql": "CREATE USER ro"}]
+}`)
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"show", "templates", "--tag", "readonly", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	var result TemplatesCatalogResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if len(result.Templates) != 1 {
+		t.Fatalf("template count = %d, want 1", len(result.Templates))
+	}
+	if result.Templates[0].Category != "user" || len(result.Templates[0].Tags) != 2 {
+		t.Fatalf("unexpected template JSON: %+v", result.Templates[0])
 	}
 }

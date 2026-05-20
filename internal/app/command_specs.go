@@ -5,14 +5,15 @@ import "strings"
 type CommandArgSource string
 
 const (
-	commandArgNone       CommandArgSource = ""
-	commandArgConnection CommandArgSource = "connection"
-	commandArgDatabase   CommandArgSource = "database"
-	commandArgTable      CommandArgSource = "table"
-	commandArgUser       CommandArgSource = "user"
-	commandArgTemplate   CommandArgSource = "template"
-	commandArgStatic     CommandArgSource = "static"
-	commandArgVariable   CommandArgSource = "variable"
+	commandArgNone        CommandArgSource = ""
+	commandArgConnection  CommandArgSource = "connection"
+	commandArgDatabase    CommandArgSource = "database"
+	commandArgTable       CommandArgSource = "table"
+	commandArgUser        CommandArgSource = "user"
+	commandArgTemplate    CommandArgSource = "template"
+	commandArgTemplateTag CommandArgSource = "template-tag"
+	commandArgStatic      CommandArgSource = "static"
+	commandArgVariable    CommandArgSource = "variable"
 )
 
 type ArgSpec struct {
@@ -85,8 +86,10 @@ func replCommandSpecs() []CommandSpec {
 			{Name: "limit", Source: commandArgNone, Optional: true},
 		}},
 		{Path: "show templates", Description: "list resolved workflow templates", Category: "command"},
+		{Path: "show templates tag", Description: "filter templates by tag", Category: "command", Args: []ArgSpec{{Name: "tag", Source: commandArgTemplateTag}}, Hidden: true},
 		{Path: "describe template", Description: "describe a workflow template", Category: "command", Args: []ArgSpec{{Name: "name", Source: commandArgTemplate}}},
 		{Path: "template run", Description: "run a workflow template", Category: "command", Args: []ArgSpec{{Name: "name", Source: commandArgTemplate}}},
+		{Path: "template validate", Description: "validate a workflow template", Category: "command", Args: []ArgSpec{{Name: "name", Source: commandArgTemplate}}},
 		{Path: "status", Description: "show session status", Category: "command"},
 		{Path: "context", Description: "show current REPL context", Category: "command"},
 		{Path: "dry-run on", Description: "enable dry-run mode", Category: "command"},
@@ -122,6 +125,7 @@ func replCommandSpecs() []CommandSpec {
 			{Name: "limit", Source: commandArgNone, Optional: true},
 		}},
 		{Path: "templates", Description: "alias for show templates", Category: "alias"},
+		{Path: "templates tag", Description: "alias filter for show templates", Category: "alias", Args: []ArgSpec{{Name: "tag", Source: commandArgTemplateTag}}, Hidden: true},
 		{Path: "template show", Description: "alias for describe template", Category: "alias", Args: []ArgSpec{{Name: "name", Source: commandArgTemplate}}},
 		{Path: "template describe", Description: "alias for describe template", Category: "alias", Args: []ArgSpec{{Name: "name", Source: commandArgTemplate}}},
 		{Path: "run template", Description: "alias for template run", Category: "alias", Args: []ArgSpec{{Name: "name", Source: commandArgTemplate}}},

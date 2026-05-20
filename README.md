@@ -110,6 +110,10 @@ show processlist
 show triggers
 show variables [name|pattern]
 show views
+show templates
+describe template <name>
+template run <name>
+template validate <name>
 truncate table <table>
 rename table <from> <to>
 use <database>
@@ -157,6 +161,10 @@ dbx show processlist [flags]
 dbx show triggers [flags]
 dbx show variables [name|pattern] [flags]
 dbx show views [flags]
+dbx show templates [query] [flags]
+dbx describe template <name> [flags]
+dbx template run <name> [flags]
+dbx template validate <name> [flags]
 dbx truncate table <table> [flags]
 dbx rename table <from> <to> [flags]
 
@@ -341,7 +349,7 @@ Use `help aliases` inside the REPL to display the alias list.
 
 ## Confirmation Behavior
 
-Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, `show users`, `show templates`, and `describe template`.
+Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, `show users`, `show templates`, `describe template`, and `template validate`.
 
 Read-only schema, table, and row inspection commands such as `show columns`, `show foreign keys`, `show create table`, `show table status`, `show triggers`, `show views`, `count rows`, `peek rows`, and `sample rows` also run immediately without confirmation.
 
@@ -569,6 +577,7 @@ show indexes users
 show templates
 describe template create_database_with_user
 template run create_database_with_user
+template validate create_database_with_user
 show grants analytics-ro
 show processlist
 show variables innodb%
@@ -602,12 +611,19 @@ Directories:
 
 Templates are safe operational workflows, not a general scripting language. They support typed inputs, previews, and transaction-aware SQL execution, but do not support loops, conditionals, embedded scripts, remote registries, or plugins.
 
+Optional template metadata:
+
+- `category`: defaults to `custom` when omitted. Common values are `database`, `user`, `tenant`, `maintenance`, and `custom`.
+- `tags`: optional string labels used for discovery and filtering.
+
 Global template example:
 
 ```json
 {
   "version": 1,
   "name": "create_database_with_user",
+  "category": "database",
+  "tags": ["tenant", "grant"],
   "transaction": true,
   "match": {
     "command": "create database",
@@ -690,10 +706,18 @@ List resolved templates:
 ```text
 dbx> show templates
 Templates:
-create_database_default        builtin      create database
-create_database_with_user      global       create database
-prod_app_database              connection   create database
-readonly_user                  global       create user
+create_database_default        builtin      custom    create database
+create_database_with_user      global       database  create database  [grant,tenant]
+prod_app_database              connection   custom    create database
+readonly_user                  global       user      create user      [readonly]
+```
+
+Filter by substring or tag:
+
+```text
+dbx> show templates database
+dbx> show templates tag readonly
+dbx --connection prod show templates --tag readonly
 ```
 
 Describe a workflow template:
@@ -702,8 +726,10 @@ Describe a workflow template:
 dbx> describe template create_database_with_user
 Template: create_database_with_user
 Scope: global
+Category: database
 Command: create database
 Transaction: true
+Tags: grant, tenant
 
 Inputs:
   database  identifier  required
@@ -732,6 +758,17 @@ dbx --connection prod template run create_database_with_user \
 
 `template run --preview` and `template run --dry-run` never execute SQL and never require confirmation. Secret inputs are redacted from previews, dry-run SQL, JSON output, history, and audit logs.
 
+Validate a workflow template definition:
+
+```text
+dbx> template validate create_database_with_user
+Template: create_database_with_user
+Scope: global
+Category: database
+Command: create database
+Validation: OK
+```
+
 ## Typical Flow
 
 ```text
@@ -755,12 +792,21 @@ Charset [utf8mb4]:
   2. utf8mb4_general_ci
 Collation [utf8mb4_unicode_ci]:
 New user password:
-Template: create_database_with_user (global)
-Source: ~/.config/dbx/templates/create_database_with_user.json
-Execution Plan
+Template: create_database_with_user
+Scope: global
+Category: database
+
+Inputs:
+  database: greenhn-dev
+  charset: utf8mb4
+  collation: utf8mb4_unicode_ci
+  password: [REDACTED]
+
+Execution Plan:
   1. Create database
   2. Create user
-Rendered SQL
+
+SQL Preview:
   1. CREATE DATABASE IF NOT EXISTS `greenhn-dev` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   2. CREATE USER IF NOT EXISTS 'greenhn-dev'@'%' IDENTIFIED BY '***'
 Dry-run mode is enabled. SQL will be rendered but not executed.
@@ -1272,7 +1318,9 @@ Discover and preview workflow templates from the CLI:
 
 ```bash
 dbx --connection prod show templates
+dbx --connection prod show templates --tag readonly
 dbx --connection prod describe template create_database_with_user --verbose
+dbx --connection prod template validate create_database_with_user --format json
 dbx --connection prod template run create_database_with_user \
   --input database=greenhn-prod \
   --input password-env=GREENHN_PASSWORD \

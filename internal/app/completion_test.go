@@ -10,19 +10,20 @@ func TestCalculateCompletionCommands(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name      string
-		input     string
-		saved     []string
-		databases []string
-		tables    []string
-		templates []string
-		users     []string
-		wantFirst string
-		wantAll   []string
+		name         string
+		input        string
+		saved        []string
+		databases    []string
+		tables       []string
+		templates    []string
+		templateTags []string
+		users        []string
+		wantFirst    string
+		wantAll      []string
 	}{
 		{name: "conn prefix", input: "con", wantFirst: "connect", wantAll: []string{"connect", "connections", "connection create", "connection edit", "connection delete", "connection show", "connection test", "connection doctor", "context"}},
 		{name: "show prefix", input: "sh", wantAll: []string{"show databases", "show users", "show tables", "show grants", "show indexes", "show processlist", "show variables", "show create table", "show table status", "show columns", "show foreign keys", "show triggers", "show views", "show templates"}},
-		{name: "template prefix", input: "tem", wantAll: []string{"templates", "template run", "template show", "template describe"}},
+		{name: "template prefix", input: "tem", wantAll: []string{"templates", "template run", "template show", "template describe", "template validate"}},
 		{name: "connection subcommands", input: "connection ", wantFirst: "create", wantAll: []string{"create", "edit", "delete", "show", "test", "doctor"}},
 		{name: "count alias tables", input: "count ", wantFirst: "orders", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
 		{name: "count rows tables", input: "count rows ", wantFirst: "orders", wantAll: []string{"orders", "users"}, tables: []string{"users", "orders"}},
@@ -58,8 +59,12 @@ func TestCalculateCompletionCommands(t *testing.T) {
 		{name: "show variables suggestions", input: "show variables ", wantAll: []string{"max_connections", "wait_timeout", "innodb_buffer_pool_size"}},
 		{name: "show vars suggestions", input: "show vars ", wantAll: []string{"max_connections", "wait_timeout", "innodb_buffer_pool_size"}},
 		{name: "show templates command", input: "show templ", wantAll: []string{"templates"}},
+		{name: "show templates tag keyword", input: "show templates ", wantAll: []string{"tag"}},
+		{name: "show templates tag values", input: "show templates tag ", wantAll: []string{"readonly", "grant"}, templateTags: []string{"grant", "readonly"}},
+		{name: "templates alias tag values", input: "templates tag ", wantAll: []string{"readonly", "grant"}, templateTags: []string{"grant", "readonly"}},
 		{name: "describe template names", input: "describe template ", wantAll: []string{"create_database_with_user", "readonly_user"}, tables: []string{"users", "orders"}, templates: []string{"readonly_user", "create_database_with_user"}},
 		{name: "template run names", input: "template run ", wantAll: []string{"create_database_with_user", "readonly_user"}, templates: []string{"readonly_user", "create_database_with_user"}},
+		{name: "template validate names", input: "template validate ", wantAll: []string{"create_database_with_user", "readonly_user"}, templates: []string{"readonly_user", "create_database_with_user"}},
 		{name: "run template names", input: "run template ", wantAll: []string{"create_database_with_user", "readonly_user"}, templates: []string{"readonly_user", "create_database_with_user"}},
 		{name: "alias test conn names", input: "test conn ", saved: []string{"prod", "dev"}, wantAll: []string{"dev", "prod", "verbose"}},
 		{name: "alias doctor conn names", input: "doctor conn ", saved: []string{"prod", "dev"}, wantAll: []string{"dev", "prod"}},
@@ -75,11 +80,12 @@ func TestCalculateCompletionCommands(t *testing.T) {
 			t.Parallel()
 
 			ctx := CompletionContext{
-				Connections: make([]CompletionConnection, 0, len(tc.saved)),
-				Databases:   tc.databases,
-				Tables:      tc.tables,
-				Templates:   tc.templates,
-				Users:       tc.users,
+				Connections:  make([]CompletionConnection, 0, len(tc.saved)),
+				Databases:    tc.databases,
+				Tables:       tc.tables,
+				Templates:    tc.templates,
+				TemplateTags: tc.templateTags,
+				Users:        tc.users,
 			}
 			for _, name := range tc.saved {
 				ctx.Connections = append(ctx.Connections, CompletionConnection{Name: name, Driver: "mysql", Mode: "direct"})

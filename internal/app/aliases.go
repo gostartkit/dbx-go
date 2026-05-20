@@ -108,6 +108,8 @@ func resolveAlias(line string) string {
 				return strings.Join(append([]string{"describe", "template"}, fields[2:]...), " ")
 			}
 		}
+	case "templates":
+		return strings.Join(append([]string{"show", "templates"}, fields[1:]...), " ")
 	case "run":
 		if len(fields) >= 2 && fields[1] == "template" {
 			return strings.Join(append([]string{"template", "run"}, fields[2:]...), " ")

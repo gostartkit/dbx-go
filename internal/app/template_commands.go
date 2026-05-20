@@ -13,7 +13,12 @@ import (
 	"pkg.gostartkit.com/dbx/internal/util"
 )
 
-func (a *Application) handleShowTemplates(ctx context.Context) error {
+type templateListFilters struct {
+	Query string
+	Tag   string
+}
+
+func (a *Application) handleShowTemplates(ctx context.Context, filters templateListFilters) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show templates"}, func(meta *auditMetadata) error {
 		cfg, err := a.templateScopeConfig("")
 		if err != nil {
@@ -24,11 +29,31 @@ func (a *Application) handleShowTemplates(ctx context.Context) error {
 			meta.Mode = cfg.Mode
 		}
 
-		result, err := a.showTemplatesResult(cfg)
+		result, err := a.showTemplatesResult(cfg, filters)
 		if err != nil {
 			return err
 		}
 		a.printTemplatesCatalog(result)
+		return nil
+	})
+}
+
+func (a *Application) handleTemplateValidate(ctx context.Context, name string) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "template validate"}, func(meta *auditMetadata) error {
+		cfg, err := a.templateScopeConfig("")
+		if err != nil {
+			return err
+		}
+		if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
+			meta.Connection = cfg.Name
+			meta.Mode = cfg.Mode
+		}
+
+		result, err := a.templateValidateResult(cfg, name)
+		if err != nil {
+			return err
+		}
+		a.printTemplateValidation(result)
 		return nil
 	})
 }
@@ -68,7 +93,7 @@ func (a *Application) handleTemplateRun(ctx context.Context, name string, previe
 			return util.WrapLayer("template", "resolve template "+name, err)
 		}
 
-		values, err := a.collectTemplateRunInputs(ctx, selectedTemplate, nil, true, a.currentDatabaseName())
+		values, inputSummary, err := a.collectTemplateRunInputs(ctx, selectedTemplate, nil, true, a.currentDatabaseName())
 		if err != nil {
 			return util.WrapLayer("template", "collect template inputs", err)
 		}
@@ -78,8 +103,7 @@ func (a *Application) handleTemplateRun(ctx context.Context, name string, previe
 			return err
 		}
 
-		redactedInputs := redactTemplateValues(selectedTemplate, values)
-		a.printTemplateRunPreview(previewPlan, redactedInputs, verbose, preview, effectiveDryRun)
+		a.printTemplateRunPreview(previewPlan, inputSummary, verbose, preview, effectiveDryRun)
 
 		if preview {
 			return nil
@@ -112,7 +136,7 @@ func (a *Application) handleTemplateRun(ctx context.Context, name string, previe
 	})
 }
 
-func (a *Application) showTemplatesResult(cfg *config.ConnectionConfig) (*TemplatesCatalogResult, error) {
+func (a *Application) showTemplatesResult(cfg *config.ConnectionConfig, filters templateListFilters) (*TemplatesCatalogResult, error) {
 	templates, err := a.templates.ListResolved(cfg)
 	if err != nil {
 		return nil, util.WrapLayer("template", "list templates", err)
@@ -120,17 +144,24 @@ func (a *Application) showTemplatesResult(cfg *config.ConnectionConfig) (*Templa
 
 	result := &TemplatesCatalogResult{
 		OK:        true,
+		Filter:    strings.TrimSpace(filters.Query),
+		Tag:       normalizeTemplateCatalogTag(filters.Tag),
 		Templates: make([]TemplateSummaryResult, 0, len(templates)),
 	}
 	if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
 		result.Connection = cfg.Name
 	}
 	for _, candidate := range templates {
+		if !matchesTemplateCatalogFilter(candidate, filters) {
+			continue
+		}
 		result.Templates = append(result.Templates, TemplateSummaryResult{
 			Name:        candidate.Name,
 			Scope:       candidate.Layer,
+			Category:    candidate.EffectiveCategory(),
 			Command:     candidate.Match.Command,
 			Description: candidate.Description,
+			Tags:        candidate.EffectiveTags(),
 		})
 	}
 	return result, nil
@@ -146,9 +177,11 @@ func (a *Application) describeTemplateResult(cfg *config.ConnectionConfig, name 
 		OK:          true,
 		Name:        selectedTemplate.Name,
 		Scope:       selectedTemplate.Layer,
+		Category:    selectedTemplate.EffectiveCategory(),
 		Command:     selectedTemplate.Match.Command,
 		Description: selectedTemplate.Description,
 		Transaction: selectedTemplate.Transaction,
+		Tags:        selectedTemplate.EffectiveTags(),
 		Inputs:      make([]TemplateInputResult, 0, len(selectedTemplate.Inputs)),
 		Actions:     make([]TemplateActionSummaryResult, 0, len(selectedTemplate.Actions)),
 	}
@@ -177,13 +210,36 @@ func (a *Application) describeTemplateResult(cfg *config.ConnectionConfig, name 
 	return result, nil
 }
 
+func (a *Application) templateValidateResult(cfg *config.ConnectionConfig, name string) (*TemplateValidationResult, error) {
+	selectedTemplate, err := a.templates.ResolveNamedAny(cfg, name)
+	if err != nil {
+		return nil, util.WrapLayer("template", "resolve template "+name, err)
+	}
+	if err := validateResolvedTemplate(selectedTemplate); err != nil {
+		return nil, util.WrapLayer("validation", "validate template "+name, err)
+	}
+
+	result := &TemplateValidationResult{
+		OK:       true,
+		Name:     selectedTemplate.Name,
+		Scope:    selectedTemplate.Layer,
+		Category: selectedTemplate.EffectiveCategory(),
+		Command:  selectedTemplate.Match.Command,
+		Valid:    true,
+	}
+	if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
+		result.Connection = cfg.Name
+	}
+	return result, nil
+}
+
 func (a *Application) templateRunResult(ctx context.Context, cfg *config.ConnectionConfig, name string, rawInputs map[string]string, preview bool, dryRun bool, verbose bool, database string) (*TemplateRunResult, error) {
 	selectedTemplate, err := a.templates.ResolveNamedAny(cfg, name)
 	if err != nil {
 		return nil, util.WrapLayer("template", "resolve template "+name, err)
 	}
 
-	values, err := a.collectTemplateRunInputs(nil, selectedTemplate, rawInputs, true, database)
+	values, inputSummary, err := a.collectTemplateRunInputs(nil, selectedTemplate, rawInputs, true, database)
 	if err != nil {
 		return nil, util.WrapLayer("template", "collect template inputs", err)
 	}
@@ -195,17 +251,19 @@ func (a *Application) templateRunResult(ctx context.Context, cfg *config.Connect
 
 	redactedInputs := redactTemplateValues(selectedTemplate, values)
 	result := &TemplateRunResult{
-		OK:          true,
-		Connection:  cfg.Name,
-		Command:     "template run",
-		Template:    selectedTemplate.Name,
-		Layer:       selectedTemplate.Layer,
-		Source:      selectedTemplate.Source,
-		Preview:     preview,
-		DryRun:      dryRun,
-		Transaction: selectedTemplate.Transaction,
-		Inputs:      redactedInputs,
-		Actions:     make([]ActionResult, 0, len(previewPlan.Actions)),
+		OK:           true,
+		Connection:   cfg.Name,
+		Command:      "template run",
+		Template:     selectedTemplate.Name,
+		Layer:        selectedTemplate.Layer,
+		Category:     selectedTemplate.EffectiveCategory(),
+		Source:       selectedTemplate.Source,
+		Preview:      preview,
+		DryRun:       dryRun,
+		Transaction:  selectedTemplate.Transaction,
+		Inputs:       redactedInputs,
+		InputSummary: inputSummary,
+		Actions:      make([]ActionResult, 0, len(previewPlan.Actions)),
 	}
 
 	switch {
@@ -258,38 +316,58 @@ func (a *Application) templateRunResult(ctx context.Context, cfg *config.Connect
 	}
 }
 
-func (a *Application) collectTemplateRunInputs(ctx context.Context, template *tpl.Template, rawInputs map[string]string, requireAll bool, database string) (map[string]string, error) {
+func (a *Application) collectTemplateRunInputs(ctx context.Context, template *tpl.Template, rawInputs map[string]string, requireAll bool, database string) (map[string]string, []TemplateInputValueResult, error) {
 	values := make(map[string]string)
+	provided := make(map[string]bool)
 	if strings.TrimSpace(database) != "" {
 		values["database"] = strings.TrimSpace(database)
+		provided["database"] = true
 	}
 	for key, value := range rawInputs {
 		if strings.HasSuffix(key, "-env") {
 			name := strings.TrimSpace(strings.TrimSuffix(key, "-env"))
 			if name == "" {
-				return nil, util.WrapLayer("validation", "collect template inputs", fmt.Errorf("input key is required"))
+				return nil, nil, util.WrapLayer("validation", "collect template inputs", fmt.Errorf("input key is required"))
 			}
 			resolved, err := resolveTemplateInputFromEnv(value)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			values[name] = resolved
+			provided[name] = true
 			continue
 		}
 		values[key] = value
+		provided[key] = true
 	}
 
 	initialRequireAll := requireAll && ctx == nil
 	merged, err := mergeTemplateInputs(template, values, initialRequireAll)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if ctx != nil {
+		beforePrompt := make(map[string]struct{}, len(merged))
+		for key := range merged {
+			beforePrompt[key] = struct{}{}
+		}
 		if err := a.collectTemplateInputs(ctx, template, merged); err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		for _, input := range template.Inputs {
+			if _, existed := beforePrompt[input.Name]; existed {
+				continue
+			}
+			if _, exists := merged[input.Name]; exists {
+				provided[input.Name] = true
+			}
 		}
 	}
-	return mergeTemplateInputs(template, merged, requireAll)
+	finalValues, err := mergeTemplateInputs(template, merged, requireAll)
+	if err != nil {
+		return nil, nil, err
+	}
+	return finalValues, buildTemplateInputSummary(template, finalValues, provided), nil
 }
 
 func (a *Application) printTemplatesCatalog(result *TemplatesCatalogResult) {
@@ -300,12 +378,22 @@ func (a *Application) printTemplatesCatalog(result *TemplatesCatalogResult) {
 	lines := make([]string, 0, len(result.Templates))
 	nameWidth := len("name")
 	scopeWidth := len("scope")
+	categoryWidth := len("category")
 	for _, candidate := range result.Templates {
 		nameWidth = max(nameWidth, len(candidate.Name))
 		scopeWidth = max(scopeWidth, len(candidate.Scope))
+		categoryWidth = max(categoryWidth, len(candidate.Category))
+	}
+	if len(result.Templates) == 0 {
+		a.prompt.Println("<none>")
+		return
 	}
 	for _, candidate := range result.Templates {
-		lines = append(lines, fmt.Sprintf("%-*s  %-*s  %s", nameWidth, candidate.Name, scopeWidth, candidate.Scope, candidate.Command))
+		line := fmt.Sprintf("%-*s  %-*s  %-*s  %s", nameWidth, candidate.Name, scopeWidth, candidate.Scope, categoryWidth, candidate.Category, candidate.Command)
+		if len(candidate.Tags) > 0 {
+			line += "  [" + strings.Join(candidate.Tags, ",") + "]"
+		}
+		lines = append(lines, line)
 	}
 	slices.Sort(lines)
 	for _, line := range lines {
@@ -319,10 +407,14 @@ func (a *Application) printTemplateDescription(result *TemplateDescriptionResult
 	}
 	a.prompt.Printf("Template: %s\n", result.Name)
 	a.prompt.Printf("Scope: %s\n", result.Scope)
+	a.prompt.Printf("Category: %s\n", result.Category)
 	a.prompt.Printf("Command: %s\n", result.Command)
 	a.prompt.Printf("Transaction: %t\n", result.Transaction)
 	if strings.TrimSpace(result.Description) != "" {
 		a.prompt.Printf("Description: %s\n", result.Description)
+	}
+	if len(result.Tags) > 0 {
+		a.prompt.Printf("Tags: %s\n", strings.Join(result.Tags, ", "))
 	}
 	a.prompt.Println("")
 	a.prompt.Println("Inputs:")
@@ -351,22 +443,10 @@ func (a *Application) printTemplateDescription(result *TemplateDescriptionResult
 	}
 }
 
-func (a *Application) printTemplateRunPreview(plan *tpl.ExecutionPlan, inputs map[string]string, verbose bool, preview bool, dryRun bool) {
-	a.prompt.Printf("Template: %s\n", plan.TemplateName)
+func (a *Application) printTemplateRunPreview(plan *tpl.ExecutionPlan, inputSummary []TemplateInputValueResult, verbose bool, preview bool, dryRun bool) {
+	a.printTemplatePlanHeading(plan.TemplateName, plan.Layer, plan.Category)
 	a.prompt.Println("")
-	a.prompt.Println("Inputs:")
-	if len(inputs) == 0 {
-		a.prompt.Println("  <none>")
-	} else {
-		keys := make([]string, 0, len(inputs))
-		for key := range inputs {
-			keys = append(keys, key)
-		}
-		slices.Sort(keys)
-		for _, key := range keys {
-			a.prompt.Printf("  %s: %s\n", key, displayTemplateInputValue(inputs[key]))
-		}
-	}
+	a.printTemplateInputSummary(inputSummary)
 	a.prompt.Println("")
 	a.prompt.Println("Execution Plan:")
 	for index, action := range plan.Actions {
@@ -394,21 +474,9 @@ func (a *Application) printTemplateRunResult(result *TemplateRunResult) {
 	if result == nil {
 		return
 	}
-	a.prompt.Printf("Template: %s\n", result.Template)
+	a.printTemplatePlanHeading(result.Template, result.Layer, result.Category)
 	a.prompt.Println("")
-	a.prompt.Println("Inputs:")
-	if len(result.Inputs) == 0 {
-		a.prompt.Println("  <none>")
-	} else {
-		keys := make([]string, 0, len(result.Inputs))
-		for key := range result.Inputs {
-			keys = append(keys, key)
-		}
-		slices.Sort(keys)
-		for _, key := range keys {
-			a.prompt.Printf("  %s: %s\n", key, displayTemplateInputValue(result.Inputs[key]))
-		}
-	}
+	a.printTemplateInputSummary(result.InputSummary)
 	a.prompt.Println("")
 	if result.Preview {
 		a.prompt.Println("Execution Plan:")
@@ -442,6 +510,17 @@ func (a *Application) printTemplateRunResult(result *TemplateRunResult) {
 	if result.Committed {
 		a.prompt.Println("Committed transaction.")
 	}
+}
+
+func (a *Application) printTemplateValidation(result *TemplateValidationResult) {
+	if result == nil {
+		return
+	}
+	a.prompt.Printf("Template: %s\n", result.Name)
+	a.prompt.Printf("Scope: %s\n", result.Scope)
+	a.prompt.Printf("Category: %s\n", result.Category)
+	a.prompt.Printf("Command: %s\n", result.Command)
+	a.prompt.Println("Validation: OK")
 }
 
 func (a *Application) templateScopeConfig(connectionName string) (*config.ConnectionConfig, error) {
@@ -480,6 +559,93 @@ func (a *Application) requireTemplateRunConnection(ctx context.Context) (*config
 	return cfg, nil
 }
 
+func matchesTemplateCatalogFilter(candidate tpl.Template, filters templateListFilters) bool {
+	tag := normalizeTemplateCatalogTag(filters.Tag)
+	if tag != "" && !slices.Contains(candidate.EffectiveTags(), tag) {
+		return false
+	}
+	query := strings.ToLower(strings.TrimSpace(filters.Query))
+	if query == "" {
+		return true
+	}
+	searchable := []string{
+		strings.ToLower(candidate.Name),
+		strings.ToLower(candidate.Match.Command),
+		strings.ToLower(candidate.EffectiveCategory()),
+		strings.ToLower(candidate.Description),
+	}
+	searchable = append(searchable, candidate.EffectiveTags()...)
+	for _, field := range searchable {
+		if strings.Contains(field, query) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeTemplateCatalogTag(tag string) string {
+	return strings.ToLower(strings.TrimSpace(tag))
+}
+
+func buildTemplateInputSummary(template *tpl.Template, values map[string]string, provided map[string]bool) []TemplateInputValueResult {
+	if template == nil || len(template.Inputs) == 0 {
+		return nil
+	}
+	summary := make([]TemplateInputValueResult, 0, len(template.Inputs))
+	for _, input := range template.Inputs {
+		value, exists := values[input.Name]
+		if !exists {
+			continue
+		}
+		if input.EffectiveType() == "secret" {
+			value = "***"
+		}
+		summary = append(summary, TemplateInputValueResult{
+			Name:      input.Name,
+			Value:     value,
+			Type:      input.EffectiveType(),
+			Defaulted: !provided[input.Name],
+		})
+	}
+	return summary
+}
+
+func (a *Application) printTemplatePlanHeading(name string, scope string, category string) {
+	a.prompt.Printf("Template: %s\n", name)
+	if strings.TrimSpace(scope) != "" {
+		a.prompt.Printf("Scope: %s\n", scope)
+	}
+	if strings.TrimSpace(category) != "" {
+		a.prompt.Printf("Category: %s\n", category)
+	}
+}
+
+func (a *Application) printTemplateInputSummary(inputs []TemplateInputValueResult) {
+	a.prompt.Println("Inputs:")
+	if len(inputs) == 0 {
+		a.prompt.Println("  <none>")
+		return
+	}
+	for _, input := range inputs {
+		value := displayTemplateInputValue(input.Value)
+		if input.Defaulted {
+			value += " (default)"
+		}
+		a.prompt.Printf("  %s: %s\n", input.Name, value)
+	}
+}
+
+func validateResolvedTemplate(selectedTemplate *tpl.Template) error {
+	if err := selectedTemplate.Validate(); err != nil {
+		return err
+	}
+	spec, ok := commandSpecByPath(selectedTemplate.Match.Command)
+	if !ok || spec.Category != "command" {
+		return fmt.Errorf("unsupported match command %q", selectedTemplate.Match.Command)
+	}
+	return nil
+}
+
 func parseDescribeTemplateArgs(args []string) (string, bool, error) {
 	if len(args) == 0 {
 		return "", false, fmt.Errorf("usage: describe template <name> [--verbose]")
@@ -494,6 +660,23 @@ func parseDescribeTemplateArgs(args []string) (string, bool, error) {
 		return "", false, fmt.Errorf("usage: describe template <name> [--verbose]")
 	}
 	return name, verbose, nil
+}
+
+func parseShowTemplatesArgs(args []string) (templateListFilters, error) {
+	filters := templateListFilters{}
+	switch len(args) {
+	case 0:
+		return filters, nil
+	case 1:
+		filters.Query = args[0]
+		return filters, nil
+	case 2:
+		if args[0] == "tag" {
+			filters.Tag = args[1]
+			return filters, nil
+		}
+	}
+	return templateListFilters{}, fmt.Errorf("usage: show templates [query] | show templates tag <tag>")
 }
 
 func parseTemplateRunArgs(args []string) (string, bool, bool, bool, error) {
@@ -517,6 +700,13 @@ func parseTemplateRunArgs(args []string) (string, bool, bool, bool, error) {
 		}
 	}
 	return name, preview, verbose, dryRunFlag, nil
+}
+
+func parseTemplateValidateArgs(args []string) (string, error) {
+	if len(args) != 1 {
+		return "", fmt.Errorf("usage: template validate <name>")
+	}
+	return strings.TrimSpace(args[0]), nil
 }
 
 func resolveTemplateInputFromEnv(name string) (string, error) {

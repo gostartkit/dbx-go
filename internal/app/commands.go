@@ -30,6 +30,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 			return false, util.WrapLayer("validation", "describe template", err)
 		}
 		return false, a.handleDescribeTemplate(ctx, name, verbose)
+	case len(fields) >= 3 && fields[0] == "template" && fields[1] == "validate":
+		name, err := parseTemplateValidateArgs(fields[2:])
+		if err != nil {
+			return false, util.WrapLayer("validation", "template validate", err)
+		}
+		return false, a.handleTemplateValidate(ctx, name)
 	case len(fields) == 2 && fields[0] == "connect":
 		return false, a.handleConnectByName(ctx, fields[1])
 	case len(fields) == 2 && fields[0] == "use":
@@ -119,8 +125,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleShowVariables(ctx, fields[2])
 	case len(fields) == 2 && fields[0] == "show" && fields[1] == "views":
 		return false, a.handleShowViews(ctx)
-	case len(fields) == 2 && fields[0] == "show" && fields[1] == "templates":
-		return false, a.handleShowTemplates(ctx)
+	case len(fields) >= 2 && fields[0] == "show" && fields[1] == "templates":
+		filters, err := parseShowTemplatesArgs(fields[2:])
+		if err != nil {
+			return false, util.WrapLayer("validation", "show templates", err)
+		}
+		return false, a.handleShowTemplates(ctx, filters)
 	case len(fields) >= 3 && fields[0] == "template" && fields[1] == "run":
 		name, preview, verbose, dryRunFlag, err := parseTemplateRunArgs(fields[2:])
 		if err != nil {
@@ -175,13 +185,15 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 	case "show processlist":
 		return false, a.handleShowProcesslist(ctx)
 	case "show templates":
-		return false, a.handleShowTemplates(ctx)
+		return false, a.handleShowTemplates(ctx, templateListFilters{})
 	case "show views":
 		return false, a.handleShowViews(ctx)
 	case "templates":
-		return false, a.handleShowTemplates(ctx)
+		return false, a.handleShowTemplates(ctx, templateListFilters{})
 	case "describe template":
 		return false, util.WrapLayer("validation", "describe template", fmt.Errorf("usage: describe template <name> [--verbose]"))
+	case "template validate":
+		return false, util.WrapLayer("validation", "template validate", fmt.Errorf("usage: template validate <name>"))
 	case "template run":
 		return false, util.WrapLayer("validation", "template run", fmt.Errorf("usage: template run <name> [--preview] [--dry-run] [--verbose]"))
 	case "drop database":

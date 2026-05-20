@@ -8,14 +8,15 @@ import (
 )
 
 type CompletionContext struct {
-	Connection  string
-	Database    string
-	DryRun      bool
-	Connections []CompletionConnection
-	Databases   []string
-	Tables      []string
-	Templates   []string
-	Users       []string
+	Connection   string
+	Database     string
+	DryRun       bool
+	Connections  []CompletionConnection
+	Databases    []string
+	Tables       []string
+	Templates    []string
+	TemplateTags []string
+	Users        []string
 }
 
 type CompletionConnection struct {
@@ -295,6 +296,8 @@ func suggestionsForArg(arg ArgSpec, ctx CompletionContext) []Suggestion {
 		return stringSuggestions(ctx.Users, "user")
 	case commandArgTemplate:
 		return stringSuggestions(ctx.Templates, "template")
+	case commandArgTemplateTag:
+		return stringSuggestions(ctx.TemplateTags, "tag")
 	case commandArgVariable:
 		return commonVariableSuggestions()
 	case commandArgStatic:

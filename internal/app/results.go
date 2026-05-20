@@ -46,15 +46,19 @@ type PlanExecutionResult struct {
 }
 
 type TemplateSummaryResult struct {
-	Name        string `json:"name"`
-	Scope       string `json:"scope"`
-	Command     string `json:"command"`
-	Description string `json:"description,omitempty"`
+	Name        string   `json:"name"`
+	Scope       string   `json:"scope"`
+	Category    string   `json:"category"`
+	Command     string   `json:"command"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 type TemplatesCatalogResult struct {
 	OK         bool                    `json:"ok"`
 	Connection string                  `json:"connection,omitempty"`
+	Filter     string                  `json:"filter,omitempty"`
+	Tag        string                  `json:"tag,omitempty"`
 	Templates  []TemplateSummaryResult `json:"templates,omitempty"`
 }
 
@@ -76,28 +80,49 @@ type TemplateDescriptionResult struct {
 	Connection  string                        `json:"connection,omitempty"`
 	Name        string                        `json:"name"`
 	Scope       string                        `json:"scope"`
+	Category    string                        `json:"category"`
 	Command     string                        `json:"command"`
 	Description string                        `json:"description,omitempty"`
 	Transaction bool                          `json:"transaction"`
+	Tags        []string                      `json:"tags,omitempty"`
 	Inputs      []TemplateInputResult         `json:"inputs,omitempty"`
 	Actions     []TemplateActionSummaryResult `json:"actions,omitempty"`
 }
 
+type TemplateInputValueResult struct {
+	Name      string `json:"name"`
+	Value     string `json:"value"`
+	Type      string `json:"type"`
+	Defaulted bool   `json:"defaulted,omitempty"`
+}
+
 type TemplateRunResult struct {
-	OK          bool              `json:"ok"`
-	Error       *ErrorResult      `json:"error,omitempty"`
-	Connection  string            `json:"connection,omitempty"`
-	Command     string            `json:"command,omitempty"`
-	Template    string            `json:"template,omitempty"`
-	Layer       string            `json:"layer,omitempty"`
-	Source      string            `json:"source,omitempty"`
-	Preview     bool              `json:"preview,omitempty"`
-	DryRun      bool              `json:"dry_run,omitempty"`
-	Transaction bool              `json:"transaction,omitempty"`
-	Committed   bool              `json:"committed,omitempty"`
-	RolledBack  bool              `json:"rolled_back,omitempty"`
-	Inputs      map[string]string `json:"inputs,omitempty"`
-	Actions     []ActionResult    `json:"actions,omitempty"`
+	OK           bool                       `json:"ok"`
+	Error        *ErrorResult               `json:"error,omitempty"`
+	Connection   string                     `json:"connection,omitempty"`
+	Command      string                     `json:"command,omitempty"`
+	Template     string                     `json:"template,omitempty"`
+	Layer        string                     `json:"layer,omitempty"`
+	Category     string                     `json:"category,omitempty"`
+	Source       string                     `json:"source,omitempty"`
+	Preview      bool                       `json:"preview,omitempty"`
+	DryRun       bool                       `json:"dry_run,omitempty"`
+	Transaction  bool                       `json:"transaction,omitempty"`
+	Committed    bool                       `json:"committed,omitempty"`
+	RolledBack   bool                       `json:"rolled_back,omitempty"`
+	Inputs       map[string]string          `json:"inputs,omitempty"`
+	InputSummary []TemplateInputValueResult `json:"input_summary,omitempty"`
+	Actions      []ActionResult             `json:"actions,omitempty"`
+}
+
+type TemplateValidationResult struct {
+	OK         bool   `json:"ok"`
+	Connection string `json:"connection,omitempty"`
+	Name       string `json:"name"`
+	Scope      string `json:"scope"`
+	Category   string `json:"category"`
+	Command    string `json:"command"`
+	Valid      bool   `json:"valid"`
 }
 
 type ConnectionSummary struct {

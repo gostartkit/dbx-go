@@ -55,6 +55,7 @@ show views            Show views in the current database
 show templates        List resolved workflow templates
 describe template     Describe a workflow template
 template run          Run a workflow template
+template validate     Validate a workflow template
 truncate table        Delete all rows from a table
 rename table          Rename a table
 use <database>        Select a database for the active REPL session
@@ -502,16 +503,25 @@ This command:
 		body: strings.TrimSpace(`
 List resolved workflow templates from builtin, global, and current connection scope.
 
+Usage:
+  show templates
+  show templates database
+  show templates tag readonly
+
 Aliases:
   templates
 
 This command:
   - does not require a selected database
   - uses precedence connection > global > builtin
+  - supports substring filtering by name, command, category, or tag
+  - supports exact tag filtering with show templates tag <tag>
   - does not require confirmation
 
 Examples:
   show templates
+  show templates database
+  show templates tag readonly
   dbx --connection prod show templates`),
 	},
 	"describe template": {
@@ -527,7 +537,7 @@ Aliases:
   template describe <name>
 
 This command:
-  - shows scope, command match, transaction flag, inputs, and actions
+  - shows scope, category, tags, command match, transaction flag, inputs, and actions
   - does not show SQL by default
   - supports --verbose in the CLI for redacted SQL preview
   - does not require confirmation`),
@@ -546,10 +556,25 @@ Aliases:
 
 This command:
   - collects and validates typed inputs
+  - prints a redacted input summary before preview or execution
   - supports --preview and --dry-run without execution
   - requires confirmation in the REPL unless preview/dry-run
   - requires --yes in the CLI unless preview/dry-run
   - redacts secret inputs in previews, SQL, and JSON output`),
+	},
+	"template validate": {
+		title: "template validate",
+		body: strings.TrimSpace(`
+Validate a workflow template definition without executing it.
+
+Usage:
+  template validate create_database_with_user
+  dbx template validate create_database_with_user --format json
+
+This command:
+  - validates template version, match command, inputs, and actions
+  - does not execute SQL
+  - does not require confirmation`),
 	},
 	"use": {
 		title: "use",

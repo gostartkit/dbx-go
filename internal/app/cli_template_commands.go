@@ -14,6 +14,10 @@ type templateRunFlags struct {
 	verbose bool
 }
 
+type showTemplatesFlags struct {
+	tag string
+}
+
 type templateDescribeFlags struct {
 	verbose bool
 }
@@ -27,6 +31,7 @@ func (b *cliBuilder) templateGroupCommand() *cmd.Command {
 			b.templateRunCommand(),
 			b.templateShowCommand(),
 			b.templateDescribeCommand(),
+			b.templateValidateCommand(),
 		},
 	}
 }
@@ -43,14 +48,19 @@ func (b *cliBuilder) runGroupCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
+	flags := &showTemplatesFlags{}
 	return &cmd.Command{
-		Name:      "templates",
-		UsageLine: "dbx show templates",
-		Short:     "List resolved workflow templates",
-		Long:      helpEntries["show templates"].body,
+		Name:        "templates",
+		UsageLine:   "dbx show templates [query] [--tag value]",
+		Short:       "List resolved workflow templates",
+		Long:        helpEntries["show templates"].body,
+		Positionals: []cmd.PositionalArg{{Name: "query", Usage: "optional substring filter"}},
+		SetFlags: func(f *cmd.FlagSet) {
+			f.StringVar(&flags.tag, "tag", "", "filter by template tag", "")
+		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if err := b.requireNoArgs(args); err != nil {
-				return util.WrapLayer("validation", "show templates", err)
+			if len(args) > 1 {
+				return util.WrapLayer("validation", "show templates", fmt.Errorf("usage: dbx show templates [query] [--tag value]"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "show templates"}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := application.templateScopeConfig(b.globals.Connection)
@@ -61,7 +71,11 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 					meta.Connection = cfg.Name
 					meta.Mode = cfg.Mode
 				}
-				result, err := application.showTemplatesResult(cfg)
+				filters := templateListFilters{Tag: flags.tag}
+				if len(args) == 1 {
+					filters.Query = args[0]
+				}
+				result, err := application.showTemplatesResult(cfg, filters)
 				if err != nil {
 					return err
 				}
@@ -137,6 +151,39 @@ func (b *cliBuilder) templateRunCommand() *cmd.Command {
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "template run", DryRun: b.globals.DryRun || flags.preview}, func(application *Application, meta *auditMetadata) error {
 				return b.runTemplateWorkflow(ctx, application, args[0], flags, meta)
+			})
+		},
+	}
+}
+
+func (b *cliBuilder) templateValidateCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:        "validate",
+		UsageLine:   "dbx template validate <name>",
+		Short:       "Validate a workflow template",
+		Long:        helpEntries["template validate"].body,
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true}},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) != 1 {
+				return util.WrapLayer("validation", "template validate", fmt.Errorf("usage: dbx template validate <name>"))
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "template validate"}, func(application *Application, meta *auditMetadata) error {
+				cfg, err := application.templateScopeConfig(b.globals.Connection)
+				if err != nil {
+					return err
+				}
+				if cfg != nil && cfg.Name != "" {
+					meta.Connection = cfg.Name
+					meta.Mode = cfg.Mode
+				}
+				result, err := application.templateValidateResult(cfg, args[0])
+				if err != nil {
+					return err
+				}
+				return b.writeOutput(result, func() error {
+					application.printTemplateValidation(result)
+					return nil
+				})
 			})
 		},
 	}

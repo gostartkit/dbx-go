@@ -62,6 +62,7 @@ var commandBehaviors = map[string]CommandBehavior{
 	"template describe":  {ReadOnly: true},
 	"template run":       {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"template show":      {ReadOnly: true},
+	"template validate":  {ReadOnly: true},
 	"templates":          {ReadOnly: true},
 	"truncate table":     {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 }

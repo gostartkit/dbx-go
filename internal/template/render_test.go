@@ -19,7 +19,11 @@ func TestBuildPlanRendersVariablesAndEscapesStrings(t *testing.T) {
 	}
 
 	tpl := &Template{
-		Name:   "create_database_with_user",
+		Name: "create_database_with_user",
+		Match: Match{
+			Command: "create database",
+			Driver:  "mysql",
+		},
 		Layer:  "global",
 		Source: "test",
 		Actions: []Action{

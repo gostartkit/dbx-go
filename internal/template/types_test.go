@@ -87,6 +87,28 @@ func TestTemplateTransactionJSON(t *testing.T) {
 	}
 }
 
+func TestTemplateCategoryDefaultAndTagsNormalization(t *testing.T) {
+	t.Parallel()
+
+	var tmpl Template
+	data := []byte(`{
+		"name": "readonly_user",
+		"tags": ["Readonly", "grant", "readonly", ""],
+		"match": {"command": "create user", "driver": "mysql"},
+		"actions": [{"type": "sql", "description": "Create user", "sql": "CREATE USER ro"}]
+	}`)
+
+	if err := json.Unmarshal(data, &tmpl); err != nil {
+		t.Fatalf("Unmarshal returned error: %v", err)
+	}
+	if tmpl.Category != DefaultTemplateCategory {
+		t.Fatalf("Category = %q, want %q", tmpl.Category, DefaultTemplateCategory)
+	}
+	if len(tmpl.Tags) != 2 || tmpl.Tags[0] != "grant" || tmpl.Tags[1] != "readonly" {
+		t.Fatalf("Tags = %#v, want normalized sorted tags", tmpl.Tags)
+	}
+}
+
 func TestTemplateValidateRejectsUnsupportedVersion(t *testing.T) {
 	t.Parallel()
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
@@ -102,14 +103,15 @@ func (a *Application) completeInput(line string) ui.Completion {
 	}
 
 	return calculateCompletion(line, CompletionContext{
-		Connection:  a.currentConnectionName(),
-		Database:    a.currentDatabaseName(),
-		DryRun:      a.dryRun,
-		Connections: connectionSuggestions,
-		Databases:   a.currentCompletionDatabases(),
-		Tables:      a.currentCompletionTables(),
-		Templates:   a.currentCompletionTemplates(),
-		Users:       a.currentCompletionUsers(),
+		Connection:   a.currentConnectionName(),
+		Database:     a.currentDatabaseName(),
+		DryRun:       a.dryRun,
+		Connections:  connectionSuggestions,
+		Databases:    a.currentCompletionDatabases(),
+		Tables:       a.currentCompletionTables(),
+		Templates:    a.currentCompletionTemplates(),
+		TemplateTags: a.currentCompletionTemplateTags(),
+		Users:        a.currentCompletionUsers(),
 	})
 }
 
@@ -277,6 +279,30 @@ func (a *Application) currentCompletionTemplates() []string {
 		names = append(names, candidate.Name)
 	}
 	return names
+}
+
+func (a *Application) currentCompletionTemplateTags() []string {
+	cfg, err := a.templateScopeConfig("")
+	if err != nil {
+		return nil
+	}
+	templates, err := a.templates.ListResolved(cfg)
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	tags := make([]string, 0)
+	for _, candidate := range templates {
+		for _, tag := range candidate.EffectiveTags() {
+			if _, exists := seen[tag]; exists {
+				continue
+			}
+			seen[tag] = struct{}{}
+			tags = append(tags, tag)
+		}
+	}
+	slices.Sort(tags)
+	return tags
 }
 
 func (a *Application) currentCompletionTables() []string {

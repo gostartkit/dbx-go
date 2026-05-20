@@ -115,4 +115,13 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 	if !strings.Contains(joined, "Run a workflow template") {
 		t.Fatalf("help output missing template run text: %q", joined)
 	}
+
+	prompt.lines = nil
+	if err := printHelpTopic(&prompt, "template validate"); err != nil {
+		t.Fatalf("printHelpTopic returned error: %v", err)
+	}
+	joined = strings.Join(prompt.lines, "\n")
+	if !strings.Contains(joined, "Validate a workflow template definition") {
+		t.Fatalf("help output missing template validate text: %q", joined)
+	}
 }
