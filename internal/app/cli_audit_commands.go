@@ -12,6 +12,7 @@ func (b *cliBuilder) auditGroupCommand() *cmd.Command {
 		Name:      "audit",
 		UsageLine: "dbx audit <subcommand>",
 		Short:     "Inspect local audit records",
+		Long:      helpEntries["audit"].body,
 		SubCommands: []*cmd.Command{
 			b.auditLogCommand(),
 		},

@@ -2,6 +2,7 @@ package app
 
 import (
 	"io"
+	"slices"
 	"strings"
 
 	"pkg.gostartkit.com/cmd"
@@ -9,6 +10,7 @@ import (
 
 type CommandSpec struct {
 	Path        string
+	UsageLine   string
 	Description string
 	Category    string
 	Hidden      bool
@@ -37,6 +39,7 @@ func flattenCommandSpec(dst *[]CommandSpec, prefix string, spec cmd.CommandSpec,
 	}
 	*dst = append(*dst, CommandSpec{
 		Path:        path,
+		UsageLine:   spec.UsageLine,
 		Description: spec.Short,
 		Category:    category,
 		Hidden:      spec.Hidden,
@@ -45,6 +48,7 @@ func flattenCommandSpec(dst *[]CommandSpec, prefix string, spec cmd.CommandSpec,
 	for _, alias := range spec.Aliases {
 		*dst = append(*dst, CommandSpec{
 			Path:        strings.TrimSpace(strings.Join([]string{prefix, alias}, " ")),
+			UsageLine:   spec.UsageLine,
 			Description: spec.Short,
 			Category:    "alias",
 			Hidden:      spec.Hidden,
@@ -63,6 +67,33 @@ func commandSpecByPath(path string) (CommandSpec, bool) {
 		}
 	}
 	return CommandSpec{}, false
+}
+
+func commandSpecForInput(line string) (CommandSpec, bool) {
+	tokens := strings.Fields(strings.TrimSpace(line))
+	if len(tokens) == 0 {
+		return CommandSpec{}, false
+	}
+
+	best := CommandSpec{}
+	bestLen := 0
+	for _, spec := range replCommandSpecs() {
+		pathTokens := strings.Fields(spec.Path)
+		if len(pathTokens) == 0 || len(pathTokens) > len(tokens) {
+			continue
+		}
+		if !slices.Equal(pathTokens, tokens[:len(pathTokens)]) {
+			continue
+		}
+		if len(pathTokens) > bestLen {
+			best = spec
+			bestLen = len(pathTokens)
+		}
+	}
+	if bestLen == 0 {
+		return CommandSpec{}, false
+	}
+	return best, true
 }
 
 func helpCompletionTopics() []Suggestion {

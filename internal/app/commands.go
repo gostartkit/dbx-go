@@ -29,11 +29,129 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 	if errors.Is(err, errREPLExit) {
 		return true, nil
 	}
+	if err != nil {
+		return false, formatREPLError(line, err)
+	}
 	return false, err
 }
 
 func (a *Application) handleHelp(topic string) error {
 	return printHelpTopic(a.prompt, topic)
+}
+
+func formatREPLError(line string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	message := replErrorMessage(line, err)
+	if message == "" {
+		return err
+	}
+	return fmt.Errorf("%s", message)
+}
+
+func replErrorMessage(line string, err error) string {
+	lower := strings.ToLower(err.Error())
+	info := util.DescribeError(err)
+	root := rootErrorString(err)
+
+	switch {
+	case strings.Contains(lower, "unknown command"):
+		return trimCommandPrefix(root)
+	case strings.Contains(lower, "missing required argument:") || strings.Contains(lower, "too many arguments:") || strings.HasPrefix(strings.ToLower(root), "usage:"):
+		return buildUsageError(line, root)
+	case strings.Contains(strings.ToLower(root), "database not found:"):
+		name := strings.TrimSpace(strings.TrimPrefix(root, "database not found:"))
+		if name == "" {
+			name = lastField(line)
+		}
+		return fmt.Sprintf("Database %q not found.\nNext: show databases", name)
+	case info != nil && info.Code == "TEMPLATE_NOT_FOUND":
+		return "Template not found.\nNext: show templates"
+	case info != nil && info.Code == "CONFIG_NOT_FOUND" && refersToConnectionCommand(line):
+		name := lastField(line)
+		if name == "" {
+			return "Connection not found.\nNext: show connections"
+		}
+		return fmt.Sprintf("Connection %q not found.\nNext: show connections", name)
+	}
+
+	if strings.HasPrefix(lower, "validation error:") {
+		return root
+	}
+	return err.Error()
+}
+
+func rootErrorString(err error) string {
+	current := err
+	for {
+		layerErr, ok := current.(*util.LayerError)
+		if !ok || layerErr.Err == nil {
+			break
+		}
+		current = layerErr.Err
+	}
+	if current == nil {
+		return ""
+	}
+	return strings.TrimSpace(current.Error())
+}
+
+func trimCommandPrefix(message string) string {
+	message = strings.TrimSpace(message)
+	message = strings.TrimPrefix(message, "not found, ")
+	return message
+}
+
+func buildUsageError(line string, root string) string {
+	root = strings.TrimSpace(root)
+	if strings.HasPrefix(strings.ToLower(root), "usage:") {
+		return capitalizeFirst(root)
+	}
+
+	usage := usageForLine(line)
+	if usage == "" {
+		return root
+	}
+	return fmt.Sprintf("%s\nUsage: %s", root, usage)
+}
+
+func capitalizeFirst(value string) string {
+	if value == "" {
+		return ""
+	}
+	return strings.ToUpper(value[:1]) + value[1:]
+}
+
+func usageForLine(line string) string {
+	spec, ok := commandSpecForInput(line)
+	if !ok {
+		return ""
+	}
+	usage := strings.TrimSpace(spec.UsageLine)
+	usage = strings.TrimPrefix(usage, "dbx ")
+	return usage
+}
+
+func refersToConnectionCommand(line string) bool {
+	switch {
+	case strings.HasPrefix(line, "connect "):
+		return true
+	case strings.HasPrefix(line, "show connection "):
+		return true
+	case strings.HasPrefix(line, "drop connection "):
+		return true
+	}
+	return false
+}
+
+func lastField(line string) string {
+	fields := strings.Fields(strings.TrimSpace(line))
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[len(fields)-1]
 }
 
 func (a *Application) handleConnect(ctx context.Context) error {

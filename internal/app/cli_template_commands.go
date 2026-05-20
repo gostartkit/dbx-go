@@ -27,6 +27,7 @@ func (b *cliBuilder) runGroupCommand() *cmd.Command {
 		Name:      "run",
 		UsageLine: "dbx run <subcommand>",
 		Short:     "Run workflows",
+		Long:      helpEntries["run"].body,
 		SubCommands: []*cmd.Command{
 			b.runTemplateCommand(),
 			b.runSQLCommand(),

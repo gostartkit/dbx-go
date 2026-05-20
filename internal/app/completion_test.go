@@ -57,6 +57,12 @@ func TestCalculateCompletionDynamicValues(t *testing.T) {
 		Templates: []string{"readonly_user", "create_database_with_user"},
 	})
 	assertSuggestionsContainAll(t, suggestionValues(templateCompletion), []string{"create_database_with_user", "readonly_user"})
+
+	createCompletion := calculateCompletion("create ", CompletionContext{})
+	assertSuggestionsContainAll(t, suggestionValues(createCompletion), []string{"connection", "database", "user"})
+
+	dropCompletion := calculateCompletion("drop ", CompletionContext{})
+	assertSuggestionsContainAll(t, suggestionValues(dropCompletion), []string{"connection", "database", "user"})
 }
 
 func TestCalculateCompletionHelpTopics(t *testing.T) {

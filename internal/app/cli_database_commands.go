@@ -30,6 +30,7 @@ func (b *cliBuilder) createGroupCommand() *cmd.Command {
 		Name:      "create",
 		UsageLine: "dbx create <subcommand>",
 		Short:     "Create database resources",
+		Long:      helpEntries["create"].body,
 		SubCommands: []*cmd.Command{
 			b.createConnectionCommand(),
 			b.createDatabaseCommand(),
@@ -43,6 +44,7 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 		Name:      "show",
 		UsageLine: "dbx show <subcommand>",
 		Short:     "Show resources",
+		Long:      helpEntries["show"].body,
 		SubCommands: []*cmd.Command{
 			b.showConnectionCommand(),
 			b.showConnectionsCommand(),
@@ -62,6 +64,7 @@ func (b *cliBuilder) dropGroupCommand() *cmd.Command {
 		Name:      "drop",
 		UsageLine: "dbx drop <subcommand>",
 		Short:     "Drop resources",
+		Long:      helpEntries["drop"].body,
 		SubCommands: []*cmd.Command{
 			b.dropConnectionCommand(),
 			b.dropDatabaseCommand(),
@@ -168,6 +171,7 @@ func (b *cliBuilder) useGroupCommand() *cmd.Command {
 		Name:      "use",
 		UsageLine: "dbx use <subcommand>",
 		Short:     "Select session-scoped resources",
+		Long:      helpEntries["use"].body,
 		SubCommands: []*cmd.Command{
 			b.useDatabaseCommand(),
 		},

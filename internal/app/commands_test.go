@@ -133,6 +133,9 @@ func TestREPLHelpCommandHasOutput(t *testing.T) {
 	if !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "Available Commands:") {
 		t.Fatalf("help output missing expected sections: %q", out.String())
 	}
+	if !strings.Contains(out.String(), "connect\n  connect prod") || !strings.Contains(out.String(), "run\n  run template seed-users --validate") {
+		t.Fatalf("help output missing grouped examples: %q", out.String())
+	}
 }
 
 func TestREPLHelpTopicsHaveOutput(t *testing.T) {
@@ -159,5 +162,53 @@ func TestREPLHelpTopicsHaveOutput(t *testing.T) {
 		if !strings.Contains(out.String(), tc.want) {
 			t.Fatalf("help output for %q missing %q: %q", tc.line, tc.want, out.String())
 		}
+	}
+}
+
+func TestREPLUnknownCommandSuggestsClosestMatch(t *testing.T) {
+	t.Parallel()
+
+	app, err := NewWithOptions(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, Options{ConfigDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	_, runErr := app.handleLine(context.Background(), "cnnect prod")
+	if runErr == nil || !strings.Contains(runErr.Error(), `Did you mean connect?`) {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+}
+
+func TestREPLMissingArgumentShowsUsage(t *testing.T) {
+	t.Parallel()
+
+	app, err := NewWithOptions(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, Options{ConfigDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	_, runErr := app.handleLine(context.Background(), "show rows")
+	if runErr == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(runErr.Error(), "missing required argument: table") || !strings.Contains(runErr.Error(), "Usage: show rows <table> [--limit n]") {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+}
+
+func TestREPLMissingConnectionSuggestsNextStep(t *testing.T) {
+	t.Parallel()
+
+	app, err := NewWithOptions(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, Options{ConfigDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	_, runErr := app.handleLine(context.Background(), "show connection prod")
+	if runErr == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(runErr.Error(), `Connection "prod" not found.`) || !strings.Contains(runErr.Error(), "Next: show connections") {
+		t.Fatalf("unexpected error: %v", runErr)
 	}
 }

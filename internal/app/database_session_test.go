@@ -290,14 +290,27 @@ func TestPromptLabelFormatsDatabaseSelection(t *testing.T) {
 		t.Fatalf("promptLabel() = %q", got)
 	}
 
+	app.dryRun = true
+	if got := app.promptLabel(); got != "dbx[dry-run]> " {
+		t.Fatalf("promptLabel() with dry-run = %q", got)
+	}
+
+	app.dryRun = false
 	app.session.Connection = sampleConnection("prod")
-	if got := app.promptLabel(); got != "dbx(prod)> " {
+	if got := app.promptLabel(); got != "dbx[prod][disconnected]> " {
 		t.Fatalf("promptLabel() with connection = %q", got)
 	}
 
+	app.session.DB = &sql.DB{}
 	app.session.Database = "app_prod"
-	if got := app.promptLabel(); got != "dbx(prod/app_prod)> " {
+	if got := app.promptLabel(); got != "dbx[prod/app_prod]> " {
 		t.Fatalf("promptLabel() with database = %q", got)
+	}
+
+	app.session.DB = nil
+	app.dryRun = true
+	if got := app.promptLabel(); got != "dbx[prod/app_prod][disconnected][dry-run]> " {
+		t.Fatalf("promptLabel() with disconnected dry-run = %q", got)
 	}
 }
 

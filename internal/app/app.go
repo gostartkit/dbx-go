@@ -172,13 +172,21 @@ func (a *Application) maybeReconnect(ctx context.Context) error {
 }
 
 func (a *Application) promptLabel() string {
-	if a.session == nil || a.session.Connection == nil {
-		return "dbx> "
+	label := "dbx"
+	if a.session != nil && a.session.Connection != nil {
+		scope := a.session.Connection.Name
+		if strings.TrimSpace(a.session.Database) != "" {
+			scope += "/" + a.session.Database
+		}
+		label += "[" + scope + "]"
+		if a.session.DB == nil {
+			label += "[disconnected]"
+		}
 	}
-	if strings.TrimSpace(a.session.Database) != "" {
-		return fmt.Sprintf("dbx(%s/%s)> ", a.session.Connection.Name, a.session.Database)
+	if a.dryRun {
+		label += "[dry-run]"
 	}
-	return fmt.Sprintf("dbx(%s)> ", a.session.Connection.Name)
+	return label + "> "
 }
 
 func (a *Application) restoreSessionDatabase(ctx context.Context) error {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"pkg.gostartkit.com/cmd"
@@ -143,15 +144,15 @@ func (b *cliBuilder) setGlobalFlags(f *cmd.FlagSet) {
 	f.SetEnum("format", "text", "json")
 }
 
-func (b *cliBuilder) runRoot(ctx context.Context, _ *cmd.Command, args []string) error {
+func (b *cliBuilder) runRoot(ctx context.Context, root *cmd.Command, args []string) error {
 	if b.mode == ModeREPL {
 		if len(args) > 0 {
-			return util.WrapLayer("validation", "command", fmt.Errorf("unknown command %q", args[0]))
+			return util.WrapLayer("validation", "command", unknownCommandError(args[0], root.SubCommands))
 		}
 		return nil
 	}
 	if len(args) > 0 {
-		return util.WrapLayer("validation", "command", fmt.Errorf("unknown command %q", args[0]))
+		return util.WrapLayer("validation", "command", unknownCommandError(args[0], root.SubCommands))
 	}
 	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
 	if err != nil {
@@ -161,6 +162,110 @@ func (b *cliBuilder) runRoot(ctx context.Context, _ *cmd.Command, args []string)
 
 	application.dryRun = b.globals.DryRun
 	return application.Run(ctx)
+}
+
+func unknownCommandError(name string, commands []*cmd.Command) error {
+	suggestions := suggestCommands(name, commands)
+	if len(suggestions) == 0 {
+		return fmt.Errorf("unknown command %q", name)
+	}
+	if len(suggestions) == 1 {
+		return fmt.Errorf("unknown command %q. Did you mean %s?", name, suggestions[0])
+	}
+	return fmt.Errorf("unknown command %q. Did you mean %s?", name, strings.Join(suggestions, " or "))
+}
+
+func suggestCommands(name string, commands []*cmd.Command) []string {
+	type candidate struct {
+		name     string
+		distance int
+	}
+
+	seen := map[string]struct{}{}
+	candidates := make([]candidate, 0, len(commands))
+	for _, command := range commands {
+		if command == nil || command.Hidden {
+			continue
+		}
+		candidateName := strings.TrimSpace(command.Name)
+		if candidateName == "" {
+			continue
+		}
+		if _, ok := seen[candidateName]; ok {
+			continue
+		}
+		seen[candidateName] = struct{}{}
+
+		distance := editDistance(strings.ToLower(name), strings.ToLower(candidateName))
+		if strings.HasPrefix(strings.ToLower(candidateName), strings.ToLower(name)) || strings.HasPrefix(strings.ToLower(name), strings.ToLower(candidateName)) {
+			distance = 0
+		}
+		if distance > 2 {
+			continue
+		}
+		candidates = append(candidates, candidate{name: candidateName, distance: distance})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].distance != candidates[j].distance {
+			return candidates[i].distance < candidates[j].distance
+		}
+		return candidates[i].name < candidates[j].name
+	})
+
+	limit := 3
+	if len(candidates) < limit {
+		limit = len(candidates)
+	}
+	results := make([]string, 0, limit)
+	for _, candidate := range candidates[:limit] {
+		results = append(results, candidate.name)
+	}
+	return results
+}
+
+func editDistance(a string, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "" {
+		return len(b)
+	}
+	if b == "" {
+		return len(a)
+	}
+
+	prev := make([]int, len(b)+1)
+	curr := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		curr[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			curr[j] = minInt(
+				prev[j]+1,
+				curr[j-1]+1,
+				prev[j-1]+cost,
+			)
+		}
+		prev, curr = curr, prev
+	}
+	return prev[len(b)]
+}
+
+func minInt(values ...int) int {
+	best := values[0]
+	for _, value := range values[1:] {
+		if value < best {
+			best = value
+		}
+	}
+	return best
 }
 
 func (b *cliBuilder) withApplication(ctx context.Context, fn func(application *Application) error) error {

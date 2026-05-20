@@ -224,6 +224,7 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 		Name:      "doctor",
 		UsageLine: "dbx doctor",
 		Short:     "Inspect the selected connection statically",
+		Long:      helpEntries["doctor"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if len(args) != 0 {
 				return util.WrapLayer("validation", "doctor", fmt.Errorf("usage: dbx doctor"))
