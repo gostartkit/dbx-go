@@ -13,7 +13,7 @@ import (
 	"pkg.gostartkit.com/dbx/internal/config"
 )
 
-func TestHandleLineConnectionDoctorParsesName(t *testing.T) {
+func TestHandleLineRemovedDoctorConnectionCommandFails(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -36,26 +36,23 @@ func TestHandleLineConnectionDoctorParsesName(t *testing.T) {
 	}
 
 	exit, err := app.handleLine(context.Background(), "doctor connection prod")
-	if err != nil {
-		t.Fatalf("handleLine returned error: %v", err)
+	if err == nil {
+		t.Fatalf("expected removed command failure")
 	}
 	if exit {
 		t.Fatalf("expected REPL to continue")
 	}
 	if connector.openCalls != 0 {
-		t.Fatalf("doctor should not open network connections")
-	}
-	if !strings.Contains(out.String(), "Connection doctor: prod") {
-		t.Fatalf("unexpected output: %q", out.String())
+		t.Fatalf("removed command should not open network connections")
 	}
 }
 
-func TestHelpConnectionIncludesDoctor(t *testing.T) {
+func TestHelpConnectionOmitsDoctorConnection(t *testing.T) {
 	t.Parallel()
 
 	entry := helpEntries["connection"].body
-	if !strings.Contains(entry, "doctor connection") {
-		t.Fatalf("connection help missing doctor command: %q", entry)
+	if strings.Contains(entry, "doctor connection") {
+		t.Fatalf("connection help unexpectedly mentions removed command: %q", entry)
 	}
 }
 
@@ -534,7 +531,7 @@ func TestCLIConnectionDoctorParsesName(t *testing.T) {
 		ConfigDir: root,
 		Connector: connector,
 	})
-	err := app.Run(context.Background(), []string{"doctor", "connection", "prod", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"doctor", "--connection", "prod", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -567,7 +564,7 @@ func TestCLIConnectionDoctorJSON(t *testing.T) {
 	writeRawConnectionConfig(t, store, "prod", raw)
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"doctor", "connection", "prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"doctor", "--connection", "prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -607,7 +604,7 @@ func TestCLIConnectionDoctorJSONFailNonZero(t *testing.T) {
 	writeRawConnectionConfig(t, store, "prod", raw)
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"doctor", "connection", "prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"doctor", "--connection", "prod", "--format", "json", "--config-dir", root})
 	if err == nil {
 		t.Fatalf("expected non-zero failure")
 	}

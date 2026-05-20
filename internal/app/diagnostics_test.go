@@ -256,21 +256,21 @@ func TestHandleLineConnectionTestRequiresExplicitNameInSharedTree(t *testing.T) 
 	}
 }
 
-func TestDiagnosticsHelpConnectionIncludesDoctor(t *testing.T) {
+func TestDiagnosticsHelpConnectionOmitsDoctorConnection(t *testing.T) {
 	t.Parallel()
 
 	entry := helpEntries["connection"].body
-	if !strings.Contains(entry, "doctor connection") {
-		t.Fatalf("connection help missing doctor command: %q", entry)
+	if strings.Contains(entry, "doctor connection") {
+		t.Fatalf("connection help unexpectedly mentions removed command: %q", entry)
 	}
 }
 
-func TestHelpDoctorCommandMentionsConnection(t *testing.T) {
+func TestHelpDoctorCommandUsesSingleCommandForm(t *testing.T) {
 	t.Parallel()
 
 	entry := helpEntries["doctor"].body
-	if !strings.Contains(entry, "doctor connection <name>") {
-		t.Fatalf("doctor help missing connection usage: %q", entry)
+	if !strings.Contains(entry, "doctor") || strings.Contains(entry, "doctor connection") {
+		t.Fatalf("doctor help not contracted correctly: %q", entry)
 	}
 }
 

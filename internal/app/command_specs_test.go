@@ -20,7 +20,7 @@ func TestRootCommandSetMatchesShellSurface(t *testing.T) {
 		have[normalizeHelpTopic(command.Name)] = struct{}{}
 	}
 
-	want := []string{"connect", "use", "show", "describe", "create", "drop", "run", "doctor", "audit", "exit"}
+	want := []string{"connect", "use", "show", "create", "drop", "run", "doctor", "audit", "exit"}
 	if len(have) != len(want) {
 		t.Fatalf("root command count = %d, want %d (%v)", len(have), len(want), have)
 	}
@@ -70,9 +70,7 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"show connections",
 		"show connection",
 		"show templates",
-		"show template",
 		"show context",
-		"describe",
 		"create connection",
 		"create database",
 		"create user",
@@ -82,7 +80,6 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"run template",
 		"run sql",
 		"doctor",
-		"doctor connection",
 		"audit log",
 		"exit",
 	} {
@@ -110,6 +107,9 @@ func TestRemovedCommandPathsAreAbsent(t *testing.T) {
 		"edit connection",
 		"test connection",
 		"context",
+		"describe",
+		"show template",
+		"doctor connection",
 		"show users",
 		"show indexes",
 		"show foreign keys",
@@ -145,6 +145,9 @@ func TestRemovedCommandsReturnErrors(t *testing.T) {
 		"edit connection prod",
 		"test connection prod",
 		"context",
+		"describe users",
+		"show template readonly_user",
+		"doctor connection prod",
 	} {
 		if err := app.RunLine(context.Background(), line); err == nil {
 			t.Fatalf("expected removed command to fail: %q", line)
@@ -189,7 +192,7 @@ func TestHelpCompletionContainsFinalTopics(t *testing.T) {
 		have[suggestion.Value] = struct{}{}
 	}
 
-	for _, want := range []string{"doctor connection", "show templates", "run template", "show rows"} {
+	for _, want := range []string{"doctor", "show templates", "run template", "show rows"} {
 		if _, ok := have[want]; !ok {
 			t.Fatalf("missing help topic %q", want)
 		}

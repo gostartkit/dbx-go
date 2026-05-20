@@ -22,10 +22,6 @@ type showTemplatesFlags struct {
 	tag string
 }
 
-type templateDescribeFlags struct {
-	verbose bool
-}
-
 func (b *cliBuilder) runGroupCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "run",
@@ -90,32 +86,6 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) showTemplateCommand() *cmd.Command {
-	flags := &templateDescribeFlags{}
-	return &cmd.Command{
-		Name:        "template",
-		UsageLine:   "dbx show template <name> [flags]",
-		Short:       "Show a workflow template",
-		Long:        helpEntries["describe template"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true, Completion: b.completeTemplates}},
-		SetFlags: func(f *cmd.FlagSet) {
-			f.BoolVar(&flags.verbose, "verbose", false, "include redacted SQL preview", "")
-		},
-		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if b.mode == ModeREPL {
-				if len(args) != 1 {
-					return util.WrapLayer("validation", "show template", fmt.Errorf("usage: show template <name> [--verbose]"))
-				}
-				return b.application.handleDescribeTemplate(ctx, args[0], flags.verbose)
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "show template", fmt.Errorf("usage: dbx show template <name> [flags]"))
-			}
-			return b.runDescribeTemplate(ctx, args[0], flags)
-		},
-	}
-}
-
 func (b *cliBuilder) runTemplateCommand() *cmd.Command {
 	flags := &templateRunFlags{inputs: inputValues{}}
 	return &cmd.Command{
@@ -165,27 +135,6 @@ func (b *cliBuilder) runTemplateCommand() *cmd.Command {
 			})
 		},
 	}
-}
-
-func (b *cliBuilder) runDescribeTemplate(ctx context.Context, name string, flags *templateDescribeFlags) error {
-	return b.withAuditedApplication(ctx, auditMetadata{Command: "show template"}, func(application *Application, meta *auditMetadata) error {
-		cfg, err := application.templateScopeConfig(b.globals.Connection)
-		if err != nil {
-			return err
-		}
-		if cfg != nil && cfg.Name != "" {
-			meta.Connection = cfg.Name
-			meta.Mode = cfg.Mode
-		}
-		result, err := application.describeTemplateResult(cfg, name, flags.verbose)
-		if err != nil {
-			return err
-		}
-		return b.writeOutput(result, func() error {
-			application.printTemplateDescription(result, flags.verbose)
-			return nil
-		})
-	})
 }
 
 func (b *cliBuilder) runTemplateWorkflow(ctx context.Context, application *Application, name string, flags *templateRunFlags, meta *auditMetadata) error {

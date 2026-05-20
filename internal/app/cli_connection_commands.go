@@ -222,16 +222,16 @@ func (b *cliBuilder) testConnectionCommand() *cmd.Command {
 func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "doctor",
-		UsageLine: "dbx doctor <subcommand>",
-		Short:     "Inspect configuration statically",
+		UsageLine: "dbx doctor",
+		Short:     "Inspect the selected connection statically",
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if len(args) != 0 {
-				return util.WrapLayer("validation", "doctor", fmt.Errorf("usage: dbx doctor [connection <name>]"))
+				return util.WrapLayer("validation", "doctor", fmt.Errorf("usage: dbx doctor"))
 			}
 			if b.mode == ModeREPL {
 				return b.application.handleConnectionDoctor(ctx, "")
 			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "doctor connection"}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "doctor"}, func(application *Application, meta *auditMetadata) error {
 				name := strings.TrimSpace(b.globals.Connection)
 				if name == "" {
 					sessionFile, err := application.store.LoadSession()
@@ -241,7 +241,7 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 					name = strings.TrimSpace(sessionFile.CurrentConnection)
 				}
 				if name == "" {
-					return util.WrapLayer("validation", "doctor", fmt.Errorf("no connection selected; use --connection or doctor connection <name>"))
+					return util.WrapLayer("validation", "doctor", fmt.Errorf("no connection selected; use --connection or connect <name> first"))
 				}
 				if cfg, err := application.store.LoadConnection(name); err == nil {
 					meta.Connection = cfg.Name
@@ -267,18 +267,7 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 				return nil
 			})
 		},
-		SubCommands: []*cmd.Command{
-			b.doctorConnectionCommand(),
-		},
 	}
-}
-
-func (b *cliBuilder) doctorConnectionCommand() *cmd.Command {
-	command := b.connectionDoctorCommand()
-	command.Name = "connection"
-	command.UsageLine = "dbx doctor connection <name>"
-	command.Short = "Inspect a saved connection statically"
-	return command
 }
 
 func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
@@ -627,53 +616,6 @@ func (b *cliBuilder) connectionTestCommand() *cmd.Command {
 					failed := false
 					meta.Success = &failed
 					return util.MarkOutputHandled(diagErr)
-				}
-				succeeded := true
-				meta.Success = &succeeded
-				return nil
-			})
-		},
-	}
-}
-
-func (b *cliBuilder) connectionDoctorCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:        "doctor",
-		UsageLine:   "dbx connection doctor <name>",
-		Short:       "Inspect a saved connection statically",
-		Long:        helpEntries["connection doctor"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
-		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if b.mode == ModeREPL {
-				switch len(args) {
-				case 1:
-					return b.application.handleConnectionDoctor(ctx, args[0])
-				default:
-					return util.WrapLayer("validation", "doctor connection", fmt.Errorf("usage: doctor connection <name>"))
-				}
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "doctor connection", fmt.Errorf("usage: dbx doctor connection <name>"))
-			}
-
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "doctor connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
-				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
-					meta.Mode = cfg.Mode
-				}
-				result, doctorErr := application.doctorConnection(args[0])
-				if doctorErr != nil {
-					result.Error = errorResult(doctorErr)
-				}
-				if writeErr := b.writeOutput(result, func() error {
-					application.printDoctorResult(result)
-					return nil
-				}); writeErr != nil {
-					return writeErr
-				}
-				if doctorErr != nil {
-					failed := false
-					meta.Success = &failed
-					return util.MarkOutputHandled(doctorErr)
 				}
 				succeeded := true
 				meta.Success = &succeeded

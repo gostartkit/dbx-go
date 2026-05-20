@@ -21,18 +21,15 @@ help <command>        Show help for a command
 connect <name>        Connect to a saved connection
 use database <name>   Select the current database
 
-show connections      Show saved connections
+show connections       Show saved connections
 show connection <name> Show one saved connection
-show context          Show the current operational context
-show databases        Show databases on the active connection
-show tables           Show tables in the selected database
-show table <name>     Show table details
-show columns <table>  Show table columns
-show rows <table>     Show table rows
-show templates        Show available templates
-show template <name>  Show one template
-
-describe <table>      Describe a table
+show context           Show the current operational context
+show databases         Show databases on the active connection
+show tables            Show tables in the selected database
+show table <name>      Show table details
+show columns <table>   Show table columns
+show rows <table>      Show table rows
+show templates         Show available templates
 
 create connection <name> Create or overwrite a saved connection
 create database <name> Create a database
@@ -46,7 +43,6 @@ run template <name>   Run or validate a template
 run sql <sql-or-file> Run raw SQL or a SQL file
 
 doctor                Inspect the selected connection
-doctor connection <name> Inspect a saved connection statically
 
 audit log             Show audit history
 exit                  Exit the shell`),
@@ -76,8 +72,7 @@ Commands:
   show connections
   show connection <name>
   create connection <name>
-  drop connection <name>
-  doctor connection <name>`),
+  drop connection <name>`),
 		},
 		"connection create": {
 			title: "create connection",
@@ -89,14 +84,6 @@ This command writes:
 
 Usage:
   create connection <name> [--overwrite] [flags]`),
-		},
-		"connection edit": {
-			title: "edit connection",
-			body: strings.TrimSpace(`
-Edit a saved connection in place.
-
-Usage:
-  edit connection <name> [flags]`),
 		},
 		"connection delete": {
 			title: "drop connection",
@@ -113,35 +100,6 @@ Show a saved connection with secrets redacted.
 
 Usage:
   show connection <name>`),
-		},
-		"connection test": {
-			title: "test connection",
-			body: strings.TrimSpace(`
-Test a saved connection and report each layer.
-
-Checks:
-  config
-  proxy when required
-  ssh when required
-  mysql
-
-Usage:
-  test connection <name> [--verbose]`),
-		},
-		"connection doctor": {
-			title: "doctor connection",
-			body: strings.TrimSpace(`
-Inspect a saved connection statically without opening the network path.
-
-Checks:
-  config structure
-  password sources
-  proxy URL shape
-  SSH auth settings
-  known_hosts presence
-
-Usage:
-  doctor connection <name>`),
 		},
 		"audit log": {
 			title: "audit log",
@@ -192,30 +150,6 @@ Drop a MySQL user from the resolved template.
 Usage:
   drop user <name> [flags]`),
 		},
-		"count rows": {
-			title: "count rows",
-			body: strings.TrimSpace(`
-Count rows in a table.
-
-Usage:
-  count rows <table>`),
-		},
-		"peek rows": {
-			title: "peek rows",
-			body: strings.TrimSpace(`
-Peek a bounded number of rows from a table.
-
-Usage:
-  peek rows <table> [--limit value]`),
-		},
-		"sample rows": {
-			title: "sample rows",
-			body: strings.TrimSpace(`
-Sample a bounded number of rows from a table.
-
-Usage:
-  sample rows <table> [--limit value]`),
-		},
 		"show databases": {
 			title: "show databases",
 			body: strings.TrimSpace(`
@@ -248,94 +182,6 @@ Show columns for a table in the selected database.
 Usage:
   show columns <table>`),
 		},
-		"show foreign keys": {
-			title: "show foreign keys",
-			body: strings.TrimSpace(`
-Show foreign keys for a table in the selected database.
-
-Usage:
-  show foreign keys <table>`),
-		},
-		"show indexes": {
-			title: "show indexes",
-			body: strings.TrimSpace(`
-Show indexes for a table in the selected database.
-
-Usage:
-  show indexes <table>`),
-		},
-		"show create table": {
-			title: "show create table",
-			body: strings.TrimSpace(`
-Show CREATE TABLE for a table in the selected database.
-
-Usage:
-  show create table <table>`),
-		},
-		"show table status": {
-			title: "show table status",
-			body: strings.TrimSpace(`
-Show table status for one table or all tables.
-
-Usage:
-  show table status [table]`),
-		},
-		"show grants": {
-			title: "show grants",
-			body: strings.TrimSpace(`
-Show grants for a MySQL user.
-
-Usage:
-  show grants <user> [host]`),
-		},
-		"show processlist": {
-			title: "show processlist",
-			body: strings.TrimSpace(`
-Show the active MySQL processlist.
-
-Usage:
-  show processlist`),
-		},
-		"show triggers": {
-			title: "show triggers",
-			body: strings.TrimSpace(`
-Show triggers in the selected database.
-
-Usage:
-  show triggers`),
-		},
-		"show variables": {
-			title: "show variables",
-			body: strings.TrimSpace(`
-Show MySQL system variables.
-
-Usage:
-  show variables [pattern]`),
-		},
-		"show views": {
-			title: "show views",
-			body: strings.TrimSpace(`
-Show views in the selected database.
-
-Usage:
-  show views`),
-		},
-		"show users": {
-			title: "show users",
-			body: strings.TrimSpace(`
-Show MySQL users.
-
-Usage:
-  show users`),
-		},
-		"describe": {
-			title: "describe",
-			body: strings.TrimSpace(`
-Describe a table in the selected database.
-
-Usage:
-  describe <table>`),
-		},
 		"show templates": {
 			title: "show templates",
 			body: strings.TrimSpace(`
@@ -343,14 +189,6 @@ Show resolved workflow templates.
 
 Usage:
   show templates [query] [--tag value]`),
-		},
-		"describe template": {
-			title: "show template",
-			body: strings.TrimSpace(`
-Show a resolved workflow template by name.
-
-Usage:
-  show template <name> [--verbose]`),
 		},
 		"template run": {
 			title: "run template",
@@ -369,30 +207,6 @@ Usage:
   run sql "SELECT 1"
   run sql @schema.sql
   run sql schema.sql`),
-		},
-		"template validate": {
-			title: "validate template",
-			body: strings.TrimSpace(`
-Validate a workflow template definition.
-
-Usage:
-  validate template <name>`),
-		},
-		"truncate table": {
-			title: "truncate table",
-			body: strings.TrimSpace(`
-Truncate a table in the selected database.
-
-Usage:
-  truncate table <table>`),
-		},
-		"rename table": {
-			title: "rename table",
-			body: strings.TrimSpace(`
-Rename a table in the selected database.
-
-Usage:
-  rename table <from> <to>`),
 		},
 		"use": {
 			title: "use database",
@@ -413,11 +227,17 @@ Usage:
 		"doctor": {
 			title: "doctor",
 			body: strings.TrimSpace(`
-Inspect the current connection, or pick one when running interactively.
+Inspect the selected connection statically without opening the network path.
+
+Checks:
+  config structure
+  password sources
+  proxy URL shape
+  SSH auth settings
+  known_hosts presence
 
 Usage:
-  doctor
-  doctor connection <name>`),
+  doctor`),
 		},
 		"status": {
 			title: "status",
@@ -425,7 +245,7 @@ Usage:
 Legacy status summary for internal compatibility.
 
 Prefer:
-  context`),
+  show context`),
 		},
 		"exit": {
 			title: "exit",
@@ -436,19 +256,12 @@ Aliases:
   quit
   q`),
 		},
-		"clear": {
-			title: "clear",
-			body: strings.TrimSpace(`
-Clear terminal output.`),
-		},
 	}
 
 	entries["show connections"] = entries["connections"]
 	entries["create connection"] = entries["connection create"]
 	entries["drop connection"] = entries["connection delete"]
 	entries["show connection"] = entries["connection show"]
-	entries["doctor connection"] = entries["connection doctor"]
-	entries["show template"] = entries["describe template"]
 	entries["run template"] = entries["template run"]
 	entries["use database"] = entries["use"]
 	entries["show context"] = entries["context"]

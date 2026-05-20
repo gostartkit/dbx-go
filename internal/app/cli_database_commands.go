@@ -51,7 +51,6 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 			b.showTableCommand(),
 			b.showColumnsCommand(),
 			b.showRowsCommand(),
-			b.showTemplateCommand(),
 			b.showTemplatesCommand(),
 			b.showContextCommand(),
 		},

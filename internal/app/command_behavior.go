@@ -13,9 +13,7 @@ var commandBehaviors = map[string]CommandBehavior{
 	"create connection": {Mutating: true, RequiresConfirmation: true},
 	"create database":   {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"create user":       {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
-	"describe table":    {ReadOnly: true},
 	"doctor":            {ReadOnly: true},
-	"doctor connection": {ReadOnly: true},
 	"drop connection":   {Mutating: true, RequiresConfirmation: true},
 	"drop database":     {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"drop user":         {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
@@ -30,7 +28,6 @@ var commandBehaviors = map[string]CommandBehavior{
 	"show rows":         {ReadOnly: true},
 	"show table":        {ReadOnly: true},
 	"show tables":       {ReadOnly: true},
-	"show template":     {ReadOnly: true},
 	"show templates":    {ReadOnly: true},
 	"use database":      {ReadOnly: true},
 }

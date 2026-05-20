@@ -16,8 +16,8 @@ import (
 )
 
 func (a *Application) handleConnectionDoctor(ctx context.Context, name string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "doctor connection"}, func(meta *auditMetadata) error {
-		selected, err := a.resolveConnectionNameForSelection(ctx, name, "doctor connection")
+	return a.auditCommand(ctx, auditMetadata{Command: "doctor"}, func(meta *auditMetadata) error {
+		selected, err := a.resolveConnectionNameForSelection(ctx, name, "doctor")
 		if err != nil {
 			return err
 		}
@@ -106,7 +106,7 @@ func (a *Application) doctorConnection(name string) (*DoctorResult, error) {
 	if result.OK {
 		return result, nil
 	}
-	return result, fmt.Errorf("doctor connection found static configuration issues")
+	return result, fmt.Errorf("doctor found static configuration issues")
 }
 
 func (a *Application) resolveConnectionNameForSelection(ctx context.Context, name string, action string) (string, error) {

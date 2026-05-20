@@ -229,7 +229,7 @@ func dynamicCompletionDescription(args []string, value string, ctx CompletionCon
 	}
 
 	switch strings.Join(args, " ") {
-	case "connect", "show connection", "edit connection", "drop connection", "test connection", "doctor connection":
+	case "connect", "show connection", "drop connection":
 		for _, connection := range ctx.Connections {
 			if connection.Name == value {
 				return strings.TrimSpace(connection.Driver + " " + connection.Mode)
@@ -241,11 +241,11 @@ func dynamicCompletionDescription(args []string, value string, ctx CompletionCon
 		}
 	case "show context":
 		return "context"
-	case "show template", "run template", "validate template":
+	case "run template":
 		if value != "" {
 			return "template"
 		}
-	case "show columns", "show rows", "show table", "describe":
+	case "show columns", "show rows", "show table":
 		if value != "" {
 			return "table"
 		}

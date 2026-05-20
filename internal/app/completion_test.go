@@ -13,7 +13,6 @@ func TestCalculateCompletionRootCommands(t *testing.T) {
 	assertSuggestionsContainAll(t, values, []string{
 		"connect",
 		"create",
-		"describe",
 		"doctor",
 		"drop",
 		"run",
@@ -63,14 +62,25 @@ func TestCalculateCompletionHelpTopics(t *testing.T) {
 	t.Parallel()
 
 	values := suggestionValues(calculateCompletion("help ", CompletionContext{}))
-	assertSuggestionsContainAll(t, values, []string{"doctor connection", "show templates", "run template", "show rows"})
+	assertSuggestionsContainAll(t, values, []string{"doctor", "show templates", "run template", "show rows"})
+	assertSuggestionsMissingAll(t, values, []string{"describe", "show template", "doctor connection"})
 }
 
 func TestCalculateCompletionOmitsRemovedCommands(t *testing.T) {
 	t.Parallel()
 
 	values := suggestionValues(calculateCompletion("", CompletionContext{}))
-	assertSuggestionsMissingAll(t, values, []string{"count", "peek", "sample", "truncate", "rename", "validate", "edit", "test", "context", "clear"})
+	assertSuggestionsMissingAll(t, values, []string{"count", "peek", "sample", "truncate", "rename", "validate", "edit", "test", "context", "clear", "describe"})
+}
+
+func TestCalculateCompletionOmitsRemovedSubcommands(t *testing.T) {
+	t.Parallel()
+
+	showValues := suggestionValues(calculateCompletion("show ", CompletionContext{}))
+	assertSuggestionsMissingAll(t, showValues, []string{"template"})
+
+	doctorValues := suggestionValues(calculateCompletion("doctor ", CompletionContext{}))
+	assertSuggestionsMissingAll(t, doctorValues, []string{"connection"})
 }
 
 func TestCalculateCompletionReplacementRanges(t *testing.T) {

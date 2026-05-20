@@ -236,30 +236,6 @@ func (b *cliBuilder) contextCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) describeCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:        "describe",
-		UsageLine:   "dbx describe <table>",
-		Short:       "Describe a table in the selected database",
-		Long:        helpEntries["describe"].body,
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
-		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if b.mode == ModeREPL {
-				if len(args) != 1 {
-					return util.WrapLayer("validation", "describe", fmt.Errorf("usage: describe <table>"))
-				}
-				return b.application.handleDescribeTable(ctx, args[0])
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "describe", fmt.Errorf("usage: dbx describe <table>"))
-			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "describe table", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
-				return b.runDescribeTable(ctx, application, args[0], meta)
-			})
-		},
-	}
-}
-
 func (b *cliBuilder) runShowTables(ctx context.Context, application *Application, meta *auditMetadata) error {
 	cfg, database, err := b.resolveConnectionAndDatabase(ctx, application, "show tables")
 	if err != nil {

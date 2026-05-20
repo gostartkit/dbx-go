@@ -162,7 +162,7 @@ func TestDescribeTemplateTextAndVerboseRedaction(t *testing.T) {
 	}
 }
 
-func TestDescribeTemplateJSONOutput(t *testing.T) {
+func TestCLIShowTemplateCommandRemoved(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -180,19 +180,11 @@ func TestDescribeTemplateJSONOutput(t *testing.T) {
 
 	app, stdout, stderr := newCLIApp(t, "", root)
 	err := app.Run(context.Background(), []string{"show", "template", "readonly_user", "--format", "json", "--config-dir", root})
-	if err != nil {
-		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	if err == nil {
+		t.Fatalf("expected removed command failure")
 	}
-	if strings.Contains(stdout.String(), "{{password}}") {
-		t.Fatalf("unexpected raw SQL in default JSON output: %q", stdout.String())
-	}
-	var result TemplateDescriptionResult
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
-	}
-	if result.Name != "readonly_user" || result.Scope != "global" {
-		t.Fatalf("unexpected result: %+v", result)
-	}
+	_ = stdout
+	_ = stderr
 }
 
 func TestTemplateRunPreviewParsesInputsAndRedactsSecrets(t *testing.T) {

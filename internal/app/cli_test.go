@@ -408,7 +408,7 @@ func TestCLIDoctorConnectionJSONOutput(t *testing.T) {
 		ConfigDir: root,
 		Connector: connector,
 	})
-	err := app.Run(context.Background(), []string{"doctor", "connection", "prod_proxy", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"doctor", "--connection", "prod_proxy", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}

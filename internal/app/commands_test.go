@@ -99,12 +99,8 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 	}
 
 	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "show template"); err != nil {
-		t.Fatalf("printHelpTopic returned error: %v", err)
-	}
-	joined = strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "Show a resolved workflow template by name.") {
-		t.Fatalf("help output missing describe template text: %q", joined)
+	if err := printHelpTopic(&prompt, "show template"); err == nil {
+		t.Fatalf("expected removed help topic to fail")
 	}
 
 	prompt.lines = nil
