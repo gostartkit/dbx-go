@@ -336,7 +336,6 @@ create db     -> create database
 drop db       -> drop database
 list users    -> show users
 show user accounts -> show users
-describe      -> describe
 desc table    -> describe table
 ctx           -> context
 test conn     -> connection test
@@ -351,7 +350,7 @@ Use `help aliases` inside the REPL to display the alias list.
 
 Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, `show users`, `show templates`, `describe template`, and `template validate`.
 
-Read-only schema, table, and row inspection commands such as `show columns`, `show foreign keys`, `show create table`, `show table status`, `show triggers`, `show views`, `count rows`, `peek rows`, and `sample rows` also run immediately without confirmation.
+Read-only schema, table, row, and operational inspection commands such as `show columns`, `show foreign keys`, `show create table`, `show table status`, `show processlist`, `show variables`, `show triggers`, `show views`, `count rows`, `peek rows`, and `sample rows` also run immediately without confirmation.
 
 Mutating commands require confirmation in the REPL unless dry-run is active. `truncate table` requires typing the table name in the REPL before execution. `template run` also requires confirmation unless preview or dry-run is active. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
 
@@ -1450,7 +1449,7 @@ connect prod
 ## Security Notes
 
 - User-facing workflows never require raw SQL input.
-- Database identifiers are validated against `[a-zA-Z_][a-zA-Z0-9_]*`.
+- Identifier validation is type-specific: internal identifiers use `[a-zA-Z_][a-zA-Z0-9_]*`, while database names, table names, and MySQL usernames accept letters, numbers, `_`, and `-`.
 - Password prompts are hidden when stdin is a terminal.
 - Secret template values are redacted from previews.
 - `type: "secret"` and legacy `secret: true` inputs are both redacted.
@@ -1465,6 +1464,8 @@ connect prod
 - `connection doctor` only performs static `known_hosts` checks against plain host entries; it does not verify hashed entries or make network calls.
 
 ## Developer Workflow
+
+For local verification before opening a change, prefer `make check`. It runs formatting checks, `go vet`, `go test ./...`, and `go build ./...` in one step.
 
 ```bash
 make fmt
