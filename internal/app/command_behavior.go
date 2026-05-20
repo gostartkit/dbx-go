@@ -26,19 +26,23 @@ var commandBehaviors = map[string]CommandBehavior{
 	"help":               {ReadOnly: true},
 	"list databases":     {ReadOnly: true},
 	"list users":         {ReadOnly: true},
+	"rename table":       {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"show databases":     {ReadOnly: true},
+	"show create table":  {ReadOnly: true},
 	"show grants":        {ReadOnly: true},
 	"show index":         {ReadOnly: true},
 	"show indexes":       {ReadOnly: true},
 	"show dbs":           {ReadOnly: true},
 	"show processlist":   {ReadOnly: true},
 	"show processes":     {ReadOnly: true},
+	"show table status":  {ReadOnly: true},
 	"show user accounts": {ReadOnly: true},
 	"show tables":        {ReadOnly: true},
 	"show users":         {ReadOnly: true},
 	"show variables":     {ReadOnly: true},
 	"show vars":          {ReadOnly: true},
 	"status":             {ReadOnly: true},
+	"truncate table":     {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 }
 
 func behaviorForCommand(command string) CommandBehavior {

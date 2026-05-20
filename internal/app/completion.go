@@ -70,12 +70,16 @@ var rootSuggestions = []Suggestion{
 	{Value: "list databases", Description: "alias for show databases", Category: "alias"},
 	{Value: "show tables", Description: "list tables in current database", Category: "command"},
 	{Value: "show indexes", Description: "show indexes for a table", Category: "command"},
+	{Value: "show create table", Description: "show CREATE TABLE for a table", Category: "command"},
+	{Value: "show table status", Description: "show compact table status", Category: "command"},
 	{Value: "show users", Description: "list MySQL users", Category: "command"},
 	{Value: "show grants", Description: "show grants for a MySQL user", Category: "command"},
 	{Value: "show processlist", Description: "show the active MySQL processlist", Category: "command"},
 	{Value: "show variables", Description: "show MySQL system variables", Category: "command"},
 	{Value: "drop database", Description: "drop a database", Category: "command"},
 	{Value: "drop user", Description: "drop a MySQL user", Category: "command"},
+	{Value: "truncate table", Description: "delete all rows from a table", Category: "command"},
+	{Value: "rename table", Description: "rename a table", Category: "command"},
 	{Value: "describe", Description: "describe a table", Category: "command"},
 	{Value: "use", Description: "select the current database", Category: "command"},
 	{Value: "status", Description: "show session status", Category: "command"},
@@ -107,8 +111,12 @@ func newCompletionEngine() completionEngine {
 			completionProviderFunc(completeUseDatabases),
 			completionProviderFunc(completeShowGrantsUsers),
 			completionProviderFunc(completeShowIndexesTables),
+			completionProviderFunc(completeShowCreateTables),
+			completionProviderFunc(completeShowTableStatusTables),
 			completionProviderFunc(completeShowVariablesPatterns),
 			completionProviderFunc(completeDropUsers),
+			completionProviderFunc(completeRenameTables),
+			completionProviderFunc(completeTruncateTables),
 			completionProviderFunc(completeDescribeTables),
 			completionProviderFunc(completeShowTables),
 			completionProviderFunc(completeCreateDropShowListHelpAuditTree),
@@ -370,6 +378,54 @@ func completeShowIndexesTables(ctx CompletionContext, req completionRequest) []S
 	return nil
 }
 
+func completeShowCreateTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "show" {
+		return nil
+	}
+	if len(req.Fields) == 2 && !req.TrailingSpace && req.Fields[1] == "create" {
+		return []Suggestion{{Value: "create", Description: "show CREATE statements", Category: "subcommand"}}
+	}
+	if len(req.Fields) == 2 && req.TrailingSpace && req.Fields[1] == "create" {
+		return []Suggestion{{Value: "table", Description: "show CREATE TABLE for a table", Category: "subcommand"}}
+	}
+	if len(req.Fields) == 3 && req.Fields[1] == "create" {
+		if !req.TrailingSpace && req.Fields[2] == "table" {
+			return []Suggestion{{Value: "table", Description: "show CREATE TABLE for a table", Category: "subcommand"}}
+		}
+		if req.TrailingSpace && req.Fields[2] == "table" {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+	}
+	if len(req.Fields) == 4 && req.Fields[1] == "create" && req.Fields[2] == "table" {
+		return stringSuggestions(ctx.Tables, "table")
+	}
+	return nil
+}
+
+func completeShowTableStatusTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "show" {
+		return nil
+	}
+	if len(req.Fields) == 2 && !req.TrailingSpace && req.Fields[1] == "table" {
+		return []Suggestion{{Value: "table", Description: "show table details", Category: "subcommand"}}
+	}
+	if len(req.Fields) == 2 && req.TrailingSpace && req.Fields[1] == "table" {
+		return []Suggestion{{Value: "status", Description: "show table status", Category: "subcommand"}}
+	}
+	if len(req.Fields) == 3 && req.Fields[1] == "table" {
+		if !req.TrailingSpace && req.Fields[2] == "status" {
+			return []Suggestion{{Value: "status", Description: "show table status", Category: "subcommand"}}
+		}
+		if req.TrailingSpace && req.Fields[2] == "status" {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+	}
+	if len(req.Fields) == 4 && req.Fields[1] == "table" && req.Fields[2] == "status" {
+		return stringSuggestions(ctx.Tables, "table")
+	}
+	return nil
+}
+
 func completeShowVariablesPatterns(_ CompletionContext, req completionRequest) []Suggestion {
 	if len(req.Fields) < 2 || req.Fields[0] != "show" {
 		return nil
@@ -382,6 +438,32 @@ func completeShowVariablesPatterns(_ CompletionContext, req completionRequest) [
 	}
 	if (len(req.Fields) == 2 && req.TrailingSpace) || len(req.Fields) == 3 {
 		return commonVariableSuggestions()
+	}
+	return nil
+}
+
+func completeTruncateTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "truncate" || req.Fields[1] != "table" {
+		return nil
+	}
+	if len(req.Fields) == 2 && req.TrailingSpace {
+		return stringSuggestions(ctx.Tables, "table")
+	}
+	if len(req.Fields) == 3 {
+		return stringSuggestions(ctx.Tables, "table")
+	}
+	return nil
+}
+
+func completeRenameTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "rename" || req.Fields[1] != "table" {
+		return nil
+	}
+	if len(req.Fields) == 2 && req.TrailingSpace {
+		return stringSuggestions(ctx.Tables, "table")
+	}
+	if len(req.Fields) == 3 {
+		return stringSuggestions(ctx.Tables, "table")
 	}
 	return nil
 }
@@ -412,12 +494,14 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 	case "show":
 		if len(req.Fields) == 1 {
 			return []Suggestion{
+				{Value: "create", Description: "show CREATE statements", Category: "subcommand"},
 				{Value: "databases", Description: "list databases on the active connection", Category: "subcommand"},
 				{Value: "dbs", Description: "alias for show databases", Category: "alias"},
 				{Value: "index", Description: "alias for show indexes", Category: "alias"},
 				{Value: "indexes", Description: "show indexes for a table", Category: "subcommand"},
 				{Value: "processes", Description: "alias for show processlist", Category: "alias"},
 				{Value: "processlist", Description: "show the active MySQL processlist", Category: "subcommand"},
+				{Value: "table", Description: "show table details", Category: "subcommand"},
 				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
 				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
 				{Value: "grants", Description: "show grants for a MySQL user", Category: "subcommand"},
@@ -431,12 +515,14 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 		}
 		if len(req.Fields) == 2 {
 			return []Suggestion{
+				{Value: "create", Description: "show CREATE statements", Category: "subcommand"},
 				{Value: "databases", Description: "list databases on the active connection", Category: "subcommand"},
 				{Value: "dbs", Description: "alias for show databases", Category: "alias"},
 				{Value: "index", Description: "alias for show indexes", Category: "alias"},
 				{Value: "indexes", Description: "show indexes for a table", Category: "subcommand"},
 				{Value: "processes", Description: "alias for show processlist", Category: "alias"},
 				{Value: "processlist", Description: "show the active MySQL processlist", Category: "subcommand"},
+				{Value: "table", Description: "show table details", Category: "subcommand"},
 				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
 				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
 				{Value: "grants", Description: "show grants for a MySQL user", Category: "subcommand"},
@@ -445,6 +531,10 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 				{Value: "vars", Description: "alias for show variables", Category: "alias"},
 			}
 		}
+	case "truncate":
+		return []Suggestion{{Value: "table", Description: "delete all rows from a table", Category: "subcommand"}}
+	case "rename":
+		return []Suggestion{{Value: "table", Description: "rename a table", Category: "subcommand"}}
 	case "help":
 		return []Suggestion{
 			{Value: "connect", Description: "connect help", Category: "topic"},
@@ -460,8 +550,10 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "create database", Description: "create database help", Category: "topic"},
 			{Value: "create user", Description: "create user help", Category: "topic"},
 			{Value: "show databases", Description: "show databases help", Category: "topic"},
+			{Value: "show create table", Description: "show create table help", Category: "topic"},
 			{Value: "show tables", Description: "show tables help", Category: "topic"},
 			{Value: "show indexes", Description: "show indexes help", Category: "topic"},
+			{Value: "show table status", Description: "show table status help", Category: "topic"},
 			{Value: "show users", Description: "show users help", Category: "topic"},
 			{Value: "show grants", Description: "show grants help", Category: "topic"},
 			{Value: "show processlist", Description: "show processlist help", Category: "topic"},
@@ -469,6 +561,8 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "drop database", Description: "drop database help", Category: "topic"},
 			{Value: "drop user", Description: "drop user help", Category: "topic"},
 			{Value: "describe", Description: "describe help", Category: "topic"},
+			{Value: "truncate table", Description: "truncate table help", Category: "topic"},
+			{Value: "rename table", Description: "rename table help", Category: "topic"},
 			{Value: "use", Description: "use help", Category: "topic"},
 			{Value: "status", Description: "status help", Category: "topic"},
 			{Value: "context", Description: "context help", Category: "topic"},

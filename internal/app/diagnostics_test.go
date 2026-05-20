@@ -82,6 +82,14 @@ func (d *diagnosticConnector) ShowIndexes(context.Context, *config.ConnectionCon
 	return nil, nil
 }
 
+func (d *diagnosticConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
+	return "", nil
+}
+
+func (d *diagnosticConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
+	return nil, nil
+}
+
 func (d *diagnosticConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
 	return nil, nil
 }
@@ -92,6 +100,14 @@ func (d *diagnosticConnector) ShowProcesslist(context.Context, *config.Connectio
 
 func (d *diagnosticConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
 	return nil, nil
+}
+
+func (d *diagnosticConnector) TruncateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) error {
+	return nil
+}
+
+func (d *diagnosticConnector) RenameTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string, string) error {
+	return nil
 }
 
 func (d *diagnosticConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {

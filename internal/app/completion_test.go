@@ -23,7 +23,7 @@ func TestCalculateCompletionCommands(t *testing.T) {
 		{name: "connection subcommands", input: "connection ", wantFirst: "create", wantCount: 6},
 		{name: "create subcommand", input: "create ", wantFirst: "database", wantCount: 2},
 		{name: "list subcommand", input: "list ", wantFirst: "databases", wantCount: 2},
-		{name: "show subcommand", input: "show ", wantFirst: "databases", wantCount: 12},
+		{name: "show subcommand", input: "show ", wantFirst: "create", wantCount: 14},
 		{name: "show partial subcommand", input: "show pro", wantFirst: "processes", wantCount: 2},
 		{name: "show user alias subcommand", input: "show user ", wantFirst: "accounts", wantCount: 1},
 		{name: "drop subcommand", input: "drop ", wantFirst: "database", wantCount: 2},
@@ -35,8 +35,12 @@ func TestCalculateCompletionCommands(t *testing.T) {
 		{name: "use databases", input: "use ", databases: []string{"app_prod", "app_demo"}, wantFirst: "app_demo", wantCount: 2},
 		{name: "drop user users", input: "drop user ", users: []string{"analytics-ro", "app_user"}, wantFirst: "analytics-ro", wantCount: 2},
 		{name: "describe tables", input: "describe ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
+		{name: "show create table tables", input: "show create table ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
+		{name: "show table status tables", input: "show table status ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
 		{name: "show indexes tables", input: "show indexes ", wantFirst: "on", wantCount: 3, tables: []string{"users", "orders"}},
 		{name: "show indexes on tables", input: "show indexes on ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
+		{name: "truncate table tables", input: "truncate table ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
+		{name: "rename table source tables", input: "rename table ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
 		{name: "show grants users", input: "show grants ", wantFirst: "analytics-ro", wantCount: 2, users: []string{"analytics-ro", "app_user"}},
 		{name: "show variables suggestions", input: "show variables ", wantFirst: "max_connections", wantCount: 6},
 	}
@@ -84,7 +88,7 @@ func TestCalculateCompletionIncludesConnectionDescriptionsAndHint(t *testing.T) 
 	}
 
 	showCompletion := calculateCompletion("show ", CompletionContext{})
-	if len(showCompletion.Suggestions) == 0 || showCompletion.Suggestions[0].Value != "databases" {
+	if len(showCompletion.Suggestions) == 0 || showCompletion.Suggestions[0].Value != "create" {
 		t.Fatalf("show suggestions = %#v", showCompletion.Suggestions)
 	}
 
@@ -177,6 +181,42 @@ func TestCalculateCompletionPreservesArgumentPrefixes(t *testing.T) {
 			wantFrom:    13,
 			wantTo:      15,
 			wantApplied: "show indexes users",
+		},
+		{
+			name:        "show create table completion",
+			input:       "show create table us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    18,
+			wantTo:      20,
+			wantApplied: "show create table users",
+		},
+		{
+			name:        "show table status completion",
+			input:       "show table status us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    18,
+			wantTo:      20,
+			wantApplied: "show table status users",
+		},
+		{
+			name:        "truncate table completion",
+			input:       "truncate table us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    15,
+			wantTo:      17,
+			wantApplied: "truncate table users",
+		},
+		{
+			name:        "rename table source completion",
+			input:       "rename table us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    13,
+			wantTo:      15,
+			wantApplied: "rename table users",
 		},
 	}
 

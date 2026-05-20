@@ -13,19 +13,23 @@ import (
 )
 
 type databaseSelectionConnector struct {
-	databases  []string
-	tables     []string
-	users      []string
-	indexes    []driver.TableIndex
-	processes  []driver.Process
-	variables  []driver.SystemVariable
-	dbErr      error
-	tableErr   error
-	userErr    error
-	openCalls  int
-	listCalls  int
-	tableCalls int
-	userCalls  int
+	databases     []string
+	tables        []string
+	users         []string
+	indexes       []driver.TableIndex
+	createDDL     string
+	statuses      []driver.TableStatus
+	processes     []driver.Process
+	variables     []driver.SystemVariable
+	dbErr         error
+	tableErr      error
+	userErr       error
+	openCalls     int
+	listCalls     int
+	tableCalls    int
+	userCalls     int
+	truncateCalls int
+	renameCalls   int
 }
 
 func (c *databaseSelectionConnector) Open(context.Context, *config.ConnectionConfig) (*sql.DB, error) {
@@ -71,6 +75,20 @@ func (c *databaseSelectionConnector) ShowIndexes(context.Context, *config.Connec
 	return append([]driver.TableIndex(nil), c.indexes...), nil
 }
 
+func (c *databaseSelectionConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
+	if c.createDDL == "" {
+		return "CREATE TABLE `users` (\n  `id` bigint NOT NULL\n)", nil
+	}
+	return c.createDDL, nil
+}
+
+func (c *databaseSelectionConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
+	if len(c.statuses) == 0 {
+		return []driver.TableStatus{{Name: "users", Engine: "InnoDB", Rows: 12813, DataLength: 44040192, IndexLength: 12582912, Collation: "utf8mb4_unicode_ci"}}, nil
+	}
+	return append([]driver.TableStatus(nil), c.statuses...), nil
+}
+
 func (c *databaseSelectionConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
 	return []string{"GRANT SELECT ON *.* TO 'analytics-ro'@'%'"}, nil
 }
@@ -87,6 +105,16 @@ func (c *databaseSelectionConnector) ShowVariables(context.Context, *config.Conn
 		return []driver.SystemVariable{{Name: "max_connections", Value: "500"}}, nil
 	}
 	return append([]driver.SystemVariable(nil), c.variables...), nil
+}
+
+func (c *databaseSelectionConnector) TruncateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) error {
+	c.truncateCalls++
+	return nil
+}
+
+func (c *databaseSelectionConnector) RenameTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string, string) error {
+	c.renameCalls++
+	return nil
 }
 
 func (c *databaseSelectionConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {

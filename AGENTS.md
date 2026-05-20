@@ -178,7 +178,14 @@ show users
 drop user
 show tables
 describe [table]
+show indexes [table]
+show create table <table>
+show table status [table]
 show grants <user> [host]
+show processlist
+show variables [name|pattern]
+truncate table <table>
+rename table <from> <to>
 use <database>
 context
 
@@ -252,7 +259,14 @@ dbx show users [flags]
 dbx drop user <name> [flags]
 dbx show tables [flags]
 dbx describe <table> [flags]
+dbx show indexes <table> [flags]
+dbx show create table <table> [flags]
+dbx show table status [table] [flags]
 dbx show grants <user> [host] [flags]
+dbx show processlist [flags]
+dbx show variables [name|pattern] [flags]
+dbx truncate table <table> [flags]
+dbx rename table <from> <to> [flags]
 
 dbx status
 dbx context

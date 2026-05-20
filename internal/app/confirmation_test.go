@@ -51,6 +51,14 @@ func (c *readOnlyConnector) ShowIndexes(context.Context, *config.ConnectionConfi
 	return []driver.TableIndex{{Name: "PRIMARY", Column: "id", Type: "BTREE", SeqInIndex: 1}}, nil
 }
 
+func (c *readOnlyConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
+	return "CREATE TABLE `users` (\n  `id` bigint NOT NULL\n)", nil
+}
+
+func (c *readOnlyConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
+	return []driver.TableStatus{{Name: "users", Engine: "InnoDB", Rows: 12813, DataLength: 44040192, IndexLength: 12582912, Collation: "utf8mb4_unicode_ci"}}, nil
+}
+
 func (c *readOnlyConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
 	return []string{"GRANT SELECT ON `app_prod`.* TO 'analytics-ro'@'%'"}, nil
 }
@@ -61,6 +69,14 @@ func (c *readOnlyConnector) ShowProcesslist(context.Context, *config.ConnectionC
 
 func (c *readOnlyConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
 	return []driver.SystemVariable{{Name: "max_connections", Value: "500"}}, nil
+}
+
+func (c *readOnlyConnector) TruncateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) error {
+	return nil
+}
+
+func (c *readOnlyConnector) RenameTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string, string) error {
+	return nil
 }
 
 func (c *readOnlyConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
@@ -172,6 +188,22 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 				return app.handleShowIndexes(context.Background(), "users")
 			},
 			wantOut: "PRIMARY",
+		},
+		{
+			name: "show create table",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleShowCreateTable(context.Background(), "users")
+			},
+			wantOut: "CREATE TABLE `users`",
+		},
+		{
+			name: "show table status",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleShowTableStatus(context.Background(), "users")
+			},
+			wantOut: "Name: users",
 		},
 		{
 			name: "show processlist",

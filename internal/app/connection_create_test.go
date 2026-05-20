@@ -44,6 +44,14 @@ func (f failingConnector) ShowIndexes(context.Context, *config.ConnectionConfig,
 	return nil, nil
 }
 
+func (f failingConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
+	return "", nil
+}
+
+func (f failingConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
+	return nil, nil
+}
+
 func (f failingConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
 	return nil, nil
 }
@@ -54,6 +62,14 @@ func (f failingConnector) ShowProcesslist(context.Context, *config.ConnectionCon
 
 func (f failingConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
 	return nil, nil
+}
+
+func (f failingConnector) TruncateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) error {
+	return nil
+}
+
+func (f failingConnector) RenameTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string, string) error {
+	return nil
 }
 
 func (f failingConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {

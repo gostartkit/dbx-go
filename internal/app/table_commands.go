@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/util"

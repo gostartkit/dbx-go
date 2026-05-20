@@ -40,9 +40,13 @@ drop user             Drop a MySQL user
 show tables           List tables in the current database
 describe [table]      Describe a table in the current database
 show indexes <table>  Show indexes for a table in the current database
+show create table     Show CREATE TABLE for a table
+show table status     Show compact table status
 show grants <user>    Show MySQL grants for a user
 show processlist      Show the active MySQL processlist
 show variables [name] Show MySQL system variables
+truncate table        Delete all rows from a table
+rename table          Rename a table
 use <database>        Select a database for the active REPL session
 
 status                Show the current session status
@@ -271,6 +275,33 @@ This command:
   - reuses the current table completion cache
   - does not require confirmation`),
 	},
+	"show create table": {
+		title: "show create table",
+		body: strings.TrimSpace(`
+Show the CREATE TABLE DDL for a table in the current database context.
+
+Usage:
+  show create table users
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - does not require confirmation`),
+	},
+	"show table status": {
+		title: "show table status",
+		body: strings.TrimSpace(`
+Show compact status information for tables in the current database context.
+
+Usage:
+  show table status
+  show table status users
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - does not require confirmation`),
+	},
 	"describe": {
 		title: "describe",
 		body: strings.TrimSpace(`
@@ -370,6 +401,34 @@ This command:
 
 Example:
   drop user analytics-ro`),
+	},
+	"truncate table": {
+		title: "truncate table",
+		body: strings.TrimSpace(`
+Delete all rows from a table in the current database context.
+
+Usage:
+  truncate table auth_sessions
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - requires typed table-name confirmation in the REPL
+  - requires --yes in the CLI unless --dry-run is active`),
+	},
+	"rename table": {
+		title: "rename table",
+		body: strings.TrimSpace(`
+Rename a table in the current database context.
+
+Usage:
+  rename table users_tmp users
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - requires confirmation in the REPL
+  - requires --yes in the CLI unless --dry-run is active`),
 	},
 	"status": {
 		title: "status",

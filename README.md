@@ -97,10 +97,14 @@ show users
 drop user
 show tables
 describe [table]
+show create table <table>
+show table status [table]
 show indexes [table]
 show grants <user> [host]
 show processlist
 show variables [name|pattern]
+truncate table <table>
+rename table <from> <to>
 use <database>
 dry-run on
 dry-run off
@@ -133,10 +137,14 @@ dbx show users [flags]
 dbx drop user <name> [flags]
 dbx show tables [flags]
 dbx describe <table> [flags]
+dbx show create table <table> [flags]
+dbx show table status [table] [flags]
 dbx show indexes <table> [flags]
 dbx show grants <user> [host] [flags]
 dbx show processlist [flags]
 dbx show variables [name|pattern] [flags]
+dbx truncate table <table> [flags]
+dbx rename table <from> <to> [flags]
 
 dbx status
 dbx context
@@ -194,6 +202,14 @@ dbx(prod/app_prod)> show indexes <TAB>
 orders
 users
 
+dbx(prod/app_prod)> show create table <TAB>
+orders
+users
+
+dbx(prod/app_prod)> show table status <TAB>
+orders
+users
+
 dbx> drop user <TAB>
 analytics-ro
 app_user
@@ -222,10 +238,12 @@ user
 dbx> show <TAB>
 databases
 dbs
+create
 indexes
 index
 processlist
 processes
+table
 users
 tables
 grants
@@ -273,7 +291,9 @@ Use `help aliases` inside the REPL to display the alias list.
 
 Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, and `show users`.
 
-Mutating commands require confirmation in the REPL unless dry-run is active. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
+Read-only table inspection commands such as `show create table` and `show table status` also run immediately without confirmation.
+
+Mutating commands require confirmation in the REPL unless dry-run is active. `truncate table` requires typing the table name in the REPL before execution. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
 
 Examples:
 
@@ -286,6 +306,8 @@ dbx(prod)> connection test prod
 ```bash
 dbx --connection prod drop database greenhn-dev --yes
 dbx --connection prod drop database greenhn-dev --dry-run
+dbx --connection prod --database app_prod truncate table auth_sessions --yes
+dbx --connection prod --database app_prod rename table users_tmp users --dry-run
 ```
 
 Running `dbx` enters the interactive shell:
@@ -317,7 +339,31 @@ Mode: proxy-ssh
 Dry-run: off
 ```
 
+Operational table workflow example:
+
+```text
+connect prod
+use app_prod
+
+show tables
+describe users
+show indexes users
+show create table users
+show table status users
+truncate table auth_sessions
+rename table users_tmp users
+```
+
 `use <database>` updates the active REPL session and persists the selected database in `session.json`. One-shot CLI commands stay stateless and instead accept `--database <name>` for a single invocation.
+
+Table operations use validated table names that can include letters, numbers, `_`, and `-`. Examples:
+
+```text
+users
+auth_sessions
+orders_2026
+tmp-users
+```
 
 Database names accept letters, numbers, `_`, and `-`. Examples:
 

@@ -121,10 +121,10 @@ type TableStatusEntryResult struct {
 }
 
 type TableStatusResult struct {
-	OK         bool                   `json:"ok"`
-	Connection string                 `json:"connection,omitempty"`
-	Database   string                 `json:"database,omitempty"`
-	Table      string                 `json:"table,omitempty"`
+	OK         bool                     `json:"ok"`
+	Connection string                   `json:"connection,omitempty"`
+	Database   string                   `json:"database,omitempty"`
+	Table      string                   `json:"table,omitempty"`
 	Tables     []TableStatusEntryResult `json:"tables,omitempty"`
 }
 
