@@ -85,41 +85,6 @@ func TestHandleLineDropUserParsesName(t *testing.T) {
 	}
 }
 
-func TestHandleLineShowUsersParsesCommand(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	store := config.NewStore(root)
-	if err := store.EnsureLayout(); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
-		t.Fatal(err)
-	}
-
-	var out bytes.Buffer
-	app, err := NewWithOptions(strings.NewReader(""), &out, &out, Options{
-		ConfigDir: root,
-		Connector: &readOnlyConnector{queryStrings: []string{"analytics-ro@%", "app_user@localhost"}},
-	})
-	if err != nil {
-		t.Fatalf("NewWithOptions returned error: %v", err)
-	}
-	app.session.Connection = sampleConnection("prod")
-	app.session.DB = &sql.DB{}
-
-	exit, err := app.handleLine(context.Background(), "show users")
-	if err != nil {
-		t.Fatalf("handleLine returned error: %v", err)
-	}
-	if exit {
-		t.Fatalf("expected REPL to continue")
-	}
-	if !strings.Contains(out.String(), "analytics-ro@%") {
-		t.Fatalf("unexpected output: %q", out.String())
-	}
-}
-
 func TestCreateUserUsesCurrentDatabaseForGrant(t *testing.T) {
 	t.Parallel()
 

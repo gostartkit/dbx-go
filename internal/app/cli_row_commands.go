@@ -14,6 +14,31 @@ type rowLimitFlags struct {
 	limit int
 }
 
+func (b *cliBuilder) showRowsCommand() *cmd.Command {
+	flags := &rowLimitFlags{limit: defaultRowInspectionLimit}
+	return &cmd.Command{
+		Name:        "rows",
+		UsageLine:   "dbx show rows <table> [--limit n]",
+		Short:       "Show rows from a table",
+		Long:        helpEntries["show rows"].body,
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
+		SetFlags: func(f *cmd.FlagSet) {
+			f.IntVar(&flags.limit, "limit", defaultRowInspectionLimit, "row limit", "")
+		},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) != 1 {
+				return util.WrapLayer("validation", "show rows", fmt.Errorf("usage: dbx show rows <table> [--limit n]"))
+			}
+			if b.mode == ModeREPL {
+				return b.application.handleShowRows(ctx, args[0], strconv.Itoa(flags.limit))
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show rows", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runRowPreview(ctx, application, "show rows", "peek rows", args[0], flags.limit, false, meta)
+			})
+		},
+	}
+}
+
 func (b *cliBuilder) countCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "count",
@@ -62,7 +87,7 @@ func (b *cliBuilder) peekCommand() *cmd.Command {
 				return util.WrapLayer("validation", "peek rows", err)
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "peek rows", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
-				return b.runRowPreview(ctx, application, "peek rows", table, limit, false, meta)
+				return b.runRowPreview(ctx, application, "peek rows", "peek rows", table, limit, false, meta)
 			})
 		},
 	}
@@ -91,7 +116,7 @@ func (b *cliBuilder) sampleCommand() *cmd.Command {
 				return util.WrapLayer("validation", "sample rows", err)
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "sample rows", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
-				return b.runRowPreview(ctx, application, "sample rows", table, limit, true, meta)
+				return b.runRowPreview(ctx, application, "sample rows", "sample rows", table, limit, true, meta)
 			})
 		},
 	}
@@ -157,7 +182,7 @@ func (b *cliBuilder) runCountRows(ctx context.Context, application *Application,
 	})
 }
 
-func (b *cliBuilder) runRowPreview(ctx context.Context, application *Application, command string, table string, limit int, random bool, meta *auditMetadata) error {
+func (b *cliBuilder) runRowPreview(ctx context.Context, application *Application, command string, templateCommand string, table string, limit int, random bool, meta *auditMetadata) error {
 	if err := util.ValidateTableName(table); err != nil {
 		return util.WrapLayer("validation", "validate table name", err)
 	}
@@ -174,7 +199,7 @@ func (b *cliBuilder) runRowPreview(ctx context.Context, application *Application
 		meta.Mode = cfg.Mode
 	}
 
-	template, err := application.selectTemplateForCLI(command, cfg, "")
+	template, err := application.selectTemplateForCLI(templateCommand, cfg, "")
 	if err != nil {
 		return err
 	}

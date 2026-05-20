@@ -345,13 +345,13 @@ type ConnectResult struct {
 }
 
 type ConnectionCreateResult struct {
-	OK          bool   `json:"ok"`
-	Connection  string `json:"connection,omitempty"`
-	Saved       bool   `json:"saved"`
-	TestOK      *bool  `json:"test_ok,omitempty"`
-	Warning     string `json:"warning,omitempty"`
-	EditCommand string `json:"edit_command,omitempty"`
-	Path        string `json:"path,omitempty"`
+	OK               bool   `json:"ok"`
+	Connection       string `json:"connection,omitempty"`
+	Saved            bool   `json:"saved"`
+	TestOK           *bool  `json:"test_ok,omitempty"`
+	Warning          string `json:"warning,omitempty"`
+	OverwriteCommand string `json:"overwrite_command,omitempty"`
+	Path             string `json:"path,omitempty"`
 }
 
 type DiagnosticStep struct {

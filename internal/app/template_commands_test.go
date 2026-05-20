@@ -625,7 +625,7 @@ func TestTemplateValidateSuccessAndJSONOutput(t *testing.T) {
 }`)
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"validate", "template", "create_database_with_user", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"run", "template", "create_database_with_user", "--validate", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -654,7 +654,7 @@ func TestTemplateValidateFailures(t *testing.T) {
 }`)
 
 	app, _, stderr := newCLIAppWithOptions(t, "", Options{ConfigDir: root})
-	err := app.Run(context.Background(), []string{"validate", "template", "bad", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"run", "template", "bad", "--validate", "--config-dir", root})
 	if err == nil || (!strings.Contains(err.Error(), "unsupported match command") && !strings.Contains(err.Error(), "select input")) {
 		t.Fatalf("expected validation failure, got %v\nstderr=%s", err, stderr.String())
 	}

@@ -29,7 +29,7 @@ type connectionCreateFlags struct {
 	queryTimeout   int
 	test           bool
 	connectNow     bool
-	force          bool
+	overwrite      bool
 }
 
 type connectionEditFlags struct {
@@ -224,6 +224,49 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 		Name:      "doctor",
 		UsageLine: "dbx doctor <subcommand>",
 		Short:     "Inspect configuration statically",
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) != 0 {
+				return util.WrapLayer("validation", "doctor", fmt.Errorf("usage: dbx doctor [connection <name>]"))
+			}
+			if b.mode == ModeREPL {
+				return b.application.handleConnectionDoctor(ctx, "")
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "doctor connection"}, func(application *Application, meta *auditMetadata) error {
+				name := strings.TrimSpace(b.globals.Connection)
+				if name == "" {
+					sessionFile, err := application.store.LoadSession()
+					if err != nil {
+						return util.WrapLayer("config", "load session", err)
+					}
+					name = strings.TrimSpace(sessionFile.CurrentConnection)
+				}
+				if name == "" {
+					return util.WrapLayer("validation", "doctor", fmt.Errorf("no connection selected; use --connection or doctor connection <name>"))
+				}
+				if cfg, err := application.store.LoadConnection(name); err == nil {
+					meta.Connection = cfg.Name
+					meta.Mode = cfg.Mode
+				}
+				result, doctorErr := application.doctorConnection(name)
+				if doctorErr != nil {
+					result.Error = errorResult(doctorErr)
+				}
+				if writeErr := b.writeOutput(result, func() error {
+					application.printDoctorResult(result)
+					return nil
+				}); writeErr != nil {
+					return writeErr
+				}
+				if doctorErr != nil {
+					failed := false
+					meta.Success = &failed
+					return util.MarkOutputHandled(doctorErr)
+				}
+				succeeded := true
+				meta.Success = &succeeded
+				return nil
+			})
+		},
 		SubCommands: []*cmd.Command{
 			b.doctorConnectionCommand(),
 		},
@@ -267,7 +310,7 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 			f.IntVar(&flags.queryTimeout, "query-timeout", 30, "query timeout in seconds", "")
 			f.BoolVar(&flags.test, "test", false, "test the connection before saving", "")
 			f.BoolVar(&flags.connectNow, "connect-now", false, "connect immediately after saving", "")
-			f.BoolVar(&flags.force, "force", false, "overwrite an existing connection", "")
+			f.BoolVar(&flags.overwrite, "overwrite", false, "overwrite an existing connection", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
@@ -290,8 +333,8 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 				if err := b.requireCLIConfirmation("create connection"); err != nil {
 					return err
 				}
-				if application.store.ConnectionExists(cfg.Name) && !flags.force {
-					return util.WrapLayer("config", "create connection", fmt.Errorf("connection %q already exists; use --force to overwrite", cfg.Name))
+				if application.store.ConnectionExists(cfg.Name) && !flags.overwrite {
+					return util.WrapLayer("config", "create connection", fmt.Errorf("connection %q already exists; use --overwrite to replace it", cfg.Name))
 				}
 
 				if err := application.store.SaveConnection(cfg); err != nil {
@@ -309,11 +352,11 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 				}
 
 				result := &ConnectionCreateResult{
-					OK:          true,
-					Connection:  cfg.Name,
-					Saved:       true,
-					EditCommand: "edit connection " + cfg.Name,
-					Path:        application.store.ConnectionConfigPath(cfg.Name),
+					OK:               true,
+					Connection:       cfg.Name,
+					Saved:            true,
+					OverwriteCommand: "create connection " + cfg.Name + " --overwrite",
+					Path:             application.store.ConnectionConfigPath(cfg.Name),
 				}
 				if flags.test {
 					ok := testErr == nil
@@ -330,7 +373,7 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 					}
 					application.printSavedConnection(cfg.Name)
 					if testErr != nil {
-						application.printConnectionEditHint(cfg.Name)
+						application.printConnectionOverwriteHint(cfg.Name)
 					}
 					if flags.connectNow && testErr == nil {
 						fmt.Fprintf(b.out, "Connected to %s.\n", cfg.Name)

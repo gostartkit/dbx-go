@@ -1,12 +1,57 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"pkg.gostartkit.com/cmd"
 )
 
-func TestREPLCommandSpecsIncludeSharedAndOverlayCommands(t *testing.T) {
+func TestRootCommandSetMatchesShellSurface(t *testing.T) {
+	t.Parallel()
+
+	spec := (&cliBuilder{
+		mode:    ModeREPL,
+		globals: &cliGlobals{Format: "text"},
+	}).buildApp().Spec()
+
+	have := map[string]struct{}{}
+	for _, command := range spec.Commands {
+		have[normalizeHelpTopic(command.Name)] = struct{}{}
+	}
+
+	want := []string{"connect", "use", "show", "describe", "create", "drop", "run", "doctor", "audit", "exit"}
+	if len(have) != len(want) {
+		t.Fatalf("root command count = %d, want %d (%v)", len(have), len(want), have)
+	}
+	for _, name := range want {
+		if _, ok := have[name]; !ok {
+			t.Fatalf("missing root command %q", name)
+		}
+	}
+}
+
+func TestRemovedRootCommandsAreAbsent(t *testing.T) {
+	t.Parallel()
+
+	spec := (&cliBuilder{
+		mode:    ModeREPL,
+		globals: &cliGlobals{Format: "text"},
+	}).buildApp().Spec()
+
+	have := map[string]struct{}{}
+	for _, command := range spec.Commands {
+		have[normalizeHelpTopic(command.Name)] = struct{}{}
+	}
+
+	for _, removed := range []string{"count", "peek", "sample", "truncate", "rename", "validate", "edit", "test", "context", "clear"} {
+		if _, ok := have[removed]; ok {
+			t.Fatalf("unexpected removed root command %q", removed)
+		}
+	}
+}
+
+func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 	t.Parallel()
 
 	have := map[string]struct{}{}
@@ -16,27 +61,98 @@ func TestREPLCommandSpecsIncludeSharedAndOverlayCommands(t *testing.T) {
 
 	for _, want := range []string{
 		"connect",
-		"create connection",
-		"edit connection",
-		"drop connection",
-		"show connection",
-		"show connections",
-		"show databases",
-		"show template",
-		"run template",
 		"use database",
-		"test connection",
+		"show databases",
+		"show tables",
+		"show table",
+		"show columns",
+		"show rows",
+		"show connections",
+		"show connection",
+		"show templates",
+		"show template",
+		"show context",
+		"describe",
+		"create connection",
+		"create database",
+		"create user",
+		"drop connection",
+		"drop database",
+		"drop user",
+		"run template",
+		"run sql",
+		"doctor",
 		"doctor connection",
-		"clear",
+		"audit log",
 		"exit",
 	} {
-		if _, ok := have[normalizeHelpTopic(want)]; !ok {
-			t.Fatalf("missing command spec %q", want)
+		if _, ok := have[want]; !ok {
+			t.Fatalf("missing command path %q", want)
 		}
 	}
 }
 
-func TestCLIAndREPLShareBusinessCommandTree(t *testing.T) {
+func TestRemovedCommandPathsAreAbsent(t *testing.T) {
+	t.Parallel()
+
+	have := map[string]struct{}{}
+	for _, spec := range replCommandSpecs() {
+		have[normalizeHelpTopic(spec.Path)] = struct{}{}
+	}
+
+	for _, removed := range []string{
+		"count rows",
+		"peek rows",
+		"sample rows",
+		"truncate table",
+		"rename table",
+		"validate template",
+		"edit connection",
+		"test connection",
+		"context",
+		"show users",
+		"show indexes",
+		"show foreign keys",
+		"show processlist",
+		"show triggers",
+		"show variables",
+		"show grants",
+		"show views",
+		"show create table",
+		"show table status",
+	} {
+		if _, ok := have[removed]; ok {
+			t.Fatalf("unexpected removed command path %q", removed)
+		}
+	}
+}
+
+func TestRemovedCommandsReturnErrors(t *testing.T) {
+	t.Parallel()
+
+	app := (&cliBuilder{
+		mode:    ModeREPL,
+		globals: &cliGlobals{Format: "text"},
+	}).buildApp()
+
+	for _, line := range []string{
+		"count rows users",
+		"peek rows users",
+		"sample rows users",
+		"truncate table users",
+		"rename table users_tmp users",
+		"validate template readonly_user",
+		"edit connection prod",
+		"test connection prod",
+		"context",
+	} {
+		if err := app.RunLine(context.Background(), line); err == nil {
+			t.Fatalf("expected removed command to fail: %q", line)
+		}
+	}
+}
+
+func TestCLIAndREPLShareCommandTree(t *testing.T) {
 	t.Parallel()
 
 	cli := newCLIBuilder(nil, nil, nil, Options{}).buildApp().Spec()
@@ -55,6 +171,9 @@ func TestCLIAndREPLShareBusinessCommandTree(t *testing.T) {
 		collectSpecPaths(replCommands, "", command)
 	}
 
+	if len(cliCommands) != len(replCommands) {
+		t.Fatalf("cli/repl path counts differ: %d vs %d", len(cliCommands), len(replCommands))
+	}
 	for path := range cliCommands {
 		if _, ok := replCommands[path]; !ok {
 			t.Fatalf("repl tree missing cli command path %q", path)
@@ -62,7 +181,7 @@ func TestCLIAndREPLShareBusinessCommandTree(t *testing.T) {
 	}
 }
 
-func TestHelpCompletionContainsHelpTopics(t *testing.T) {
+func TestHelpCompletionContainsFinalTopics(t *testing.T) {
 	t.Parallel()
 
 	have := map[string]struct{}{}
@@ -70,7 +189,7 @@ func TestHelpCompletionContainsHelpTopics(t *testing.T) {
 		have[suggestion.Value] = struct{}{}
 	}
 
-	for _, want := range []string{"test connection", "show templates", "run template", "show connection"} {
+	for _, want := range []string{"doctor connection", "show templates", "run template", "show rows"} {
 		if _, ok := have[want]; !ok {
 			t.Fatalf("missing help topic %q", want)
 		}

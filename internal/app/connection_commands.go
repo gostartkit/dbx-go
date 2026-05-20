@@ -471,7 +471,7 @@ func (a *Application) testSaveAndMaybeConnect(ctx context.Context, cfg *config.C
 	}
 
 	if testErr != nil {
-		a.printConnectionEditHint(cfg.Name)
+		a.printConnectionOverwriteHint(cfg.Name)
 		return nil
 	}
 
@@ -495,10 +495,10 @@ func (a *Application) printSavedConnection(name string) {
 	a.prompt.Printf("  %s\n", a.store.ConnectionConfigPath(name))
 }
 
-func (a *Application) printConnectionEditHint(name string) {
+func (a *Application) printConnectionOverwriteHint(name string) {
 	a.prompt.Println()
-	a.prompt.Println("You can update it with:")
-	a.prompt.Printf("  edit connection %s\n", name)
+	a.prompt.Println("You can replace it with:")
+	a.prompt.Printf("  create connection %s --overwrite\n", name)
 }
 
 func (a *Application) testConnection(ctx context.Context, cfg *config.ConnectionConfig) error {

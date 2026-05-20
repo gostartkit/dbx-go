@@ -11,16 +11,15 @@ func TestCalculateCompletionRootCommands(t *testing.T) {
 
 	values := suggestionValues(calculateCompletion("", CompletionContext{}))
 	assertSuggestionsContainAll(t, values, []string{
-		"clear",
 		"connect",
 		"create",
-		"edit",
+		"describe",
+		"doctor",
 		"drop",
 		"run",
 		"show",
-		"test",
 		"use",
-		"validate",
+		"audit",
 		"exit",
 	})
 }
@@ -49,6 +48,11 @@ func TestCalculateCompletionDynamicValues(t *testing.T) {
 	})
 	assertSuggestionsContainAll(t, suggestionValues(useCompletion), []string{"app_demo", "app_prod"})
 
+	rowCompletion := calculateCompletion("show rows ", CompletionContext{
+		Tables: []string{"users", "orders"},
+	})
+	assertSuggestionsContainAll(t, suggestionValues(rowCompletion), []string{"orders", "users"})
+
 	templateCompletion := calculateCompletion("run template ", CompletionContext{
 		Templates: []string{"readonly_user", "create_database_with_user"},
 	})
@@ -59,7 +63,14 @@ func TestCalculateCompletionHelpTopics(t *testing.T) {
 	t.Parallel()
 
 	values := suggestionValues(calculateCompletion("help ", CompletionContext{}))
-	assertSuggestionsContainAll(t, values, []string{"test connection", "show templates", "run template", "show connection"})
+	assertSuggestionsContainAll(t, values, []string{"doctor connection", "show templates", "run template", "show rows"})
+}
+
+func TestCalculateCompletionOmitsRemovedCommands(t *testing.T) {
+	t.Parallel()
+
+	values := suggestionValues(calculateCompletion("", CompletionContext{}))
+	assertSuggestionsMissingAll(t, values, []string{"count", "peek", "sample", "truncate", "rename", "validate", "edit", "test", "context", "clear"})
 }
 
 func TestCalculateCompletionReplacementRanges(t *testing.T) {
@@ -85,6 +96,19 @@ func TestCalculateCompletionReplacementRanges(t *testing.T) {
 	hint := calculateCompletion("con", CompletionContext{}).Hint
 	if hint == "" {
 		t.Fatalf("expected inline hint")
+	}
+}
+
+func assertSuggestionsMissingAll(t *testing.T, values []string, missing []string) {
+	t.Helper()
+	have := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		have[value] = struct{}{}
+	}
+	for _, value := range missing {
+		if _, ok := have[value]; ok {
+			t.Fatalf("unexpected suggestion %q in %#v", value, values)
+		}
 	}
 }
 

@@ -34,6 +34,47 @@ func (b *cliBuilder) showTablesCommand() *cmd.Command {
 	}
 }
 
+func (b *cliBuilder) showContextCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "context",
+		UsageLine: "dbx show context",
+		Short:     "Show the current operational context",
+		Long:      helpEntries["show context"].body,
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "show context", err)
+				}
+				return b.application.handleContext(ctx)
+			}
+			if err := b.requireNoArgs(args); err != nil {
+				return util.WrapLayer("validation", "show context", err)
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show context", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				result, err := application.contextForCLI(ctx, b.globals.Connection, b.globals.Database)
+				if err != nil {
+					return err
+				}
+				if result.Connection != "" {
+					meta.Connection = result.Connection
+					meta.Mode = result.Mode
+				}
+				return b.writeOutput(result, func() error {
+					fmt.Fprintf(b.out, "Connection: %s\n", emptyValue(result.Connection, "<none>"))
+					fmt.Fprintf(b.out, "Database: %s\n", emptyValue(result.Database, "<none>"))
+					fmt.Fprintf(b.out, "Mode: %s\n", emptyValue(result.Mode, "<none>"))
+					if result.DryRun {
+						fmt.Fprintln(b.out, "Dry-run: on")
+					} else {
+						fmt.Fprintln(b.out, "Dry-run: off")
+					}
+					return nil
+				})
+			})
+		},
+	}
+}
+
 func (b *cliBuilder) showIndexesCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "indexes",

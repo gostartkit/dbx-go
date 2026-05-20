@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"errors"
 	"io"
 	"strings"
@@ -38,29 +37,6 @@ func (r staticCompletionResolver) TemplateTags() []string {
 
 func (r staticCompletionResolver) Users() []string {
 	return append([]string(nil), r.ctx.Users...)
-}
-
-func replOverlayCommands(b *cliBuilder) []*cmd.Command {
-	return []*cmd.Command{
-		{
-			Name:      "exit",
-			Aliases:   []string{"quit", "q"},
-			UsageLine: "exit",
-			Short:     "Exit the REPL",
-			Run: func(context.Context, *cmd.Command, []string) error {
-				return errREPLExit
-			},
-		},
-		{
-			Name:      "clear",
-			UsageLine: "clear",
-			Short:     "Clear the terminal output",
-			Run: func(context.Context, *cmd.Command, []string) error {
-				b.application.prompt.Printf("\033[H\033[2J")
-				return nil
-			},
-		},
-	}
 }
 
 func (a *Application) replCommandApp() *cmd.App {
@@ -263,15 +239,13 @@ func dynamicCompletionDescription(args []string, value string, ctx CompletionCon
 		if value != "" {
 			return "database"
 		}
+	case "show context":
+		return "context"
 	case "show template", "run template", "validate template":
 		if value != "" {
 			return "template"
 		}
-	case "show grants":
-		if value != "" {
-			return "user"
-		}
-	case "show columns", "show indexes", "show foreign keys", "show create table", "show table status", "describe", "count rows", "peek rows", "sample rows", "truncate table":
+	case "show columns", "show rows", "show table", "describe":
 		if value != "" {
 			return "table"
 		}

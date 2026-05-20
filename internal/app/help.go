@@ -19,48 +19,37 @@ help                  Show command help
 help <command>        Show help for a command
 
 connect <name>        Connect to a saved connection
+use database <name>   Select the current database
+
 show connections      Show saved connections
 show connection <name> Show one saved connection
-create connection <name> Create a saved connection
-edit connection <name> Edit a saved connection
-drop connection <name> Drop a saved connection
-test connection <name> Test a saved connection
-doctor connection <name> Inspect a saved connection statically
-
+show context          Show the current operational context
 show databases        Show databases on the active connection
 show tables           Show tables in the selected database
+show table <name>     Show table details
 show columns <table>  Show table columns
-describe <table>      Describe a table
-show indexes <table>  Show table indexes
-show foreign keys <table> Show table foreign keys
-show create table <table> Show CREATE TABLE output
-show table status [table] Show table status
-show grants <user> [host] Show grants for a MySQL user
-show processlist      Show active MySQL processes
-show variables [pattern] Show MySQL variables
-show triggers         Show triggers
-show views            Show views
-show users            Show MySQL users
-
-create database <name> Create a database
-drop database <name>  Drop a database
-create user <name>    Create a MySQL user
-drop user <name>      Drop a MySQL user
-count rows <table>    Count table rows
-peek rows <table>     Peek table rows
-sample rows <table>   Sample table rows
-truncate table <table> Truncate a table
-rename table <from> <to> Rename a table
-
+show rows <table>     Show table rows
 show templates        Show available templates
 show template <name>  Show one template
-run template <name>   Run a template
-validate template <name> Validate a template
 
-use database <name>   Select the current database
-context               Show the current operational context
-clear                 Clear terminal output
-exit                  Exit the REPL`),
+describe <table>      Describe a table
+
+create connection <name> Create or overwrite a saved connection
+create database <name> Create a database
+create user <name>    Create a MySQL user
+
+drop connection <name> Drop a saved connection
+drop database <name>  Drop a database
+drop user <name>      Drop a MySQL user
+
+run template <name>   Run or validate a template
+run sql <sql-or-file> Run raw SQL or a SQL file
+
+doctor                Inspect the selected connection
+doctor connection <name> Inspect a saved connection statically
+
+audit log             Show audit history
+exit                  Exit the shell`),
 		},
 		"connect": {
 			title: "connect",
@@ -87,9 +76,7 @@ Commands:
   show connections
   show connection <name>
   create connection <name>
-  edit connection <name>
   drop connection <name>
-  test connection <name>
   doctor connection <name>`),
 		},
 		"connection create": {
@@ -101,7 +88,7 @@ This command writes:
   ~/.config/dbx/{name}/config.json
 
 Usage:
-  create connection <name> [flags]`),
+  create connection <name> [--overwrite] [flags]`),
 		},
 		"connection edit": {
 			title: "edit connection",
@@ -189,6 +176,14 @@ Create a MySQL user from the resolved template.
 Usage:
   create user <name> [flags]`),
 		},
+		"show rows": {
+			title: "show rows",
+			body: strings.TrimSpace(`
+Show rows from a table.
+
+Usage:
+  show rows <table> [--limit n]`),
+		},
 		"drop user": {
 			title: "drop user",
 			body: strings.TrimSpace(`
@@ -236,6 +231,14 @@ Show tables in the selected database.
 
 Usage:
   show tables`),
+		},
+		"show table": {
+			title: "show table",
+			body: strings.TrimSpace(`
+Show detailed table output for one table.
+
+Usage:
+  show table <name>`),
 		},
 		"show columns": {
 			title: "show columns",
@@ -352,10 +355,20 @@ Usage:
 		"template run": {
 			title: "run template",
 			body: strings.TrimSpace(`
-Run a workflow template.
+Run or validate a workflow template.
 
 Usage:
-  run template <name> [--preview] [--verbose]`),
+  run template <name> [--preview] [--verbose] [--validate]`),
+		},
+		"run sql": {
+			title: "run sql",
+			body: strings.TrimSpace(`
+Run raw SQL text or load SQL from a file.
+
+Usage:
+  run sql "SELECT 1"
+  run sql @schema.sql
+  run sql schema.sql`),
 		},
 		"template validate": {
 			title: "validate template",
@@ -390,12 +403,21 @@ Usage:
   use database <name>`),
 		},
 		"context": {
-			title: "context",
+			title: "show context",
 			body: strings.TrimSpace(`
 Show the current connection, database, and dry-run mode.
 
 Usage:
-  context`),
+  show context`),
+		},
+		"doctor": {
+			title: "doctor",
+			body: strings.TrimSpace(`
+Inspect the current connection, or pick one when running interactively.
+
+Usage:
+  doctor
+  doctor connection <name>`),
 		},
 		"status": {
 			title: "status",
@@ -423,15 +445,13 @@ Clear terminal output.`),
 
 	entries["show connections"] = entries["connections"]
 	entries["create connection"] = entries["connection create"]
-	entries["edit connection"] = entries["connection edit"]
 	entries["drop connection"] = entries["connection delete"]
 	entries["show connection"] = entries["connection show"]
-	entries["test connection"] = entries["connection test"]
 	entries["doctor connection"] = entries["connection doctor"]
 	entries["show template"] = entries["describe template"]
 	entries["run template"] = entries["template run"]
-	entries["validate template"] = entries["template validate"]
 	entries["use database"] = entries["use"]
+	entries["show context"] = entries["context"]
 
 	return entries
 }()

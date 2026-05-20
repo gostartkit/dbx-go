@@ -163,7 +163,7 @@ func diagnosticFailureLayerForTest(cfg *config.ConnectionConfig, err error) stri
 	return expected[len(expected)-1]
 }
 
-func TestHandleLineConnectionTestParsesName(t *testing.T) {
+func TestHandleLineRemovedTestConnectionCommandFails(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -186,18 +186,15 @@ func TestHandleLineConnectionTestParsesName(t *testing.T) {
 	}
 
 	exit, err := app.handleLine(context.Background(), "test connection prod")
-	if err != nil {
-		t.Fatalf("handleLine returned error: %v", err)
+	if err == nil {
+		t.Fatalf("expected unknown command error")
 	}
 	if exit {
 		t.Fatalf("expected REPL to continue")
 	}
-	if connector.openCalls != 1 || connector.lastName != "prod" {
-		t.Fatalf("unexpected connector calls: calls=%d name=%q", connector.openCalls, connector.lastName)
-	}
 }
 
-func TestHandleLineConnectionTestParsesVerboseName(t *testing.T) {
+func TestHandleLineRemovedTestConnectionVerboseCommandFails(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -220,14 +217,11 @@ func TestHandleLineConnectionTestParsesVerboseName(t *testing.T) {
 	}
 
 	exit, err := app.handleLine(context.Background(), "test connection prod --verbose")
-	if err != nil {
-		t.Fatalf("handleLine returned error: %v", err)
+	if err == nil {
+		t.Fatalf("expected unknown command error")
 	}
 	if exit {
 		t.Fatalf("expected REPL to continue")
-	}
-	if connector.openCalls != 1 || connector.lastName != "prod" {
-		t.Fatalf("unexpected connector calls: calls=%d name=%q", connector.openCalls, connector.lastName)
 	}
 }
 
@@ -262,21 +256,21 @@ func TestHandleLineConnectionTestRequiresExplicitNameInSharedTree(t *testing.T) 
 	}
 }
 
-func TestHelpConnectionIncludesTest(t *testing.T) {
+func TestDiagnosticsHelpConnectionIncludesDoctor(t *testing.T) {
 	t.Parallel()
 
 	entry := helpEntries["connection"].body
-	if !strings.Contains(entry, "test connection") {
-		t.Fatalf("connection help missing test command: %q", entry)
+	if !strings.Contains(entry, "doctor connection") {
+		t.Fatalf("connection help missing doctor command: %q", entry)
 	}
 }
 
-func TestHelpConnectionTestMentionsVerbose(t *testing.T) {
+func TestHelpDoctorCommandMentionsConnection(t *testing.T) {
 	t.Parallel()
 
-	entry := helpEntries["test connection"].body
-	if !strings.Contains(entry, "--verbose") || !strings.Contains(entry, "test connection <name>") {
-		t.Fatalf("connection test help missing verbose usage: %q", entry)
+	entry := helpEntries["doctor"].body
+	if !strings.Contains(entry, "doctor connection <name>") {
+		t.Fatalf("doctor help missing connection usage: %q", entry)
 	}
 }
 

@@ -186,15 +186,15 @@ func TestCLIConnectionCreateSavesWhenTestFails(t *testing.T) {
 	if result.Warning != "connection test failed" {
 		t.Fatalf("warning = %q", result.Warning)
 	}
-	if result.EditCommand != "edit connection prod" {
-		t.Fatalf("edit command = %q", result.EditCommand)
+	if result.OverwriteCommand != "create connection prod --overwrite" {
+		t.Fatalf("overwrite command = %q", result.OverwriteCommand)
 	}
 	if strings.Contains(stdout.String(), "secret123") || strings.Contains(stderr.String(), "secret123") {
 		t.Fatalf("secret leaked in output")
 	}
 }
 
-func TestCLIConnectionEditPreservesUnspecifiedFields(t *testing.T) {
+func TestCLIConnectionEditCommandRemoved(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -214,26 +214,13 @@ func TestCLIConnectionEditPreservesUnspecifiedFields(t *testing.T) {
 		"--query-timeout", "60",
 		"--config-dir", root,
 	})
-	if err != nil {
-		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	if err == nil {
+		t.Fatalf("expected removed command failure")
 	}
-
-	cfg, err := store.LoadConnection("prod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Host != "10.0.1.30" {
-		t.Fatalf("host = %q, want updated value", cfg.Host)
-	}
-	if cfg.User != "root" || cfg.Port != 3306 {
-		t.Fatalf("unexpected preserved fields: %+v", cfg)
-	}
-	if cfg.Timeout.QuerySeconds != 60 || cfg.Timeout.ConnectSeconds != 10 {
-		t.Fatalf("unexpected timeouts: %+v", cfg.Timeout)
-	}
+	_ = stderr
 }
 
-func TestCLIConnectionTestParsesName(t *testing.T) {
+func TestCLIConnectionTestCommandRemoved(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -251,18 +238,17 @@ func TestCLIConnectionTestParsesName(t *testing.T) {
 		Connector: connector,
 	})
 	err := app.Run(context.Background(), []string{"test", "connection", "prod", "--config-dir", root})
-	if err != nil {
-		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	if err == nil {
+		t.Fatalf("expected removed command failure")
 	}
-	if connector.openCalls != 1 || connector.lastName != "prod" {
+	if connector.openCalls != 0 || connector.lastName != "" {
 		t.Fatalf("unexpected connector usage: calls=%d name=%q", connector.openCalls, connector.lastName)
 	}
-	if !strings.Contains(stdout.String(), "[OK] mysql") {
-		t.Fatalf("stdout missing diagnostic output: %q", stdout.String())
-	}
+	_ = stdout
+	_ = stderr
 }
 
-func TestCLIConnectionTestVerboseJSONIncludesDetails(t *testing.T) {
+func TestCLIConnectionTestVerboseCommandRemoved(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -294,20 +280,11 @@ func TestCLIConnectionTestVerboseJSONIncludesDetails(t *testing.T) {
 	})
 
 	err := app.Run(context.Background(), []string{"test", "connection", "prod", "--verbose", "--format", "json", "--config-dir", root})
-	if err != nil {
-		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	if err == nil {
+		t.Fatalf("expected removed command failure")
 	}
-
-	var result DiagnosticResult
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
-	}
-	if got := result.Steps[0].Details["config_path"]; got != filepath.Join(root, "prod", "config.json") {
-		t.Fatalf("missing config path details: %+v", result.Steps[0].Details)
-	}
-	if got := result.Steps[1].Details["duration_ms"]; got != float64(42) {
-		t.Fatalf("missing mysql details: %+v", result.Steps[1].Details)
-	}
+	_ = stdout
+	_ = stderr
 }
 
 func TestCLIConnectionCreateValidationFailureStillFails(t *testing.T) {
@@ -400,7 +377,7 @@ func TestCLIConnectionCreateOverwriteProtectedWithoutForce(t *testing.T) {
 	}
 }
 
-func TestCLIConnectionTestJSONFailureNonZero(t *testing.T) {
+func TestCLIDoctorConnectionJSONOutput(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -431,38 +408,20 @@ func TestCLIConnectionTestJSONFailureNonZero(t *testing.T) {
 		ConfigDir: root,
 		Connector: connector,
 	})
-	err := app.Run(context.Background(), []string{"test", "connection", "prod_proxy", "--format", "json", "--config-dir", root})
-	if err == nil {
-		t.Fatalf("expected failure exit status")
-	}
-	if app.ExitStatus() == 0 {
-		t.Fatalf("expected non-zero exit status")
+	err := app.Run(context.Background(), []string{"doctor", "connection", "prod_proxy", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected json mode to keep stderr empty, got %q", stderr.String())
 	}
 
-	var result DiagnosticResult
+	var result DoctorResult
 	if unmarshalErr := json.Unmarshal(stdout.Bytes(), &result); unmarshalErr != nil {
 		t.Fatalf("Unmarshal returned error: %v\noutput=%s", unmarshalErr, stdout.String())
 	}
-	if result.OK {
-		t.Fatalf("expected failed diagnostic result: %+v", result)
-	}
-	if len(result.Steps) != 2 {
-		t.Fatalf("unexpected steps: %+v", result.Steps)
-	}
-	if result.Steps[1].Name != "proxy" || result.Steps[1].Status != "fail" {
-		t.Fatalf("unexpected failed step: %+v", result.Steps[1])
-	}
-	if result.Steps[1].Error != "connection refused" {
-		t.Fatalf("unexpected json error: %+v", result.Steps[1])
-	}
-	if result.Steps[1].Details != nil {
-		t.Fatalf("expected non-verbose json to omit details: %+v", result.Steps[1])
-	}
-	if strings.Contains(stdout.String(), "proxy_password") {
-		t.Fatalf("json output leaked proxy password: %s", stdout.String())
+	if result.Connection != "prod_proxy" {
+		t.Fatalf("unexpected doctor result: %+v", result)
 	}
 }
 
@@ -663,7 +622,7 @@ func TestCLIConnectionShowJSONRedactsSecrets(t *testing.T) {
 	}
 }
 
-func TestCLIContextParsesGlobalFlagsAfterCommand(t *testing.T) {
+func TestCLIShowContextParsesGlobalFlagsAfterCommand(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -676,7 +635,7 @@ func TestCLIContextParsesGlobalFlagsAfterCommand(t *testing.T) {
 	}
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"context", "--connection", "prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "context", "--connection", "prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -690,7 +649,7 @@ func TestCLIContextParsesGlobalFlagsAfterCommand(t *testing.T) {
 	}
 }
 
-func TestCLIContextIncludesDatabaseFlag(t *testing.T) {
+func TestCLIShowContextIncludesDatabaseFlag(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -706,7 +665,7 @@ func TestCLIContextIncludesDatabaseFlag(t *testing.T) {
 		ConfigDir: root,
 		Connector: &databaseSelectionConnector{databases: []string{"app_prod", "app_demo"}},
 	})
-	err := app.Run(context.Background(), []string{"context", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"show", "context", "--connection", "prod", "--database", "app_prod", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -787,28 +746,6 @@ func TestCLICreateDatabaseAllowsHyphenName(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "`greenhn-dev`") {
 		t.Fatalf("stdout missing quoted database name: %q", stdout.String())
-	}
-}
-
-func TestCLIShowUsersParsesCommand(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	store := config.NewStore(root)
-	if err := store.EnsureLayout(); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
-		t.Fatal(err)
-	}
-
-	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"show", "users", "--connection", "prod", "--dry-run", "--format", "json", "--config-dir", root})
-	if err != nil {
-		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"command": "show users"`) {
-		t.Fatalf("unexpected stdout: %q", stdout.String())
 	}
 }
 

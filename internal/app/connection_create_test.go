@@ -146,7 +146,7 @@ func TestInteractiveConnectionCreateSavesWhenTestFails(t *testing.T) {
 	if !strings.Contains(output, "Saved connection:") {
 		t.Fatalf("output missing saved message: %q", output)
 	}
-	if !strings.Contains(output, "edit connection prod") {
-		t.Fatalf("output missing edit hint: %q", output)
+	if !strings.Contains(output, "create connection prod --overwrite") {
+		t.Fatalf("output missing overwrite hint: %q", output)
 	}
 }

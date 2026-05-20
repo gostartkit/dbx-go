@@ -31,6 +31,27 @@ func (b *cliBuilder) showTableGroupCommand() *cmd.Command {
 	}
 }
 
+func (b *cliBuilder) showTableCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:        "table",
+		UsageLine:   "dbx show table <table>",
+		Short:       "Show table details",
+		Long:        helpEntries["show table"].body,
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) != 1 {
+				return util.WrapLayer("validation", "show table", fmt.Errorf("usage: dbx show table <table>"))
+			}
+			if b.mode == ModeREPL {
+				return b.application.handleShowCreateTable(ctx, args[0])
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show table", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runShowTable(ctx, application, args[0], meta)
+			})
+		},
+	}
+}
+
 func (b *cliBuilder) truncateGroupCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "truncate",
@@ -218,6 +239,10 @@ func (b *cliBuilder) runShowCreateTable(ctx context.Context, application *Applic
 		fmt.Fprintln(b.out, ddl)
 		return nil
 	})
+}
+
+func (b *cliBuilder) runShowTable(ctx context.Context, application *Application, table string, meta *auditMetadata) error {
+	return b.runShowCreateTable(ctx, application, table, meta)
 }
 
 func (b *cliBuilder) runShowTableStatus(ctx context.Context, application *Application, table string, meta *auditMetadata) error {

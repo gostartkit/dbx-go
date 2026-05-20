@@ -14,7 +14,7 @@ import (
 var variablePatternRE = regexp.MustCompile(`^[a-zA-Z0-9_%]+$`)
 
 func (a *Application) handleContext(ctx context.Context) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "context", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show context", DryRun: a.dryRun}, func(meta *auditMetadata) error {
 		result := a.currentContextResult()
 		if result.Connection != "" {
 			meta.Connection = result.Connection

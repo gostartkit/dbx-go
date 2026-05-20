@@ -75,7 +75,15 @@ func (a *Application) handleSampleRows(ctx context.Context, table string, limitA
 	return a.handleRowPreview(ctx, "sample rows", table, limitArg, true)
 }
 
+func (a *Application) handleShowRows(ctx context.Context, table string, limitArg string) error {
+	return a.handleRowPreviewWithTemplate(ctx, "show rows", "peek rows", table, limitArg, false)
+}
+
 func (a *Application) handleRowPreview(ctx context.Context, command string, table string, limitArg string, random bool) error {
+	return a.handleRowPreviewWithTemplate(ctx, command, command, table, limitArg, random)
+}
+
+func (a *Application) handleRowPreviewWithTemplate(ctx context.Context, command string, templateCommand string, table string, limitArg string, random bool) error {
 	return a.auditCommand(ctx, auditMetadata{Command: command, DryRun: a.dryRun}, func(meta *auditMetadata) error {
 		cfg, db, database, err := a.requireDatabaseContext(ctx)
 		if err != nil {
@@ -93,9 +101,9 @@ func (a *Application) handleRowPreview(ctx context.Context, command string, tabl
 			return err
 		}
 
-		template, err := a.templates.Resolve(command, cfg)
+		template, err := a.templates.Resolve(templateCommand, cfg)
 		if err != nil {
-			return util.WrapLayer("template", "resolve "+command+" template", err)
+			return util.WrapLayer("template", "resolve "+templateCommand+" template", err)
 		}
 
 		values := map[string]string{

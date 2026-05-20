@@ -97,7 +97,7 @@ func (b *cliBuilder) buildApp() *cmd.App {
 	cli.Out = b.out
 	cli.Err = b.err
 	cli.Short = "Interactive MySQL database REPL with native SSH support"
-	cli.Long = "dbx starts in interactive mode and guides database operations without requiring raw SQL from users."
+	cli.Long = "dbx is a lightweight MySQL shell with shared CLI and REPL commands."
 	if b.mode == ModeCLI {
 		cli.SetFlags = b.setGlobalFlags
 	}
@@ -109,26 +109,15 @@ func (b *cliBuilder) buildApp() *cmd.App {
 	}
 	cli.Commands = []*cmd.Command{
 		b.connectCommand(),
-		b.auditGroupCommand(),
-		b.createGroupCommand(),
-		b.describeCommand(),
-		b.doctorGroupCommand(),
-		b.dropGroupCommand(),
-		b.editGroupCommand(),
-		b.peekCommand(),
-		b.countCommand(),
-		b.renameGroupCommand(),
-		b.runGroupCommand(),
-		b.sampleCommand(),
-		b.showGroupCommand(),
-		b.testGroupCommand(),
-		b.truncateGroupCommand(),
 		b.useGroupCommand(),
-		b.validateGroupCommand(),
-		b.contextCommand(),
-	}
-	if b.mode == ModeREPL {
-		cli.Commands = append(replOverlayCommands(b), cli.Commands...)
+		b.showGroupCommand(),
+		b.describeCommand(),
+		b.createGroupCommand(),
+		b.dropGroupCommand(),
+		b.runGroupCommand(),
+		b.doctorGroupCommand(),
+		b.auditGroupCommand(),
+		b.exitCommand(),
 	}
 	return cli
 }
@@ -152,7 +141,13 @@ func (b *cliBuilder) setGlobalFlags(f *cmd.FlagSet) {
 
 func (b *cliBuilder) runRoot(ctx context.Context, _ *cmd.Command, args []string) error {
 	if b.mode == ModeREPL {
+		if len(args) > 0 {
+			return util.WrapLayer("validation", "command", fmt.Errorf("unknown command %q", args[0]))
+		}
 		return nil
+	}
+	if len(args) > 0 {
+		return util.WrapLayer("validation", "command", fmt.Errorf("unknown command %q", args[0]))
 	}
 	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
 	if err != nil {
@@ -230,4 +225,19 @@ func (b *cliBuilder) requireNoArgs(args []string) error {
 		return nil
 	}
 	return fmt.Errorf("unexpected arguments: %s", strings.Join(args, " "))
+}
+
+func (b *cliBuilder) exitCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "exit",
+		Aliases:   []string{"quit", "q"},
+		UsageLine: "dbx exit",
+		Short:     "Exit the shell",
+		Run: func(context.Context, *cmd.Command, []string) error {
+			if b.mode == ModeREPL {
+				return errREPLExit
+			}
+			return nil
+		},
+	}
 }
