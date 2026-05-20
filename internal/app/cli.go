@@ -74,8 +74,12 @@ func newCLIBuilder(in io.Reader, out io.Writer, err io.Writer, options Options) 
 func newREPLBuilder(application *Application, resolver completionResolver) *cliBuilder {
 	configDir := ""
 	var connector connectorClient
+	out := io.Discard
 	if application != nil {
 		connector = application.connector
+		if application.out != nil {
+			out = application.out
+		}
 		if application.store != nil {
 			configDir = application.store.RootDir
 		}
@@ -83,8 +87,8 @@ func newREPLBuilder(application *Application, resolver completionResolver) *cliB
 	return &cliBuilder{
 		mode:        ModeREPL,
 		in:          nil,
-		out:         io.Discard,
-		err:         io.Discard,
+		out:         out,
+		err:         out,
 		globals:     &cliGlobals{Format: "text"},
 		options:     Options{ConfigDir: configDir, Connector: connector},
 		application: application,
@@ -116,6 +120,7 @@ func (b *cliBuilder) buildApp() *cmd.App {
 		b.runGroupCommand(),
 		b.doctorGroupCommand(),
 		b.auditGroupCommand(),
+		b.helpCommand(),
 		b.exitCommand(),
 	}
 	return cli
@@ -237,6 +242,25 @@ func (b *cliBuilder) exitCommand() *cmd.Command {
 				return errREPLExit
 			}
 			return nil
+		},
+	}
+}
+
+func (b *cliBuilder) helpCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "help",
+		UsageLine: "dbx help [command...]",
+		Short:     "Show command help",
+		Long:      helpEntries[""].body,
+		Run: func(_ context.Context, _ *cmd.Command, args []string) error {
+			topic := normalizeHelpTopic(strings.Join(args, " "))
+			if b.mode == ModeREPL {
+				if b.application == nil {
+					return fmt.Errorf("repl application is not configured")
+				}
+				return b.application.handleHelp(topic)
+			}
+			return printHelpTopic(writerPrinter{w: b.out}, topic)
 		},
 	}
 }

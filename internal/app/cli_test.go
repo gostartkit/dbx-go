@@ -931,6 +931,20 @@ func TestCLIHelpForMultiWordCommand(t *testing.T) {
 	}
 }
 
+func TestCLIHelpRootCommandHasOutput(t *testing.T) {
+	t.Parallel()
+
+	app, stdout, stderr := newCLIApp(t, "", t.TempDir())
+	err := app.Run(context.Background(), []string{"help"})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	output := stdout.String() + stderr.String()
+	if !strings.Contains(output, "Usage:") || !strings.Contains(output, "Available Commands:") {
+		t.Fatalf("help output missing expected sections: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestCLIJSONErrorIncludesCode(t *testing.T) {
 	t.Parallel()
 

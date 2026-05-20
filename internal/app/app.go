@@ -22,6 +22,7 @@ type Options struct {
 
 type Application struct {
 	prompt               *ui.Prompt
+	out                  io.Writer
 	store                *config.Store
 	connector            connectorClient
 	templates            *tpl.Service
@@ -66,6 +67,7 @@ func NewWithOptions(in io.Reader, out io.Writer, _ io.Writer, opts Options) (*Ap
 
 	application := &Application{
 		prompt:    ui.NewPrompt(in, out),
+		out:       out,
 		store:     store,
 		connector: defaultConnector(),
 		templates: tpl.NewService(store),

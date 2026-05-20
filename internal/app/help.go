@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -304,4 +305,12 @@ func normalizeHelpTopic(topic string) string {
 
 type printer interface {
 	Println(args ...any)
+}
+
+type writerPrinter struct {
+	w io.Writer
+}
+
+func (p writerPrinter) Println(args ...any) {
+	fmt.Fprintln(p.w, args...)
 }

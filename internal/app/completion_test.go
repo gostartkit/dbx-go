@@ -15,6 +15,7 @@ func TestCalculateCompletionRootCommands(t *testing.T) {
 		"create",
 		"doctor",
 		"drop",
+		"help",
 		"run",
 		"show",
 		"use",

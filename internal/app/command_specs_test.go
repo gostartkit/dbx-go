@@ -20,7 +20,7 @@ func TestRootCommandSetMatchesShellSurface(t *testing.T) {
 		have[normalizeHelpTopic(command.Name)] = struct{}{}
 	}
 
-	want := []string{"connect", "use", "show", "create", "drop", "run", "doctor", "audit", "exit"}
+	want := []string{"connect", "use", "show", "create", "drop", "run", "doctor", "audit", "help", "exit"}
 	if len(have) != len(want) {
 		t.Fatalf("root command count = %d, want %d (%v)", len(have), len(want), have)
 	}
@@ -81,6 +81,7 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"run sql",
 		"doctor",
 		"audit log",
+		"help",
 		"exit",
 	} {
 		if _, ok := have[want]; !ok {

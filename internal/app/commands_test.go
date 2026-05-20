@@ -1,6 +1,8 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -113,5 +115,49 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 	}
 	if !strings.Contains(joined, "--validate") {
 		t.Fatalf("help output missing validate flag text: %q", joined)
+	}
+}
+
+func TestREPLHelpCommandHasOutput(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	app, err := NewWithOptions(strings.NewReader(""), &out, &out, Options{ConfigDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	if err := app.replCommandApp().RunLine(context.Background(), "help"); err != nil {
+		t.Fatalf("RunLine returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "Available Commands:") {
+		t.Fatalf("help output missing expected sections: %q", out.String())
+	}
+}
+
+func TestREPLHelpTopicsHaveOutput(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		line string
+		want string
+	}{
+		{line: "help show", want: "Usage: dbx show <subcommand>"},
+		{line: "help connect", want: "Usage: dbx connect <name>"},
+		{line: "help run", want: "Usage: dbx run <subcommand>"},
+	}
+
+	for _, tc := range cases {
+		var out bytes.Buffer
+		app, err := NewWithOptions(strings.NewReader(""), &out, &out, Options{ConfigDir: t.TempDir()})
+		if err != nil {
+			t.Fatalf("NewWithOptions returned error: %v", err)
+		}
+		if err := app.replCommandApp().RunLine(context.Background(), tc.line); err != nil {
+			t.Fatalf("RunLine(%q) returned error: %v", tc.line, err)
+		}
+		if !strings.Contains(out.String(), tc.want) {
+			t.Fatalf("help output for %q missing %q: %q", tc.line, tc.want, out.String())
+		}
 	}
 }

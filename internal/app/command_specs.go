@@ -26,7 +26,6 @@ func replCommandSpecs() []CommandSpec {
 	for _, command := range app.Spec().Commands {
 		flattenCommandSpec(&specs, "", command, false)
 	}
-	specs = append(specs, CommandSpec{Path: "help", Description: "show command help", Category: "builtin"})
 	return specs
 }
 

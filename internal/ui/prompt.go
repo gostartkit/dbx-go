@@ -78,6 +78,10 @@ func (p *Prompt) SetHistory(entries []string) {
 	p.history = NewHistoryNavigator(entries)
 }
 
+func (p *Prompt) Writer() io.Writer {
+	return p.out
+}
+
 func (p *Prompt) AppendHistory(entry string) bool {
 	if p.history == nil {
 		p.history = NewHistoryNavigator(nil)
