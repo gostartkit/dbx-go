@@ -57,8 +57,19 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 		Positionals: []cmd.PositionalArg{{Name: "query", Usage: "optional substring filter"}},
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.tag, "tag", "", "filter by template tag", "")
+			f.SetCompletion("tag", b.completeTemplateTags)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				filters := templateListFilters{Tag: flags.tag}
+				if len(args) > 1 {
+					return util.WrapLayer("validation", "show templates", fmt.Errorf("usage: show templates [query] [--tag value]"))
+				}
+				if len(args) == 1 {
+					filters.Query = args[0]
+				}
+				return b.application.handleShowTemplates(ctx, filters)
+			}
 			if len(args) > 1 {
 				return util.WrapLayer("validation", "show templates", fmt.Errorf("usage: dbx show templates [query] [--tag value]"))
 			}
@@ -111,11 +122,17 @@ func (b *cliBuilder) templateDescribeCommand() *cmd.Command {
 		UsageLine:   "dbx template describe <name> [flags]",
 		Short:       "Alias for describe template",
 		Long:        helpEntries["describe template"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true, Completion: b.completeTemplates}},
 		SetFlags: func(f *cmd.FlagSet) {
 			f.BoolVar(&flags.verbose, "verbose", false, "include redacted SQL preview", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "describe template", fmt.Errorf("usage: describe template <name> [--verbose]"))
+				}
+				return b.application.handleDescribeTemplate(ctx, args[0], flags.verbose)
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "describe template", fmt.Errorf("usage: dbx template describe <name> [flags]"))
 			}
@@ -139,13 +156,19 @@ func (b *cliBuilder) templateRunCommand() *cmd.Command {
 		UsageLine:   "dbx template run <name> [flags]",
 		Short:       "Run a workflow template",
 		Long:        helpEntries["template run"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true, Completion: b.completeTemplates}},
 		SetFlags: func(f *cmd.FlagSet) {
 			bindInputFlag(f, flags.inputs)
 			f.BoolVar(&flags.preview, "preview", false, "render the workflow plan without executing", "")
 			f.BoolVar(&flags.verbose, "verbose", false, "include redacted SQL preview", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "template run", fmt.Errorf("usage: template run <name> [flags]"))
+				}
+				return b.application.handleTemplateRun(ctx, args[0], flags.preview, flags.verbose, b.globals.DryRun)
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "template run", fmt.Errorf("usage: dbx template run <name> [flags]"))
 			}
@@ -162,8 +185,14 @@ func (b *cliBuilder) templateValidateCommand() *cmd.Command {
 		UsageLine:   "dbx template validate <name>",
 		Short:       "Validate a workflow template",
 		Long:        helpEntries["template validate"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true, Completion: b.completeTemplates}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "template validate", fmt.Errorf("usage: template validate <name>"))
+				}
+				return b.application.handleTemplateValidate(ctx, args[0])
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "template validate", fmt.Errorf("usage: dbx template validate <name>"))
 			}

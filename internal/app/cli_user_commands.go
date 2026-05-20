@@ -37,7 +37,7 @@ func (b *cliBuilder) createUserCommand() *cmd.Command {
 		UsageLine:   "dbx create user <name> [flags]",
 		Short:       "Create a MySQL user",
 		Long:        helpEntries["create user"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.template, "template", "", "template name", "")
 			f.StringVar(&flags.host, "host", "%", "MySQL user host", "")
@@ -49,6 +49,16 @@ func (b *cliBuilder) createUserCommand() *cmd.Command {
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				name := ""
+				if len(args) > 1 {
+					return util.WrapLayer("validation", "create user", fmt.Errorf("usage: create user [name]"))
+				}
+				if len(args) == 1 {
+					name = args[0]
+				}
+				return b.application.handleCreateUser(ctx, name)
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "create user", fmt.Errorf("usage: dbx create user <name> [flags]"))
 			}
@@ -71,6 +81,12 @@ func (b *cliBuilder) showUsersCommand() *cmd.Command {
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "show users", err)
+				}
+				return b.application.handleShowUsers(ctx)
+			}
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "show users", err)
 			}
@@ -118,13 +134,23 @@ func (b *cliBuilder) dropUserCommand() *cmd.Command {
 		UsageLine:   "dbx drop user <name> [flags]",
 		Short:       "Drop a MySQL user",
 		Long:        helpEntries["drop user"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.template, "template", "", "template name", "")
 			f.StringVar(&flags.host, "host", "%", "MySQL user host", "")
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				name := ""
+				if len(args) > 1 {
+					return util.WrapLayer("validation", "drop user", fmt.Errorf("usage: drop user [name]"))
+				}
+				if len(args) == 1 {
+					name = args[0]
+				}
+				return b.application.handleDropUser(ctx, name)
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "drop user", fmt.Errorf("usage: dbx drop user <name> [flags]"))
 			}

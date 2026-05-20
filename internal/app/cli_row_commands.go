@@ -21,6 +21,13 @@ func (b *cliBuilder) countCommand() *cmd.Command {
 		Short:     "Count rows in a table",
 		Long:      helpEntries["count rows"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				table, err := parseCountArgs(args)
+				if err != nil {
+					return util.WrapLayer("validation", "count rows", err)
+				}
+				return b.application.handleCountRows(ctx, table)
+			}
 			table, err := parseCountArgs(args)
 			if err != nil {
 				return util.WrapLayer("validation", "count rows", err)
@@ -43,6 +50,13 @@ func (b *cliBuilder) peekCommand() *cmd.Command {
 			f.IntVar(&flags.limit, "limit", defaultRowInspectionLimit, "row limit", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				table, limit, err := parsePreviewArgs("peek", args, flags.limit)
+				if err != nil {
+					return util.WrapLayer("validation", "peek rows", err)
+				}
+				return b.application.handlePeekRows(ctx, table, strconv.Itoa(limit))
+			}
 			table, limit, err := parsePreviewArgs("peek", args, flags.limit)
 			if err != nil {
 				return util.WrapLayer("validation", "peek rows", err)
@@ -65,6 +79,13 @@ func (b *cliBuilder) sampleCommand() *cmd.Command {
 			f.IntVar(&flags.limit, "limit", defaultRowInspectionLimit, "row limit", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				table, limit, err := parsePreviewArgs("sample", args, flags.limit)
+				if err != nil {
+					return util.WrapLayer("validation", "sample rows", err)
+				}
+				return b.application.handleSampleRows(ctx, table, strconv.Itoa(limit))
+			}
 			table, limit, err := parsePreviewArgs("sample", args, flags.limit)
 			if err != nil {
 				return util.WrapLayer("validation", "sample rows", err)

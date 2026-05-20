@@ -18,6 +18,12 @@ func (b *cliBuilder) showTablesCommand() *cmd.Command {
 		Short:     "List tables in the selected database",
 		Long:      helpEntries["show tables"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "show tables", err)
+				}
+				return b.application.handleShowTables(ctx)
+			}
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "show tables", err)
 			}
@@ -34,8 +40,14 @@ func (b *cliBuilder) showIndexesCommand() *cmd.Command {
 		UsageLine:   "dbx show indexes <table>",
 		Short:       "Show indexes for a table in the selected database",
 		Long:        helpEntries["show indexes"].body,
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "show indexes", fmt.Errorf("usage: show indexes <table>"))
+				}
+				return b.application.handleShowIndexes(ctx, args[0])
+			}
 			table := ""
 			switch len(args) {
 			case 1:
@@ -61,8 +73,18 @@ func (b *cliBuilder) showGrantsCommand() *cmd.Command {
 		UsageLine:   "dbx show grants <user> [host]",
 		Short:       "Show MySQL grants for a user",
 		Long:        helpEntries["show grants"].body,
-		Positionals: []cmd.PositionalArg{{Name: "user", Usage: "MySQL username", Required: true}, {Name: "host", Usage: "MySQL user host"}},
+		Positionals: []cmd.PositionalArg{{Name: "user", Usage: "MySQL username", Required: true, Completion: b.completeUsers}, {Name: "host", Usage: "MySQL user host"}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) == 0 || len(args) > 2 {
+					return util.WrapLayer("validation", "show grants", fmt.Errorf("usage: show grants <user> [host]"))
+				}
+				host := ""
+				if len(args) == 2 {
+					host = args[1]
+				}
+				return b.application.handleShowGrants(ctx, args[0], host)
+			}
 			if len(args) == 0 || len(args) > 2 {
 				return util.WrapLayer("validation", "show grants", fmt.Errorf("usage: dbx show grants <user> [host]"))
 			}
@@ -84,6 +106,12 @@ func (b *cliBuilder) showProcesslistCommand() *cmd.Command {
 		Short:     "Show the active MySQL processlist",
 		Long:      helpEntries["show processlist"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "show processlist", err)
+				}
+				return b.application.handleShowProcesslist(ctx)
+			}
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "show processlist", err)
 			}
@@ -100,8 +128,18 @@ func (b *cliBuilder) showVariablesCommand() *cmd.Command {
 		UsageLine:   "dbx show variables [pattern]",
 		Short:       "Show MySQL system variables",
 		Long:        helpEntries["show variables"].body,
-		Positionals: []cmd.PositionalArg{{Name: "pattern", Usage: "exact name or LIKE pattern"}},
+		Positionals: []cmd.PositionalArg{{Name: "pattern", Usage: "exact name or LIKE pattern", Completion: b.completeVariables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) > 1 {
+					return util.WrapLayer("validation", "show variables", fmt.Errorf("usage: show variables [pattern]"))
+				}
+				pattern := ""
+				if len(args) == 1 {
+					pattern = args[0]
+				}
+				return b.application.handleShowVariables(ctx, pattern)
+			}
 			if len(args) > 1 {
 				return util.WrapLayer("validation", "show variables", fmt.Errorf("usage: dbx show variables [pattern]"))
 			}
@@ -119,10 +157,17 @@ func (b *cliBuilder) showVariablesCommand() *cmd.Command {
 func (b *cliBuilder) contextCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "context",
+		Aliases:   []string{"ctx"},
 		UsageLine: "dbx context",
 		Short:     "Show the current operational context",
 		Long:      helpEntries["context"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "context", err)
+				}
+				return b.application.handleContext(ctx)
+			}
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "context", err)
 			}
@@ -163,6 +208,16 @@ func (b *cliBuilder) describeCommand() *cmd.Command {
 			f.BoolVar(&flags.verbose, "verbose", false, "include redacted SQL preview for template descriptions", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				switch len(args) {
+				case 0:
+					return b.application.handleDescribeTable(ctx, "")
+				case 1:
+					return b.application.handleDescribeTable(ctx, args[0])
+				default:
+					return util.WrapLayer("validation", "describe", fmt.Errorf("usage: describe [table]"))
+				}
+			}
 			if len(args) >= 2 && args[0] == "template" {
 				if len(args) != 2 {
 					return util.WrapLayer("validation", "describe template", fmt.Errorf("usage: dbx describe template <name> [flags]"))

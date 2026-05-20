@@ -14,8 +14,14 @@ func (b *cliBuilder) showColumnsCommand() *cmd.Command {
 		UsageLine:   "dbx show columns <table>",
 		Short:       "Show columns for a table in the selected database",
 		Long:        helpEntries["show columns"].body,
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "show columns", fmt.Errorf("usage: show columns <table>"))
+				}
+				return b.application.handleShowColumns(ctx, args[0])
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "show columns", fmt.Errorf("usage: dbx show columns <table>"))
 			}
@@ -46,8 +52,14 @@ func (b *cliBuilder) showForeignKeysCommand() *cmd.Command {
 				UsageLine:   "dbx show foreign keys <table>",
 				Short:       "Show foreign keys for a table in the selected database",
 				Long:        helpEntries["show foreign keys"].body,
-				Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true}},
+				Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 				Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+					if b.mode == ModeREPL {
+						if len(args) != 1 {
+							return util.WrapLayer("validation", "show foreign keys", fmt.Errorf("usage: show foreign keys <table>"))
+						}
+						return b.application.handleShowForeignKeys(ctx, args[0])
+					}
 					if len(args) != 1 {
 						return util.WrapLayer("validation", "show foreign keys", fmt.Errorf("usage: dbx show foreign keys <table>"))
 					}
@@ -65,8 +77,14 @@ func (b *cliBuilder) showFksCommand() *cmd.Command {
 		Name:        "fks",
 		UsageLine:   "dbx show fks <table>",
 		Short:       "Alias for show foreign keys",
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "show foreign keys", fmt.Errorf("usage: show fks <table>"))
+				}
+				return b.application.handleShowForeignKeys(ctx, args[0])
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "show foreign keys", fmt.Errorf("usage: dbx show fks <table>"))
 			}
@@ -84,6 +102,12 @@ func (b *cliBuilder) showTriggersCommand() *cmd.Command {
 		Short:     "Show triggers in the selected database",
 		Long:      helpEntries["show triggers"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "show triggers", err)
+				}
+				return b.application.handleShowTriggers(ctx)
+			}
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "show triggers", err)
 			}
@@ -109,6 +133,12 @@ func (b *cliBuilder) showViewsCommand() *cmd.Command {
 		Short:     "Show views in the selected database",
 		Long:      helpEntries["show views"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "show views", err)
+				}
+				return b.application.handleShowViews(ctx)
+			}
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "show views", err)
 			}

@@ -55,11 +55,22 @@ type connectionEditFlags struct {
 func (b *cliBuilder) connectCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "connect",
+		Aliases:     []string{"conn", "cx"},
 		UsageLine:   "dbx connect <name>",
 		Short:       "Connect to a saved connection",
 		Long:        helpEntries["connect"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name"}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				switch len(args) {
+				case 0:
+					return b.application.handleConnect(ctx)
+				case 1:
+					return b.application.handleConnectByName(ctx, args[0])
+				default:
+					return util.WrapLayer("validation", "connect", fmt.Errorf("usage: connect [name]"))
+				}
+			}
 			if len(args) == 0 {
 				return b.withApplication(ctx, func(application *Application) error {
 					if strings.EqualFold(b.globals.Format, "json") {
@@ -93,10 +104,17 @@ func (b *cliBuilder) connectCommand() *cmd.Command {
 func (b *cliBuilder) connectionsCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "connections",
+		Aliases:   []string{"conns"},
 		UsageLine: "dbx connections",
 		Short:     "List saved connections",
 		Long:      helpEntries["connections"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "connections", err)
+				}
+				return b.application.handleConnections(ctx)
+			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "connections"}, func(application *Application, meta *auditMetadata) error {
 				if err := b.requireNoArgs(args); err != nil {
 					return util.WrapLayer("validation", "connections", err)
@@ -157,7 +175,7 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 		UsageLine:   "dbx connection create <name> [flags]",
 		Short:       "Create a saved connection",
 		Long:        helpEntries["connection create"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.driver, "driver", "mysql", "database driver", "")
 			f.SetEnum("driver", "mysql")
@@ -182,6 +200,12 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 			f.BoolVar(&flags.force, "force", false, "overwrite an existing connection", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 0 {
+					return util.WrapLayer("validation", "connection create", fmt.Errorf("usage: connection create"))
+				}
+				return b.application.handleConnectionCreate(ctx)
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection create", fmt.Errorf("usage: dbx connection create <name> [flags]"))
 			}
@@ -255,7 +279,7 @@ func (b *cliBuilder) connectionEditCommand() *cmd.Command {
 		UsageLine:   "dbx connection edit <name> [flags]",
 		Short:       "Edit a saved connection",
 		Long:        helpEntries["connection edit"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		SetFlags: func(f *cmd.FlagSet) {
 			bindOptionalStringFlag(f, &flags.driver, "driver", "database driver")
 			if flag, ok := f.Lookup("driver"); ok {
@@ -282,6 +306,12 @@ func (b *cliBuilder) connectionEditCommand() *cmd.Command {
 			f.BoolVar(&flags.test, "test", false, "test the connection before saving", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "connection edit", fmt.Errorf("usage: connection edit <name>"))
+				}
+				return b.application.handleConnectionEdit(ctx, args[0])
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection edit", fmt.Errorf("usage: dbx connection edit <name> [flags]"))
 			}
@@ -332,8 +362,14 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 		UsageLine:   "dbx connection delete <name> [flags]",
 		Short:       "Delete a saved connection",
 		Long:        helpEntries["connection delete"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "connection delete", fmt.Errorf("usage: connection delete <name>"))
+				}
+				return b.application.handleConnectionDelete(ctx, args[0])
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection delete", fmt.Errorf("usage: dbx connection delete <name>"))
 			}
@@ -362,8 +398,14 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 		UsageLine:   "dbx connection show <name>",
 		Short:       "Show a saved connection",
 		Long:        helpEntries["connection show"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "connection show", fmt.Errorf("usage: connection show <name>"))
+				}
+				return b.application.handleConnectionShow(ctx, args[0])
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection show", fmt.Errorf("usage: dbx connection show <name>"))
 			}
@@ -426,11 +468,21 @@ func (b *cliBuilder) connectionTestCommand() *cmd.Command {
 		UsageLine:   "dbx connection test <name>",
 		Short:       "Test a saved connection",
 		Long:        helpEntries["connection test"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		SetFlags: func(f *cmd.FlagSet) {
 			f.BoolVar(&verbose, "verbose", false, "include per-layer diagnostic details", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				switch len(args) {
+				case 0:
+					return b.application.handleConnectionTest(ctx, "", verbose)
+				case 1:
+					return b.application.handleConnectionTest(ctx, args[0], verbose)
+				default:
+					return util.WrapLayer("validation", "connection test", fmt.Errorf("usage: connection test [name] [--verbose]"))
+				}
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection test", fmt.Errorf("usage: dbx connection test <name>"))
 			}
@@ -479,8 +531,18 @@ func (b *cliBuilder) connectionDoctorCommand() *cmd.Command {
 		UsageLine:   "dbx connection doctor <name>",
 		Short:       "Inspect a saved connection statically",
 		Long:        helpEntries["connection doctor"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				switch len(args) {
+				case 0:
+					return b.application.handleConnectionDoctor(ctx, "")
+				case 1:
+					return b.application.handleConnectionDoctor(ctx, args[0])
+				default:
+					return util.WrapLayer("validation", "connection doctor", fmt.Errorf("usage: connection doctor [name]"))
+				}
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "connection doctor", fmt.Errorf("usage: dbx connection doctor <name>"))
 			}

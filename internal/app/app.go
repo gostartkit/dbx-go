@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/config"
 	"pkg.gostartkit.com/dbx/internal/repl"
 	tpl "pkg.gostartkit.com/dbx/internal/template"
@@ -24,6 +25,7 @@ type Application struct {
 	store                *config.Store
 	connector            connectorClient
 	templates            *tpl.Service
+	replApp              *cmd.App
 	session              *Session
 	history              []string
 	dryRun               bool
@@ -81,38 +83,6 @@ func NewWithOptions(in io.Reader, out io.Writer, _ io.Writer, opts Options) (*Ap
 	}
 
 	return application, nil
-}
-
-func (a *Application) completeInput(line string) ui.Completion {
-	connections, err := a.store.ListConnections()
-	if err != nil {
-		return calculateCompletion(line, CompletionContext{
-			Connection: a.currentConnectionName(),
-			Database:   a.currentDatabaseName(),
-			DryRun:     a.dryRun,
-		})
-	}
-
-	connectionSuggestions := make([]CompletionConnection, 0, len(connections))
-	for _, connection := range connections {
-		connectionSuggestions = append(connectionSuggestions, CompletionConnection{
-			Name:   connection.Name,
-			Driver: connection.Driver,
-			Mode:   connection.Mode,
-		})
-	}
-
-	return calculateCompletion(line, CompletionContext{
-		Connection:   a.currentConnectionName(),
-		Database:     a.currentDatabaseName(),
-		DryRun:       a.dryRun,
-		Connections:  connectionSuggestions,
-		Databases:    a.currentCompletionDatabases(),
-		Tables:       a.currentCompletionTables(),
-		Templates:    a.currentCompletionTemplates(),
-		TemplateTags: a.currentCompletionTemplateTags(),
-		Users:        a.currentCompletionUsers(),
-	})
 }
 
 func (a *Application) Run(ctx context.Context) error {

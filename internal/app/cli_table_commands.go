@@ -59,8 +59,14 @@ func (b *cliBuilder) showCreateTableCommand() *cmd.Command {
 		UsageLine:   "dbx show create table <table>",
 		Short:       "Show CREATE TABLE for a table",
 		Long:        helpEntries["show create table"].body,
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "show create table", fmt.Errorf("usage: show create table <table>"))
+				}
+				return b.application.handleShowCreateTable(ctx, args[0])
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "show create table", fmt.Errorf("usage: dbx show create table <table>"))
 			}
@@ -77,8 +83,18 @@ func (b *cliBuilder) showTableStatusCommand() *cmd.Command {
 		UsageLine:   "dbx show table status [table]",
 		Short:       "Show table status for one or more tables",
 		Long:        helpEntries["show table status"].body,
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name"}},
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) > 1 {
+					return util.WrapLayer("validation", "show table status", fmt.Errorf("usage: show table status [table]"))
+				}
+				table := ""
+				if len(args) == 1 {
+					table = args[0]
+				}
+				return b.application.handleShowTableStatus(ctx, table)
+			}
 			if len(args) > 1 {
 				return util.WrapLayer("validation", "show table status", fmt.Errorf("usage: dbx show table status [table]"))
 			}
@@ -99,8 +115,14 @@ func (b *cliBuilder) truncateTableCommand() *cmd.Command {
 		UsageLine:   "dbx truncate table <table>",
 		Short:       "Delete all rows from a table",
 		Long:        helpEntries["truncate table"].body,
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true}},
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 1 {
+					return util.WrapLayer("validation", "truncate table", fmt.Errorf("usage: truncate table <table>"))
+				}
+				return b.application.handleTruncateTable(ctx, args[0])
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "truncate table", fmt.Errorf("usage: dbx truncate table <table>"))
 			}
@@ -118,10 +140,16 @@ func (b *cliBuilder) renameTableCommand() *cmd.Command {
 		Short:     "Rename a table",
 		Long:      helpEntries["rename table"].body,
 		Positionals: []cmd.PositionalArg{
-			{Name: "from", Usage: "existing table name", Required: true},
+			{Name: "from", Usage: "existing table name", Required: true, Completion: b.completeTables},
 			{Name: "to", Usage: "new table name", Required: true},
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 2 {
+					return util.WrapLayer("validation", "rename table", fmt.Errorf("usage: rename table <from> <to>"))
+				}
+				return b.application.handleRenameTable(ctx, args[0], args[1])
+			}
 			if len(args) != 2 {
 				return util.WrapLayer("validation", "rename table", fmt.Errorf("usage: dbx rename table <from> <to>"))
 			}

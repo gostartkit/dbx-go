@@ -105,6 +105,12 @@ func (b *cliBuilder) showDatabasesCommand() *cmd.Command {
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "show databases", err)
+				}
+				return b.application.handleShowDatabases(ctx)
+			}
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "show databases", err)
 			}
@@ -167,6 +173,12 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 0 {
+					return util.WrapLayer("validation", "create database", fmt.Errorf("usage: create database"))
+				}
+				return b.application.handleCreateDatabase(ctx)
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "create database", fmt.Errorf("usage: dbx create database <name> [flags]"))
 			}
@@ -198,6 +210,12 @@ func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if len(args) != 0 {
+					return util.WrapLayer("validation", "drop database", fmt.Errorf("usage: drop database"))
+				}
+				return b.application.handleDropDatabase(ctx)
+			}
 			if len(args) != 1 {
 				return util.WrapLayer("validation", "drop database", fmt.Errorf("usage: dbx drop database <name> [flags]"))
 			}
@@ -215,6 +233,12 @@ func (b *cliBuilder) statusCommand() *cmd.Command {
 		Short:     "Show the current session status",
 		Long:      helpEntries["status"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if b.mode == ModeREPL {
+				if err := b.requireNoArgs(args); err != nil {
+					return util.WrapLayer("validation", "status", err)
+				}
+				return b.application.handleStatus(ctx)
+			}
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "status", err)
 			}

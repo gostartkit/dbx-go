@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -21,196 +22,22 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 	}
 
 	resolved := resolveAlias(line)
-	fields := strings.Fields(resolved)
-
 	switch {
-	case len(fields) >= 3 && fields[0] == "describe" && fields[1] == "template":
-		name, verbose, err := parseDescribeTemplateArgs(fields[2:])
-		if err != nil {
-			return false, util.WrapLayer("validation", "describe template", err)
-		}
-		return false, a.handleDescribeTemplate(ctx, name, verbose)
-	case len(fields) >= 3 && fields[0] == "template" && fields[1] == "validate":
-		name, err := parseTemplateValidateArgs(fields[2:])
-		if err != nil {
-			return false, util.WrapLayer("validation", "template validate", err)
-		}
-		return false, a.handleTemplateValidate(ctx, name)
-	case len(fields) == 2 && fields[0] == "connect":
-		return false, a.handleConnectByName(ctx, fields[1])
-	case len(fields) == 2 && fields[0] == "use":
-		return false, a.handleUseDatabase(ctx, fields[1])
-	case len(fields) == 2 && fields[0] == "count":
-		return false, a.handleCountRows(ctx, fields[1])
-	case len(fields) == 3 && fields[0] == "count" && fields[1] == "rows":
-		return false, a.handleCountRows(ctx, fields[2])
-	case len(fields) == 2 && fields[0] == "peek":
-		return false, a.handlePeekRows(ctx, fields[1], "")
-	case len(fields) == 3 && fields[0] == "peek":
-		if fields[1] == "rows" {
-			return false, a.handlePeekRows(ctx, fields[2], "")
-		}
-		return false, a.handlePeekRows(ctx, fields[1], fields[2])
-	case len(fields) == 4 && fields[0] == "peek" && fields[1] == "rows":
-		return false, a.handlePeekRows(ctx, fields[2], fields[3])
-	case len(fields) == 2 && fields[0] == "sample":
-		return false, a.handleSampleRows(ctx, fields[1], "")
-	case len(fields) == 3 && fields[0] == "sample":
-		if fields[1] == "rows" {
-			return false, a.handleSampleRows(ctx, fields[2], "")
-		}
-		return false, a.handleSampleRows(ctx, fields[1], fields[2])
-	case len(fields) == 4 && fields[0] == "sample" && fields[1] == "rows":
-		return false, a.handleSampleRows(ctx, fields[2], fields[3])
-	case len(fields) == 2 && fields[0] == "columns":
-		return false, a.handleShowColumns(ctx, fields[1])
-	case len(fields) == 2 && fields[0] == "describe":
-		return false, a.handleDescribeTable(ctx, fields[1])
-	case len(fields) == 3 && fields[0] == "describe" && fields[1] == "table":
-		return false, a.handleDescribeTable(ctx, fields[2])
-	case len(fields) == 2 && fields[0] == "describe" && fields[1] == "table":
-		return false, a.handleDescribeTable(ctx, "")
-	case len(fields) == 3 && fields[0] == "create" && fields[1] == "user":
-		return false, a.handleCreateUser(ctx, fields[2])
-	case len(fields) == 2 && fields[0] == "create" && fields[1] == "user":
-		return false, a.handleCreateUser(ctx, "")
-	case len(fields) == 3 && fields[0] == "drop" && fields[1] == "user":
-		return false, a.handleDropUser(ctx, fields[2])
-	case len(fields) == 2 && fields[0] == "drop" && fields[1] == "user":
-		return false, a.handleDropUser(ctx, "")
-	case line == "connection create":
-		return false, a.handleConnectionCreate(ctx)
-	case len(fields) == 2 && fields[0] == "connection" && fields[1] == "doctor":
-		return false, a.handleConnectionDoctor(ctx, "")
-	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "doctor":
-		return false, a.handleConnectionDoctor(ctx, fields[2])
-	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "edit":
-		return false, a.handleConnectionEdit(ctx, fields[2])
-	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "delete":
-		return false, a.handleConnectionDelete(ctx, fields[2])
-	case len(fields) == 3 && fields[0] == "connection" && fields[1] == "show":
-		return false, a.handleConnectionShow(ctx, fields[2])
-	case len(fields) >= 2 && fields[0] == "connection" && fields[1] == "test":
-		name, verbose, ok := parseConnectionTestArgs(fields[2:])
-		if ok {
-			return false, a.handleConnectionTest(ctx, name, verbose)
-		}
-	case len(fields) >= 1 && fields[0] == "help":
-		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(line, "help")))
-	case len(fields) == 2 && fields[0] == "show" && fields[1] == "tables":
-		return false, a.handleShowTables(ctx)
-	case len(fields) == 3 && fields[0] == "show" && fields[1] == "columns":
-		return false, a.handleShowColumns(ctx, fields[2])
-	case len(fields) == 4 && fields[0] == "show" && fields[1] == "create" && fields[2] == "table":
-		return false, a.handleShowCreateTable(ctx, fields[3])
-	case len(fields) == 4 && fields[0] == "show" && fields[1] == "foreign" && fields[2] == "keys":
-		return false, a.handleShowForeignKeys(ctx, fields[3])
-	case len(fields) == 3 && fields[0] == "show" && fields[1] == "table" && fields[2] == "status":
-		return false, a.handleShowTableStatus(ctx, "")
-	case len(fields) == 4 && fields[0] == "show" && fields[1] == "table" && fields[2] == "status":
-		return false, a.handleShowTableStatus(ctx, fields[3])
-	case len(fields) == 2 && fields[0] == "show" && fields[1] == "indexes":
-		return false, a.handleShowIndexes(ctx, "")
-	case len(fields) == 3 && fields[0] == "show" && fields[1] == "indexes":
-		return false, a.handleShowIndexes(ctx, fields[2])
-	case len(fields) == 4 && fields[0] == "show" && fields[1] == "indexes" && fields[2] == "on":
-		return false, a.handleShowIndexes(ctx, fields[3])
-	case len(fields) == 2 && fields[0] == "show" && fields[1] == "processlist":
-		return false, a.handleShowProcesslist(ctx)
-	case len(fields) == 2 && fields[0] == "show" && fields[1] == "triggers":
-		return false, a.handleShowTriggers(ctx)
-	case len(fields) == 2 && fields[0] == "show" && fields[1] == "variables":
-		return false, a.handleShowVariables(ctx, "")
-	case len(fields) == 3 && fields[0] == "show" && fields[1] == "variables":
-		return false, a.handleShowVariables(ctx, fields[2])
-	case len(fields) == 2 && fields[0] == "show" && fields[1] == "views":
-		return false, a.handleShowViews(ctx)
-	case len(fields) >= 2 && fields[0] == "show" && fields[1] == "templates":
-		filters, err := parseShowTemplatesArgs(fields[2:])
-		if err != nil {
-			return false, util.WrapLayer("validation", "show templates", err)
-		}
-		return false, a.handleShowTemplates(ctx, filters)
-	case len(fields) >= 3 && fields[0] == "template" && fields[1] == "run":
-		name, preview, verbose, dryRunFlag, err := parseTemplateRunArgs(fields[2:])
-		if err != nil {
-			return false, util.WrapLayer("validation", "template run", err)
-		}
-		return false, a.handleTemplateRun(ctx, name, preview, verbose, dryRunFlag)
-	case len(fields) == 3 && fields[0] == "truncate" && fields[1] == "table":
-		return false, a.handleTruncateTable(ctx, fields[2])
-	case len(fields) == 4 && fields[0] == "rename" && fields[1] == "table":
-		return false, a.handleRenameTable(ctx, fields[2], fields[3])
-	case len(fields) == 3 && fields[0] == "show" && fields[1] == "grants":
-		return false, a.handleShowGrants(ctx, fields[2], "")
-	case len(fields) == 4 && fields[0] == "show" && fields[1] == "grants":
-		return false, a.handleShowGrants(ctx, fields[2], fields[3])
+	case resolved == "":
+		return false, nil
+	case resolved == "/":
+		return false, a.handleHelp("")
+	case resolved == "help":
+		return false, a.handleHelp("")
+	case strings.HasPrefix(resolved, "help "):
+		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(resolved, "help ")))
 	}
 
-	switch resolved {
-	case "":
-		return false, nil
-	case "/":
-		return false, a.handleHelp("")
-	case "help":
-		return false, a.handleHelp("")
-	case "connect":
-		return false, a.handleConnect(ctx)
-	case "connections":
-		return false, a.handleConnections(ctx)
-	case "context":
-		return false, a.handleContext(ctx)
-	case "audit log":
-		return false, a.handleAuditLog(ctx)
-	case "count rows":
-		return false, a.handleCountRows(ctx, "")
-	case "peek rows":
-		return false, a.handlePeekRows(ctx, "", "")
-	case "sample rows":
-		return false, a.handleSampleRows(ctx, "", "")
-	case "status":
-		return false, a.handleStatus(ctx)
-	case "create database":
-		return false, a.handleCreateDatabase(ctx)
-	case "show databases":
-		return false, a.handleShowDatabases(ctx)
-	case "list databases":
-		return false, a.handleShowDatabases(ctx)
-	case "show users":
-		return false, a.handleShowUsers(ctx)
-	case "show tables":
-		return false, a.handleShowTables(ctx)
-	case "show triggers":
-		return false, a.handleShowTriggers(ctx)
-	case "show processlist":
-		return false, a.handleShowProcesslist(ctx)
-	case "show templates":
-		return false, a.handleShowTemplates(ctx, templateListFilters{})
-	case "show views":
-		return false, a.handleShowViews(ctx)
-	case "templates":
-		return false, a.handleShowTemplates(ctx, templateListFilters{})
-	case "describe template":
-		return false, util.WrapLayer("validation", "describe template", fmt.Errorf("usage: describe template <name> [--verbose]"))
-	case "template validate":
-		return false, util.WrapLayer("validation", "template validate", fmt.Errorf("usage: template validate <name>"))
-	case "template run":
-		return false, util.WrapLayer("validation", "template run", fmt.Errorf("usage: template run <name> [--preview] [--dry-run] [--verbose]"))
-	case "drop database":
-		return false, a.handleDropDatabase(ctx)
-	case "dry-run on":
-		a.dryRun = true
-		a.prompt.Println("Dry-run mode is on.")
-		return false, nil
-	case "dry-run off":
-		a.dryRun = false
-		a.prompt.Println("Dry-run mode is off.")
-		return false, nil
-	case "exit":
+	err := a.replCommandApp().RunLine(ctx, resolved)
+	if errors.Is(err, errREPLExit) {
 		return true, nil
-	default:
-		return false, fmt.Errorf("unknown command %q; use / or help", line)
 	}
+	return false, err
 }
 
 func (a *Application) handleHelp(topic string) error {

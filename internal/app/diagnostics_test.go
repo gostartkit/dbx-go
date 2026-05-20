@@ -219,7 +219,7 @@ func TestHandleLineConnectionTestParsesVerboseName(t *testing.T) {
 		t.Fatalf("NewWithOptions returned error: %v", err)
 	}
 
-	exit, err := app.handleLine(context.Background(), "connection test prod verbose")
+	exit, err := app.handleLine(context.Background(), "connection test prod --verbose")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestHandleLineConnectionTestParsesVerboseName(t *testing.T) {
 	}
 }
 
-func TestHandleLineConnectionTestParsesVerboseWithoutName(t *testing.T) {
+func TestHandleLineConnectionTestRequiresExplicitNameInSharedTree(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -245,7 +245,7 @@ func TestHandleLineConnectionTestParsesVerboseWithoutName(t *testing.T) {
 
 	var out bytes.Buffer
 	connector := &diagnosticConnector{}
-	app, err := NewWithOptions(strings.NewReader("prod\n"), &out, &out, Options{
+	app, err := NewWithOptions(strings.NewReader(""), &out, &out, Options{
 		ConfigDir: root,
 		Connector: connector,
 	})
@@ -253,15 +253,12 @@ func TestHandleLineConnectionTestParsesVerboseWithoutName(t *testing.T) {
 		t.Fatalf("NewWithOptions returned error: %v", err)
 	}
 
-	exit, err := app.handleLine(context.Background(), "connection test verbose")
-	if err != nil {
-		t.Fatalf("handleLine returned error: %v", err)
+	exit, err := app.handleLine(context.Background(), "connection test --verbose")
+	if err == nil {
+		t.Fatalf("expected validation error")
 	}
 	if exit {
 		t.Fatalf("expected REPL to continue")
-	}
-	if connector.openCalls != 1 || connector.lastName != "prod" {
-		t.Fatalf("unexpected connector calls: calls=%d name=%q", connector.openCalls, connector.lastName)
 	}
 }
 

@@ -20,12 +20,32 @@ type cliGlobals struct {
 	Format     string
 }
 
+type CommandMode string
+
+const (
+	ModeCLI  CommandMode = "cli"
+	ModeREPL CommandMode = "repl"
+)
+
+type completionResolver interface {
+	Connections() []CompletionConnection
+	Databases() []string
+	Tables() []string
+	Templates() []string
+	TemplateTags() []string
+	Users() []string
+}
+
 type cliBuilder struct {
+	mode    CommandMode
 	in      io.Reader
 	out     io.Writer
 	err     io.Writer
 	globals *cliGlobals
 	options Options
+
+	application *Application
+	resolver    completionResolver
 }
 
 func NewCommandApp(in io.Reader, out io.Writer, err io.Writer) *cmd.App {
@@ -33,54 +53,93 @@ func NewCommandApp(in io.Reader, out io.Writer, err io.Writer) *cmd.App {
 }
 
 func newCommandAppWithOptions(in io.Reader, out io.Writer, err io.Writer, options Options) *cmd.App {
+	return newCLIBuilder(in, out, err, options).buildApp()
+}
+
+func newCLIBuilder(in io.Reader, out io.Writer, err io.Writer, options Options) *cliBuilder {
 	globals := &cliGlobals{
 		Format: "text",
 	}
 
-	builder := &cliBuilder{
+	return &cliBuilder{
+		mode:    ModeCLI,
 		in:      in,
 		out:     out,
 		err:     err,
 		globals: globals,
 		options: options,
 	}
+}
 
+func newREPLBuilder(application *Application, resolver completionResolver) *cliBuilder {
+	configDir := ""
+	var connector connectorClient
+	if application != nil {
+		connector = application.connector
+		if application.store != nil {
+			configDir = application.store.RootDir
+		}
+	}
+	return &cliBuilder{
+		mode:        ModeREPL,
+		in:          nil,
+		out:         io.Discard,
+		err:         io.Discard,
+		globals:     &cliGlobals{Format: "text"},
+		options:     Options{ConfigDir: configDir, Connector: connector},
+		application: application,
+		resolver:    resolver,
+	}
+}
+
+func (b *cliBuilder) buildApp() *cmd.App {
 	cli := cmd.NewApp("dbx")
-	cli.Out = out
-	cli.Err = err
+	cli.Out = b.out
+	cli.Err = b.err
 	cli.Short = "Interactive MySQL database REPL with native SSH support"
 	cli.Long = "dbx starts in interactive mode and guides database operations without requiring raw SQL from users."
-	cli.SetFlags = builder.setGlobalFlags
+	if b.mode == ModeCLI {
+		cli.SetFlags = b.setGlobalFlags
+	}
 	cli.Root = &cmd.Command{
 		UsageLine: "dbx [flags] [command]",
 		Short:     cli.Short,
 		Long:      helpEntries[""].body,
-		Run:       builder.runRoot,
+		Run:       b.runRoot,
 	}
 	cli.Commands = []*cmd.Command{
-		builder.connectCommand(),
-		builder.columnsCommand(),
-		builder.connectionsCommand(),
-		builder.countCommand(),
-		builder.auditGroupCommand(),
-		builder.connectionGroupCommand(),
-		builder.createGroupCommand(),
-		builder.describeCommand(),
-		builder.listGroupCommand(),
-		builder.peekCommand(),
-		builder.runGroupCommand(),
-		builder.sampleCommand(),
-		builder.showGroupCommand(),
-		builder.templateGroupCommand(),
-		builder.templatesCommand(),
-		builder.dropGroupCommand(),
-		builder.truncateGroupCommand(),
-		builder.renameGroupCommand(),
-		builder.contextCommand(),
-		builder.statusCommand(),
+		b.connectCommand(),
+		b.columnsCommand(),
+		b.connectionsCommand(),
+		b.countCommand(),
+		b.auditGroupCommand(),
+		b.connectionGroupCommand(),
+		b.createGroupCommand(),
+		b.describeCommand(),
+		b.listGroupCommand(),
+		b.peekCommand(),
+		b.runGroupCommand(),
+		b.sampleCommand(),
+		b.showGroupCommand(),
+		b.templateGroupCommand(),
+		b.templatesCommand(),
+		b.dropGroupCommand(),
+		b.truncateGroupCommand(),
+		b.renameGroupCommand(),
+		b.contextCommand(),
+		b.statusCommand(),
 	}
-
+	if b.mode == ModeREPL {
+		cli.Commands = append(replOverlayCommands(b), cli.Commands...)
+	}
 	return cli
+}
+
+func (b *cliBuilder) syncREPLGlobals(application *Application) {
+	if b.mode != ModeREPL || application == nil {
+		return
+	}
+	b.globals.DryRun = application.dryRun
 }
 
 func (b *cliBuilder) setGlobalFlags(f *cmd.FlagSet) {
@@ -94,6 +153,9 @@ func (b *cliBuilder) setGlobalFlags(f *cmd.FlagSet) {
 }
 
 func (b *cliBuilder) runRoot(ctx context.Context, _ *cmd.Command, args []string) error {
+	if b.mode == ModeREPL {
+		return nil
+	}
 	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
 	if err != nil {
 		return err
@@ -105,6 +167,14 @@ func (b *cliBuilder) runRoot(ctx context.Context, _ *cmd.Command, args []string)
 }
 
 func (b *cliBuilder) withApplication(ctx context.Context, fn func(application *Application) error) error {
+	if b.mode == ModeREPL {
+		if b.application == nil {
+			return fmt.Errorf("repl application is not configured")
+		}
+		b.syncREPLGlobals(b.application)
+		return fn(b.application)
+	}
+
 	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
 	if err != nil {
 		return err

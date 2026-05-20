@@ -231,7 +231,7 @@ func TestHandleLineShowIndexesParsesCommand(t *testing.T) {
 	}
 }
 
-func TestHandleLineShowIndexesOnParsesCommand(t *testing.T) {
+func TestHandleLineShowIndexesUsesSharedTreeSyntax(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -255,7 +255,7 @@ func TestHandleLineShowIndexesOnParsesCommand(t *testing.T) {
 	app.session.Database = "app_prod"
 	app.session.DB = &sql.DB{}
 
-	exit, err := app.handleLine(context.Background(), "show indexes on users")
+	exit, err := app.handleLine(context.Background(), "show indexes users")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}
