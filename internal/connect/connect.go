@@ -91,6 +91,28 @@ func (c *Connector) ShowIndexes(ctx context.Context, cfg *config.ConnectionConfi
 	}
 }
 
+func (c *Connector) ShowCreateTable(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) (string, error) {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.ShowCreateTable(queryCtx, db, database, table)
+	default:
+		return "", fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
+func (c *Connector) ShowTableStatus(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) ([]driver.TableStatus, error) {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.ShowTableStatus(queryCtx, db, database, table)
+	default:
+		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
 func (c *Connector) ShowGrants(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, user string, host string) ([]string, error) {
 	switch cfg.Driver {
 	case "mysql":
@@ -121,6 +143,28 @@ func (c *Connector) ShowVariables(ctx context.Context, cfg *config.ConnectionCon
 		return driver.ShowVariables(queryCtx, db, pattern)
 	default:
 		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
+func (c *Connector) TruncateTable(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) error {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.TruncateTable(queryCtx, db, database, table)
+	default:
+		return fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
+func (c *Connector) RenameTable(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, from string, to string) error {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.RenameTable(queryCtx, db, database, from, to)
+	default:
+		return fmt.Errorf("unsupported driver %q", cfg.Driver)
 	}
 }
 

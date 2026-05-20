@@ -132,6 +132,15 @@ type TableIndex struct {
 	SeqInIndex int    `json:"seq_in_index,omitempty"`
 }
 
+type TableStatus struct {
+	Name        string `json:"name"`
+	Engine      string `json:"engine"`
+	Rows        int64  `json:"rows"`
+	DataLength  int64  `json:"data_length"`
+	IndexLength int64  `json:"index_length"`
+	Collation   string `json:"collation,omitempty"`
+}
+
 type Process struct {
 	ID          int64  `json:"id"`
 	User        string `json:"user"`
@@ -292,6 +301,117 @@ func ShowIndexes(ctx context.Context, db *sql.DB, database string, table string)
 	return indexes, nil
 }
 
+func ShowCreateTable(ctx context.Context, db *sql.DB, database string, table string) (string, error) {
+	var ddl string
+	err := withDatabaseConn(ctx, db, database, func(conn *sql.Conn) error {
+		rows, err := conn.QueryContext(ctx, "SHOW CREATE TABLE "+util.QuoteMySQLIdentifier(table))
+		if err != nil {
+			return classifyTableOperationError("show create table", table, err)
+		}
+		defer rows.Close()
+
+		if !rows.Next() {
+			if err := rows.Err(); err != nil {
+				return util.WrapLayer("sql execution", "read query rows", err)
+			}
+			return util.WrapLayer("validation", "show create table", fmt.Errorf("table not found: %s", table))
+		}
+
+		var tableName string
+		if err := rows.Scan(&tableName, &ddl); err != nil {
+			return util.WrapLayer("sql execution", "scan query result", err)
+		}
+		if err := rows.Err(); err != nil {
+			return util.WrapLayer("sql execution", "read query rows", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return ddl, nil
+}
+
+func ShowTableStatus(ctx context.Context, db *sql.DB, database string, table string) ([]TableStatus, error) {
+	statuses := make([]TableStatus, 0)
+	err := withDatabaseConn(ctx, db, database, func(conn *sql.Conn) error {
+		query := "SHOW TABLE STATUS"
+		if strings.TrimSpace(table) != "" {
+			query += " LIKE '" + util.EscapeMySQLString(table) + "'"
+		}
+
+		rows, err := conn.QueryContext(ctx, query)
+		if err != nil {
+			return util.WrapLayer("sql execution", "run query", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				name          string
+				engine        sql.NullString
+				version       sql.NullInt64
+				rowFormat     sql.NullString
+				rowsValue     sql.NullInt64
+				avgRowLength  sql.NullInt64
+				dataLength    sql.NullInt64
+				maxDataLength sql.NullInt64
+				indexLength   sql.NullInt64
+				dataFree      sql.NullInt64
+				autoIncrement sql.NullInt64
+				createTime    sql.NullTime
+				updateTime    sql.NullTime
+				checkTime     sql.NullTime
+				collation     sql.NullString
+				checksum      sql.NullInt64
+				createOptions sql.NullString
+				comment       sql.NullString
+			)
+			if err := rows.Scan(
+				&name,
+				&engine,
+				&version,
+				&rowFormat,
+				&rowsValue,
+				&avgRowLength,
+				&dataLength,
+				&maxDataLength,
+				&indexLength,
+				&dataFree,
+				&autoIncrement,
+				&createTime,
+				&updateTime,
+				&checkTime,
+				&collation,
+				&checksum,
+				&createOptions,
+				&comment,
+			); err != nil {
+				return util.WrapLayer("sql execution", "scan query result", err)
+			}
+			statuses = append(statuses, TableStatus{
+				Name:        name,
+				Engine:      engine.String,
+				Rows:        rowsValue.Int64,
+				DataLength:  dataLength.Int64,
+				IndexLength: indexLength.Int64,
+				Collation:   collation.String,
+			})
+		}
+		if err := rows.Err(); err != nil {
+			return util.WrapLayer("sql execution", "read query rows", err)
+		}
+		if strings.TrimSpace(table) != "" && len(statuses) == 0 {
+			return util.WrapLayer("validation", "show table status", fmt.Errorf("table not found: %s", table))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return statuses, nil
+}
+
 func ShowGrants(ctx context.Context, db *sql.DB, user string, host string) ([]string, error) {
 	query := fmt.Sprintf(
 		"SHOW GRANTS FOR '%s'@'%s'",
@@ -299,6 +419,15 @@ func ShowGrants(ctx context.Context, db *sql.DB, user string, host string) ([]st
 		util.EscapeMySQLString(host),
 	)
 	return QueryStrings(ctx, db, query)
+}
+
+func TruncateTable(ctx context.Context, db *sql.DB, database string, table string) error {
+	return execWithDatabase(ctx, db, database, "TRUNCATE TABLE "+util.QuoteMySQLIdentifier(table), "truncate table", table)
+}
+
+func RenameTable(ctx context.Context, db *sql.DB, database string, from string, to string) error {
+	statement := "RENAME TABLE " + util.QuoteMySQLIdentifier(from) + " TO " + util.QuoteMySQLIdentifier(to)
+	return execWithDatabase(ctx, db, database, statement, "rename table", from)
 }
 
 func ShowProcesslist(ctx context.Context, db *sql.DB) ([]Process, error) {
@@ -377,6 +506,36 @@ func ExecStatement(ctx context.Context, db *sql.DB, statement string) error {
 		return util.WrapLayer("sql execution", "execute statement", err)
 	}
 	return nil
+}
+
+func withDatabaseConn(ctx context.Context, db *sql.DB, database string, fn func(conn *sql.Conn) error) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return util.WrapLayer("mysql", "open database connection", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "USE "+util.QuoteMySQLIdentifier(database)); err != nil {
+		return util.WrapLayer("mysql", "select database", err)
+	}
+	return fn(conn)
+}
+
+func execWithDatabase(ctx context.Context, db *sql.DB, database string, statement string, operation string, table string) error {
+	return withDatabaseConn(ctx, db, database, func(conn *sql.Conn) error {
+		if _, err := conn.ExecContext(ctx, statement); err != nil {
+			return classifyTableOperationError(operation, table, err)
+		}
+		return nil
+	})
+}
+
+func classifyTableOperationError(operation string, table string, err error) error {
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1146 {
+		return util.WrapLayer("validation", operation, fmt.Errorf("table not found: %s", table))
+	}
+	return util.WrapLayer("sql execution", "run query", err)
 }
 
 func registerSSHDialer(cfg *config.ConnectionConfig) (string, error) {

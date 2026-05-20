@@ -63,6 +63,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(line, "help")))
 	case len(fields) == 2 && fields[0] == "show" && fields[1] == "tables":
 		return false, a.handleShowTables(ctx)
+	case len(fields) == 4 && fields[0] == "show" && fields[1] == "create" && fields[2] == "table":
+		return false, a.handleShowCreateTable(ctx, fields[3])
+	case len(fields) == 3 && fields[0] == "show" && fields[1] == "table" && fields[2] == "status":
+		return false, a.handleShowTableStatus(ctx, "")
+	case len(fields) == 4 && fields[0] == "show" && fields[1] == "table" && fields[2] == "status":
+		return false, a.handleShowTableStatus(ctx, fields[3])
 	case len(fields) == 2 && fields[0] == "show" && fields[1] == "indexes":
 		return false, a.handleShowIndexes(ctx, "")
 	case len(fields) == 3 && fields[0] == "show" && fields[1] == "indexes":
@@ -75,6 +81,10 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleShowVariables(ctx, "")
 	case len(fields) == 3 && fields[0] == "show" && fields[1] == "variables":
 		return false, a.handleShowVariables(ctx, fields[2])
+	case len(fields) == 3 && fields[0] == "truncate" && fields[1] == "table":
+		return false, a.handleTruncateTable(ctx, fields[2])
+	case len(fields) == 4 && fields[0] == "rename" && fields[1] == "table":
+		return false, a.handleRenameTable(ctx, fields[2], fields[3])
 	case len(fields) == 3 && fields[0] == "show" && fields[1] == "grants":
 		return false, a.handleShowGrants(ctx, fields[2], "")
 	case len(fields) == 4 && fields[0] == "show" && fields[1] == "grants":

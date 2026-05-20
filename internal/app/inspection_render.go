@@ -88,6 +88,21 @@ func sortedVariables(variables []driver.SystemVariable) []driver.SystemVariable 
 	return sorted
 }
 
+func sortedTableStatuses(statuses []driver.TableStatus) []driver.TableStatus {
+	sorted := append([]driver.TableStatus(nil), statuses...)
+	slices.SortFunc(sorted, func(a driver.TableStatus, b driver.TableStatus) int {
+		switch {
+		case a.Name < b.Name:
+			return -1
+		case a.Name > b.Name:
+			return 1
+		default:
+			return 0
+		}
+	})
+	return sorted
+}
+
 func formatIndexLine(index driver.TableIndex) string {
 	return fmt.Sprintf("%-16s %-8s %s", index.Name, emptyValue(index.Type, "<unknown>"), index.Column)
 }
@@ -112,6 +127,28 @@ func formatVariableLine(variable driver.SystemVariable) string {
 	return fmt.Sprintf("%-24s %s", variable.Name, variable.Value)
 }
 
+func formatTableStatusSummary(status driver.TableStatus) string {
+	return fmt.Sprintf(
+		"%-16s %-7s rows=%-8d data=%-6s index=%s",
+		status.Name,
+		emptyValue(status.Engine, "<none>"),
+		status.Rows,
+		formatByteSize(status.DataLength),
+		formatByteSize(status.IndexLength),
+	)
+}
+
+func formatTableStatusDetail(status driver.TableStatus) []string {
+	return []string{
+		"Name: " + status.Name,
+		"Engine: " + emptyValue(status.Engine, "<none>"),
+		fmt.Sprintf("Rows: %d", status.Rows),
+		"Data Size: " + formatByteSize(status.DataLength),
+		"Index Size: " + formatByteSize(status.IndexLength),
+		"Collation: " + emptyValue(status.Collation, "<none>"),
+	}
+}
+
 func truncateDisplayText(value string, limit int) string {
 	value = strings.TrimSpace(value)
 	if limit <= 0 || len(value) <= limit {
@@ -129,4 +166,33 @@ func variableScopeLabel(pattern string) string {
 		return ""
 	}
 	return " matching " + pattern
+}
+
+func tableStatusScopeLabel(table string) string {
+	table = strings.TrimSpace(table)
+	if table == "" {
+		return ""
+	}
+	return " for " + table
+}
+
+func formatByteSize(size int64) string {
+	if size <= 0 {
+		return "0B"
+	}
+	type unit struct {
+		name  string
+		value int64
+	}
+	units := []unit{
+		{name: "GB", value: 1024 * 1024 * 1024},
+		{name: "MB", value: 1024 * 1024},
+		{name: "KB", value: 1024},
+	}
+	for _, unit := range units {
+		if size >= unit.value {
+			return fmt.Sprintf("%d%s", size/unit.value, unit.name)
+		}
+	}
+	return fmt.Sprintf("%dB", size)
 }

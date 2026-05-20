@@ -118,6 +118,40 @@ func Builtins() []Template {
 		},
 		{
 			Version: 1,
+			Name:    "builtin_show_create_table",
+			Match: Match{
+				Command: "show create table",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show CREATE TABLE for `{{table}}`",
+					SQL:         "SHOW CREATE TABLE `{{table}}`",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show create table",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_show_table_status",
+			Match: Match{
+				Command: "show table status",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show table status{{table_status_scope}}",
+					SQL:         "SHOW TABLE STATUS{{table_status_like_clause}}",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show table status",
+		},
+		{
+			Version: 1,
 			Name:    "builtin_describe_table",
 			Match: Match{
 				Command: "describe table",
@@ -200,6 +234,40 @@ func Builtins() []Template {
 			},
 			Layer:  "builtin",
 			Source: "builtin:show variables",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_truncate_table",
+			Match: Match{
+				Command: "truncate table",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Truncate table {{table}}",
+					SQL:         "TRUNCATE TABLE `{{table}}`",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:truncate table",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_rename_table",
+			Match: Match{
+				Command: "rename table",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Rename table {{from_table}} -> {{to_table}}",
+					SQL:         "RENAME TABLE `{{from_table}}` TO `{{to_table}}`",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:rename table",
 		},
 		{
 			Version: 1,

@@ -42,6 +42,28 @@ func TestValidateDatabaseName(t *testing.T) {
 	}
 }
 
+func TestValidateTableName(t *testing.T) {
+	t.Parallel()
+
+	valid := []string{"users", "auth_sessions", "orders_2026", "tmp-users"}
+	for _, name := range valid {
+		if err := ValidateTableName(name); err != nil {
+			t.Fatalf("ValidateTableName(%q) returned error: %v", name, err)
+		}
+	}
+
+	invalid := []string{"", "foo bar", "foo;drop", "foo`", "foo/db"}
+	for _, name := range invalid {
+		err := ValidateTableName(name)
+		if err == nil {
+			t.Fatalf("ValidateTableName(%q) succeeded, want error", name)
+		}
+		if name != "" && err.Error() != `invalid table name "`+name+`"` {
+			t.Fatalf("ValidateTableName(%q) error = %q", name, err.Error())
+		}
+	}
+}
+
 func TestValidateMySQLUsername(t *testing.T) {
 	t.Parallel()
 

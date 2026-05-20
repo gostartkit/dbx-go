@@ -17,9 +17,13 @@ type connectorClient interface {
 	ListTables(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string) ([]string, error)
 	DescribeTable(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) ([]driver.TableColumn, error)
 	ShowIndexes(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) ([]driver.TableIndex, error)
+	ShowCreateTable(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) (string, error)
+	ShowTableStatus(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) ([]driver.TableStatus, error)
 	ShowGrants(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, user string, host string) ([]string, error)
 	ShowProcesslist(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB) ([]driver.Process, error)
 	ShowVariables(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, pattern string) ([]driver.SystemVariable, error)
+	TruncateTable(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) error
+	RenameTable(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, from string, to string) error
 	QueryStrings(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, query string) ([]string, error)
 }
 

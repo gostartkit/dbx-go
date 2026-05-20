@@ -103,6 +103,31 @@ type TableIndexesResult struct {
 	Indexes    []TableIndexResult `json:"indexes,omitempty"`
 }
 
+type CreateTableResult struct {
+	OK          bool   `json:"ok"`
+	Connection  string `json:"connection,omitempty"`
+	Database    string `json:"database,omitempty"`
+	Table       string `json:"table,omitempty"`
+	CreateTable string `json:"create_table,omitempty"`
+}
+
+type TableStatusEntryResult struct {
+	Name        string `json:"name"`
+	Engine      string `json:"engine"`
+	Rows        int64  `json:"rows"`
+	DataLength  int64  `json:"data_length"`
+	IndexLength int64  `json:"index_length"`
+	Collation   string `json:"collation,omitempty"`
+}
+
+type TableStatusResult struct {
+	OK         bool                   `json:"ok"`
+	Connection string                 `json:"connection,omitempty"`
+	Database   string                 `json:"database,omitempty"`
+	Table      string                 `json:"table,omitempty"`
+	Tables     []TableStatusEntryResult `json:"tables,omitempty"`
+}
+
 type GrantsResult struct {
 	OK         bool     `json:"ok"`
 	Connection string   `json:"connection,omitempty"`
@@ -144,6 +169,14 @@ type VariablesResult struct {
 	Connection string           `json:"connection,omitempty"`
 	Pattern    string           `json:"pattern,omitempty"`
 	Variables  []VariableResult `json:"variables,omitempty"`
+}
+
+type TableMutationResult struct {
+	OK     bool   `json:"ok"`
+	Table  string `json:"table,omitempty"`
+	From   string `json:"from,omitempty"`
+	To     string `json:"to,omitempty"`
+	Action string `json:"action,omitempty"`
 }
 
 type UserMutationResult struct {
@@ -335,6 +368,21 @@ func toTableIndexResults(indexes []driver.TableIndex) []TableIndexResult {
 			Name:   index.Name,
 			Column: index.Column,
 			Type:   index.Type,
+		})
+	}
+	return results
+}
+
+func toTableStatusResults(statuses []driver.TableStatus) []TableStatusEntryResult {
+	results := make([]TableStatusEntryResult, 0, len(statuses))
+	for _, status := range statuses {
+		results = append(results, TableStatusEntryResult{
+			Name:        status.Name,
+			Engine:      status.Engine,
+			Rows:        status.Rows,
+			DataLength:  status.DataLength,
+			IndexLength: status.IndexLength,
+			Collation:   status.Collation,
 		})
 	}
 	return results

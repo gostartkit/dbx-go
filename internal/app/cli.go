@@ -67,6 +67,8 @@ func newCommandAppWithOptions(in io.Reader, out io.Writer, err io.Writer, option
 		builder.listGroupCommand(),
 		builder.showGroupCommand(),
 		builder.dropGroupCommand(),
+		builder.truncateGroupCommand(),
+		builder.renameGroupCommand(),
 		builder.contextCommand(),
 		builder.statusCommand(),
 	}
