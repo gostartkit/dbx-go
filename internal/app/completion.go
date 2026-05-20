@@ -38,6 +38,8 @@ type completionRequest struct {
 	Fields        []string
 	TrailingSpace bool
 	Prefix        string
+	ReplaceFrom   int
+	ReplaceTo     int
 }
 
 type completionProviderFunc func(ctx CompletionContext, req completionRequest) []Suggestion
@@ -122,17 +124,26 @@ func parseCompletionRequest(line string) completionRequest {
 	trimmed := strings.TrimLeft(line, " ")
 	fields := strings.Fields(trimmed)
 	prefix := ""
+	replaceFrom := len(line)
+	replaceTo := len(line)
 	if len(fields) > 0 {
 		prefix = fields[len(fields)-1]
 	}
 	if trailingSpace {
 		prefix = ""
+	} else if prefix != "" {
+		replaceFrom = len(line) - len(prefix)
+	} else {
+		replaceFrom = 0
+		replaceTo = len(line)
 	}
 	return completionRequest{
 		Line:          line,
 		Fields:        fields,
 		TrailingSpace: trailingSpace,
 		Prefix:        prefix,
+		ReplaceFrom:   replaceFrom,
+		ReplaceTo:     replaceTo,
 	}
 }
 
@@ -144,6 +155,9 @@ func toUICompletion(req completionRequest, suggestions []Suggestion) ui.Completi
 			Value:       suggestion.Value,
 			Description: suggestion.Description,
 			Category:    suggestion.Category,
+			Replacement: suggestion.Value,
+			ReplaceFrom: req.ReplaceFrom,
+			ReplaceTo:   req.ReplaceTo,
 		})
 	}
 

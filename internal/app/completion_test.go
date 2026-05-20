@@ -85,6 +85,107 @@ func TestCalculateCompletionIncludesConnectionDescriptionsAndHint(t *testing.T) 
 	}
 }
 
+func TestCalculateCompletionPreservesArgumentPrefixes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		input       string
+		ctx         CompletionContext
+		wantValue   string
+		wantFrom    int
+		wantTo      int
+		wantApplied string
+	}{
+		{
+			name:        "use trailing space",
+			input:       "use ",
+			ctx:         CompletionContext{Databases: []string{"greenhn-dev"}},
+			wantValue:   "greenhn-dev",
+			wantFrom:    4,
+			wantTo:      4,
+			wantApplied: "use greenhn-dev",
+		},
+		{
+			name:        "use partial prefix",
+			input:       "use gre",
+			ctx:         CompletionContext{Databases: []string{"greenhn-dev"}},
+			wantValue:   "greenhn-dev",
+			wantFrom:    4,
+			wantTo:      7,
+			wantApplied: "use greenhn-dev",
+		},
+		{
+			name:        "connect trailing space",
+			input:       "connect ",
+			ctx:         CompletionContext{Connections: []CompletionConnection{{Name: "prod", Driver: "mysql", Mode: "ssh"}}},
+			wantValue:   "prod",
+			wantFrom:    8,
+			wantTo:      8,
+			wantApplied: "connect prod",
+		},
+		{
+			name:        "connection show trailing space",
+			input:       "connection show ",
+			ctx:         CompletionContext{Connections: []CompletionConnection{{Name: "prod", Driver: "mysql", Mode: "ssh"}}},
+			wantValue:   "prod",
+			wantFrom:    16,
+			wantTo:      16,
+			wantApplied: "connection show prod",
+		},
+		{
+			name:        "drop user trailing space",
+			input:       "drop user ",
+			ctx:         CompletionContext{Users: []string{"app_user"}},
+			wantValue:   "app_user",
+			wantFrom:    10,
+			wantTo:      10,
+			wantApplied: "drop user app_user",
+		},
+		{
+			name:        "command prefix still replaces line token",
+			input:       "connec",
+			ctx:         CompletionContext{},
+			wantValue:   "connect",
+			wantFrom:    0,
+			wantTo:      6,
+			wantApplied: "connect",
+		},
+		{
+			name:        "multi word subcommand replaces current token",
+			input:       "connection ",
+			ctx:         CompletionContext{},
+			wantValue:   "create",
+			wantFrom:    11,
+			wantTo:      11,
+			wantApplied: "connection create",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			completion := calculateCompletion(tc.input, tc.ctx)
+			if len(completion.Suggestions) == 0 {
+				t.Fatalf("expected suggestions")
+			}
+			got := completion.Suggestions[0]
+			if got.Value != tc.wantValue {
+				t.Fatalf("value = %q, want %q", got.Value, tc.wantValue)
+			}
+			if got.ReplaceFrom != tc.wantFrom || got.ReplaceTo != tc.wantTo {
+				t.Fatalf("replace range = [%d,%d], want [%d,%d]", got.ReplaceFrom, got.ReplaceTo, tc.wantFrom, tc.wantTo)
+			}
+			applied := tc.input[:got.ReplaceFrom] + got.Replacement + tc.input[got.ReplaceTo:]
+			if applied != tc.wantApplied {
+				t.Fatalf("applied = %q, want %q", applied, tc.wantApplied)
+			}
+		})
+	}
+}
+
 func suggestionValues(completion ui.Completion) []string {
 	values := make([]string, 0, len(completion.Suggestions))
 	for _, suggestion := range completion.Suggestions {

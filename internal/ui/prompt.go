@@ -22,6 +22,9 @@ type Suggestion struct {
 	Value       string
 	Description string
 	Category    string
+	Replacement string
+	ReplaceFrom int
+	ReplaceTo   int
 }
 
 type Completer func(line string) Completion
@@ -265,14 +268,14 @@ func (p *Prompt) applyCompletion(current string) string {
 		return current
 	}
 
-	if p.session != nil && current != p.session.BaseInput && !containsSuggestionValue(p.session.Suggestions, current) {
+	if p.session != nil && current != p.session.BaseInput && !containsSuggestionResult(p.session, current) {
 		p.resetCompletionSession()
 	}
 
 	if p.session != nil && len(p.session.Suggestions) > 0 {
 		selected := p.session.current()
 		p.session.advance()
-		return selected.Value
+		return applySuggestion(p.session.BaseInput, selected)
 	}
 
 	completion := p.completer(current)
@@ -284,13 +287,13 @@ func (p *Prompt) applyCompletion(current string) string {
 
 	if len(candidates) == 1 {
 		p.resetCompletionSession()
-		return candidates[0]
+		return applySuggestion(current, completion.Suggestions[0])
 	}
 
 	p.session = newCompletionSession(current, completion.Suggestions)
 	selected := p.session.current()
 	p.session.advance()
-	return selected.Value
+	return applySuggestion(p.session.BaseInput, selected)
 }
 
 func (p *Prompt) handleEscapeSequence(current string) (string, bool, error) {
@@ -427,13 +430,38 @@ func (s *CompletionSession) advance() {
 	s.Index = (s.Index + 1) % len(s.Suggestions)
 }
 
-func containsSuggestionValue(suggestions []Suggestion, current string) bool {
-	for _, suggestion := range suggestions {
-		if suggestion.Value == current {
+func containsSuggestionResult(session *CompletionSession, current string) bool {
+	if session == nil {
+		return false
+	}
+	for _, suggestion := range session.Suggestions {
+		if applySuggestion(session.BaseInput, suggestion) == current {
 			return true
 		}
 	}
 	return false
+}
+
+func applySuggestion(base string, suggestion Suggestion) string {
+	replacement := suggestion.Replacement
+	if replacement == "" {
+		replacement = suggestion.Value
+	}
+	from := suggestion.ReplaceFrom
+	to := suggestion.ReplaceTo
+	if from < 0 {
+		from = 0
+	}
+	if to < from {
+		to = from
+	}
+	if from > len(base) {
+		from = len(base)
+	}
+	if to > len(base) {
+		to = len(base)
+	}
+	return base[:from] + replacement + base[to:]
 }
 
 func (p *Prompt) printSuggestions(suggestions []Suggestion) {

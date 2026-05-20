@@ -94,9 +94,9 @@ func TestPromptApplyCompletionCyclesSuggestions(t *testing.T) {
 		return Completion{
 			Prefix: "conn",
 			Suggestions: []Suggestion{
-				{Value: "connect", Description: "connect to a saved connection"},
-				{Value: "connections", Description: "list saved connections"},
-				{Value: "connection create", Description: "create a saved connection"},
+				{Value: "connect", Description: "connect to a saved connection", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 4},
+				{Value: "connections", Description: "list saved connections", Replacement: "connections", ReplaceFrom: 0, ReplaceTo: 4},
+				{Value: "connection create", Description: "create a saved connection", Replacement: "connection create", ReplaceFrom: 0, ReplaceTo: 4},
 			},
 		}
 	}
@@ -124,7 +124,7 @@ func TestPromptApplyCompletionSingleCandidateDoesNotPrintList(t *testing.T) {
 		return Completion{
 			Prefix: "connec",
 			Suggestions: []Suggestion{
-				{Value: "connect", Description: "connect to a saved connection"},
+				{Value: "connect", Description: "connect to a saved connection", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 6},
 			},
 		}
 	}
@@ -146,13 +146,20 @@ func TestPromptApplyCompletionUsesOriginalBaseInputAcrossCycle(t *testing.T) {
 	prompt.completer = func(input string) Completion {
 		if input == "connect" {
 			return Completion{
-				Prefix:      "connect",
-				Suggestions: []Suggestion{{Value: "connect"}, {Value: "connections"}},
+				Prefix: "connect",
+				Suggestions: []Suggestion{
+					{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 7},
+					{Value: "connections", Replacement: "connections", ReplaceFrom: 0, ReplaceTo: 7},
+				},
 			}
 		}
 		return Completion{
-			Prefix:      "conn",
-			Suggestions: []Suggestion{{Value: "connect"}, {Value: "connections"}, {Value: "connection create"}},
+			Prefix: "conn",
+			Suggestions: []Suggestion{
+				{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 4},
+				{Value: "connections", Replacement: "connections", ReplaceFrom: 0, ReplaceTo: 4},
+				{Value: "connection create", Replacement: "connection create", ReplaceFrom: 0, ReplaceTo: 4},
+			},
 		}
 	}
 
@@ -168,7 +175,7 @@ func TestPromptCompletionSessionReset(t *testing.T) {
 	t.Parallel()
 
 	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
-	prompt.session = newCompletionSession("conn", []Suggestion{{Value: "connect"}})
+	prompt.session = newCompletionSession("conn", []Suggestion{{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 4}})
 
 	prompt.resetCompletionSession()
 
@@ -213,14 +220,63 @@ func TestPromptApplyCompletionResetsSessionWhenInputDiverges(t *testing.T) {
 	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
 	prompt.completer = func(string) Completion {
 		return Completion{
-			Prefix:      "co",
-			Suggestions: []Suggestion{{Value: "connect"}, {Value: "connections"}},
+			Prefix: "co",
+			Suggestions: []Suggestion{
+				{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 2},
+				{Value: "connections", Replacement: "connections", ReplaceFrom: 0, ReplaceTo: 2},
+			},
 		}
 	}
-	prompt.session = newCompletionSession("conn", []Suggestion{{Value: "connect"}, {Value: "connections"}})
+	prompt.session = newCompletionSession("conn", []Suggestion{
+		{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 4},
+		{Value: "connections", Replacement: "connections", ReplaceFrom: 0, ReplaceTo: 4},
+	})
 
 	if got := prompt.applyCompletion("co"); got != "connect" {
 		t.Fatalf("completion = %q", got)
+	}
+}
+
+func TestPromptApplyCompletionPreservesCommandPrefixForArguments(t *testing.T) {
+	t.Parallel()
+
+	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
+	prompt.completer = func(string) Completion {
+		return Completion{
+			Prefix: "gre",
+			Suggestions: []Suggestion{
+				{Value: "greenhn-dev", Replacement: "greenhn-dev", ReplaceFrom: 4, ReplaceTo: 7},
+			},
+		}
+	}
+
+	if got := prompt.applyCompletion("use gre"); got != "use greenhn-dev" {
+		t.Fatalf("completion = %q", got)
+	}
+}
+
+func TestPromptApplyCompletionCyclesArgumentCandidatesWithPrefixPreserved(t *testing.T) {
+	t.Parallel()
+
+	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
+	prompt.completer = func(string) Completion {
+		return Completion{
+			Suggestions: []Suggestion{
+				{Value: "db1", Replacement: "db1", ReplaceFrom: 4, ReplaceTo: 4},
+				{Value: "db2", Replacement: "db2", ReplaceFrom: 4, ReplaceTo: 4},
+				{Value: "db3", Replacement: "db3", ReplaceFrom: 4, ReplaceTo: 4},
+			},
+		}
+	}
+
+	if got := prompt.applyCompletion("use "); got != "use db1" {
+		t.Fatalf("first completion = %q", got)
+	}
+	if got := prompt.applyCompletion("use db1"); got != "use db2" {
+		t.Fatalf("second completion = %q", got)
+	}
+	if got := prompt.applyCompletion("use db2"); got != "use db3" {
+		t.Fatalf("third completion = %q", got)
 	}
 }
 
