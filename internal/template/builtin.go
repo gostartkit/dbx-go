@@ -135,6 +135,57 @@ func Builtins() []Template {
 		},
 		{
 			Version: 1,
+			Name:    "builtin_count_rows",
+			Match: Match{
+				Command: "count rows",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Count rows in table `{{table}}`",
+					SQL:         "SELECT COUNT(*) FROM `{{table}}`",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:count rows",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_peek_rows",
+			Match: Match{
+				Command: "peek rows",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Peek up to {{limit}} rows from table `{{table}}`",
+					SQL:         "SELECT * FROM `{{table}}` LIMIT {{limit}}",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:peek rows",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_sample_rows",
+			Match: Match{
+				Command: "sample rows",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Sample up to {{limit}} rows from table `{{table}}`",
+					SQL:         "SELECT * FROM `{{table}}` ORDER BY RAND() LIMIT {{limit}}",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:sample rows",
+		},
+		{
+			Version: 1,
 			Name:    "builtin_show_create_table",
 			Match: Match{
 				Command: "show create table",

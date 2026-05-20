@@ -174,6 +174,9 @@ create database
 show databases
 drop database
 create user
+count rows <table>
+peek rows <table>
+sample rows <table>
 show users
 drop user
 show tables
@@ -259,6 +262,9 @@ dbx show dbs [flags]
 dbx list databases [flags]
 dbx drop database <name> [flags]
 dbx create user <name> [flags]
+dbx count rows <table> [flags]
+dbx peek rows <table> [flags]
+dbx sample rows <table> [flags]
 dbx show users [flags]
 dbx drop user <name> [flags]
 dbx show tables [flags]

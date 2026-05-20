@@ -133,6 +133,11 @@ type SchemaColumn struct {
 	Extra    string `json:"extra,omitempty"`
 }
 
+type RowSet struct {
+	Columns []string `json:"columns"`
+	Rows    [][]any  `json:"rows"`
+}
+
 type TableIndex struct {
 	Name       string `json:"name"`
 	Column     string `json:"column"`
@@ -413,6 +418,29 @@ ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION
 		}
 	}
 	return keys, nil
+}
+
+func CountRows(ctx context.Context, db *sql.DB, database string, table string) (int64, error) {
+	var count int64
+	err := withDatabaseConn(ctx, db, database, func(conn *sql.Conn) error {
+		row := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+util.QuoteMySQLIdentifier(table))
+		if err := row.Scan(&count); err != nil {
+			return classifyTableOperationError("count rows", table, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func PeekRows(ctx context.Context, db *sql.DB, database string, table string, limit int) (*RowSet, error) {
+	return queryRows(ctx, db, database, table, limit, false)
+}
+
+func SampleRows(ctx context.Context, db *sql.DB, database string, table string, limit int) (*RowSet, error) {
+	return queryRows(ctx, db, database, table, limit, true)
 }
 
 func ShowCreateTable(ctx context.Context, db *sql.DB, database string, table string) (string, error) {
@@ -704,6 +732,53 @@ func ExecStatement(ctx context.Context, db *sql.DB, statement string) error {
 	return nil
 }
 
+func queryRows(ctx context.Context, db *sql.DB, database string, table string, limit int, random bool) (*RowSet, error) {
+	result := &RowSet{Columns: []string{}, Rows: [][]any{}}
+	err := withDatabaseConn(ctx, db, database, func(conn *sql.Conn) error {
+		query := "SELECT * FROM " + util.QuoteMySQLIdentifier(table)
+		if random {
+			query += " ORDER BY RAND()"
+		}
+		query += " LIMIT ?"
+
+		rows, err := conn.QueryContext(ctx, query, limit)
+		if err != nil {
+			return classifyTableOperationError(operationNameForRows(random), table, err)
+		}
+		defer rows.Close()
+
+		columns, err := rows.Columns()
+		if err != nil {
+			return util.WrapLayer("sql execution", "read query columns", err)
+		}
+		result.Columns = append(result.Columns, columns...)
+
+		for rows.Next() {
+			values := make([]any, len(columns))
+			dest := make([]any, len(columns))
+			for i := range values {
+				dest[i] = &values[i]
+			}
+			if err := rows.Scan(dest...); err != nil {
+				return util.WrapLayer("sql execution", "scan query result", err)
+			}
+			row := make([]any, 0, len(values))
+			for _, value := range values {
+				row = append(row, normalizeRowValue(value))
+			}
+			result.Rows = append(result.Rows, row)
+		}
+		if err := rows.Err(); err != nil {
+			return util.WrapLayer("sql execution", "read query rows", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func tableExists(ctx context.Context, db *sql.DB, database string, table string) (bool, error) {
 	row := db.QueryRowContext(ctx, `
 SELECT 1
@@ -719,6 +794,26 @@ LIMIT 1
 		return false, util.WrapLayer("sql execution", "run query", err)
 	}
 	return true, nil
+}
+
+func normalizeRowValue(value any) any {
+	switch typed := value.(type) {
+	case nil:
+		return nil
+	case []byte:
+		return string(typed)
+	case time.Time:
+		return typed.Format("2006-01-02 15:04:05")
+	default:
+		return typed
+	}
+}
+
+func operationNameForRows(random bool) string {
+	if random {
+		return "sample rows"
+	}
+	return "peek rows"
 }
 
 func withDatabaseConn(ctx context.Context, db *sql.DB, database string, fn func(conn *sql.Conn) error) error {

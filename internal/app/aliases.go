@@ -8,8 +8,11 @@ var commandAliases = map[string]string{
 	"conn":               "connect",
 	"cx":                 "connect",
 	"conns":              "connections",
+	"count":              "count rows",
 	"ctx":                "context",
 	"ls db":              "show databases",
+	"peek":               "peek rows",
+	"sample":             "sample rows",
 	"list databases":     "show databases",
 	"columns":            "show columns",
 	"show dbs":           "show databases",
@@ -65,6 +68,21 @@ func resolveAlias(line string) string {
 		}
 	case "columns":
 		return strings.Join(append([]string{"show", "columns"}, fields[1:]...), " ")
+	case "count":
+		if len(fields) >= 2 && fields[1] == "rows" {
+			return line
+		}
+		return strings.Join(append([]string{"count", "rows"}, fields[1:]...), " ")
+	case "peek":
+		if len(fields) >= 2 && fields[1] == "rows" {
+			return line
+		}
+		return strings.Join(append([]string{"peek", "rows"}, fields[1:]...), " ")
+	case "sample":
+		if len(fields) >= 2 && fields[1] == "rows" {
+			return line
+		}
+		return strings.Join(append([]string{"sample", "rows"}, fields[1:]...), " ")
 	case "show":
 		if len(fields) >= 2 {
 			switch fields[1] {

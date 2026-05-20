@@ -105,6 +105,24 @@ type ColumnsResult struct {
 	Columns    []SchemaColumnResult `json:"columns,omitempty"`
 }
 
+type RowCountResult struct {
+	OK         bool   `json:"ok"`
+	Connection string `json:"connection,omitempty"`
+	Database   string `json:"database,omitempty"`
+	Table      string `json:"table,omitempty"`
+	Rows       int64  `json:"rows"`
+}
+
+type RowPreviewResult struct {
+	OK         bool     `json:"ok"`
+	Connection string   `json:"connection,omitempty"`
+	Database   string   `json:"database,omitempty"`
+	Table      string   `json:"table,omitempty"`
+	Columns    []string `json:"columns,omitempty"`
+	Rows       [][]any  `json:"rows,omitempty"`
+	Limit      int      `json:"limit,omitempty"`
+}
+
 type TableIndexResult struct {
 	Name   string `json:"name"`
 	Column string `json:"column"`

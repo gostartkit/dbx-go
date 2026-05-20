@@ -28,6 +28,28 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleConnectByName(ctx, fields[1])
 	case len(fields) == 2 && fields[0] == "use":
 		return false, a.handleUseDatabase(ctx, fields[1])
+	case len(fields) == 2 && fields[0] == "count":
+		return false, a.handleCountRows(ctx, fields[1])
+	case len(fields) == 3 && fields[0] == "count" && fields[1] == "rows":
+		return false, a.handleCountRows(ctx, fields[2])
+	case len(fields) == 2 && fields[0] == "peek":
+		return false, a.handlePeekRows(ctx, fields[1], "")
+	case len(fields) == 3 && fields[0] == "peek":
+		if fields[1] == "rows" {
+			return false, a.handlePeekRows(ctx, fields[2], "")
+		}
+		return false, a.handlePeekRows(ctx, fields[1], fields[2])
+	case len(fields) == 4 && fields[0] == "peek" && fields[1] == "rows":
+		return false, a.handlePeekRows(ctx, fields[2], fields[3])
+	case len(fields) == 2 && fields[0] == "sample":
+		return false, a.handleSampleRows(ctx, fields[1], "")
+	case len(fields) == 3 && fields[0] == "sample":
+		if fields[1] == "rows" {
+			return false, a.handleSampleRows(ctx, fields[2], "")
+		}
+		return false, a.handleSampleRows(ctx, fields[1], fields[2])
+	case len(fields) == 4 && fields[0] == "sample" && fields[1] == "rows":
+		return false, a.handleSampleRows(ctx, fields[2], fields[3])
 	case len(fields) == 2 && fields[0] == "columns":
 		return false, a.handleShowColumns(ctx, fields[1])
 	case len(fields) == 2 && fields[0] == "describe":
@@ -116,6 +138,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleContext(ctx)
 	case "audit log":
 		return false, a.handleAuditLog(ctx)
+	case "count rows":
+		return false, a.handleCountRows(ctx, "")
+	case "peek rows":
+		return false, a.handlePeekRows(ctx, "", "")
+	case "sample rows":
+		return false, a.handleSampleRows(ctx, "", "")
 	case "status":
 		return false, a.handleStatus(ctx)
 	case "create database":

@@ -91,6 +91,39 @@ func (c *Connector) ShowColumns(ctx context.Context, cfg *config.ConnectionConfi
 	}
 }
 
+func (c *Connector) CountRows(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) (int64, error) {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.CountRows(queryCtx, db, database, table)
+	default:
+		return 0, fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
+func (c *Connector) PeekRows(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string, limit int) (*driver.RowSet, error) {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.PeekRows(queryCtx, db, database, table, limit)
+	default:
+		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
+func (c *Connector) SampleRows(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string, limit int) (*driver.RowSet, error) {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.SampleRows(queryCtx, db, database, table, limit)
+	default:
+		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
 func (c *Connector) ShowIndexes(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) ([]driver.TableIndex, error) {
 	switch cfg.Driver {
 	case "mysql":

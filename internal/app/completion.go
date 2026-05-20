@@ -62,6 +62,8 @@ var rootSuggestions = []Suggestion{
 	{Value: "connection show", Description: "show a saved connection", Category: "command"},
 	{Value: "connection test", Description: "test a saved connection", Category: "command"},
 	{Value: "connection doctor", Description: "inspect a saved connection statically", Category: "command"},
+	{Value: "count", Description: "alias for count rows", Category: "alias"},
+	{Value: "count rows", Description: "count rows in a table", Category: "command"},
 	{Value: "context", Description: "show current REPL context", Category: "command"},
 	{Value: "create database", Description: "create a database", Category: "command"},
 	{Value: "create user", Description: "create a MySQL user", Category: "command"},
@@ -86,6 +88,10 @@ var rootSuggestions = []Suggestion{
 	{Value: "show view", Description: "alias for show views", Category: "alias"},
 	{Value: "drop database", Description: "drop a database", Category: "command"},
 	{Value: "drop user", Description: "drop a MySQL user", Category: "command"},
+	{Value: "peek", Description: "alias for peek rows", Category: "alias"},
+	{Value: "peek rows", Description: "peek bounded rows from a table", Category: "command"},
+	{Value: "sample", Description: "alias for sample rows", Category: "alias"},
+	{Value: "sample rows", Description: "sample bounded rows from a table", Category: "command"},
 	{Value: "truncate table", Description: "delete all rows from a table", Category: "command"},
 	{Value: "rename table", Description: "rename a table", Category: "command"},
 	{Value: "describe", Description: "describe a table", Category: "command"},
@@ -117,6 +123,7 @@ func newCompletionEngine() completionEngine {
 			completionProviderFunc(completeConnectionCommands),
 			completionProviderFunc(completeConnectNames),
 			completionProviderFunc(completeUseDatabases),
+			completionProviderFunc(completeCountPeekSampleTables),
 			completionProviderFunc(completeShowGrantsUsers),
 			completionProviderFunc(completeShowColumnsTables),
 			completionProviderFunc(completeShowForeignKeysTables),
@@ -390,6 +397,47 @@ func completeShowForeignKeysTables(ctx CompletionContext, req completionRequest)
 	return nil
 }
 
+func completeCountPeekSampleTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 {
+		return nil
+	}
+	switch req.Fields[0] {
+	case "count":
+		if len(req.Fields) == 1 && req.TrailingSpace {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		if len(req.Fields) == 2 {
+			if req.Fields[1] == "rows" {
+				if req.TrailingSpace {
+					return stringSuggestions(ctx.Tables, "table")
+				}
+				return []Suggestion{{Value: "rows", Description: "count rows in a table", Category: "subcommand"}}
+			}
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		if len(req.Fields) == 3 && req.Fields[1] == "rows" {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+	case "peek", "sample":
+		if len(req.Fields) == 1 && req.TrailingSpace {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		if len(req.Fields) == 2 {
+			if req.Fields[1] == "rows" {
+				if req.TrailingSpace {
+					return stringSuggestions(ctx.Tables, "table")
+				}
+				return []Suggestion{{Value: "rows", Description: req.Fields[0] + " bounded rows from a table", Category: "subcommand"}}
+			}
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		if len(req.Fields) == 3 && req.Fields[1] == "rows" {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+	}
+	return nil
+}
+
 func completeDescribeTables(ctx CompletionContext, req completionRequest) []Suggestion {
 	if len(req.Fields) == 0 || req.Fields[0] != "describe" {
 		return nil
@@ -554,6 +602,8 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "database", Description: "create a database", Category: "subcommand"},
 			{Value: "user", Description: "create a MySQL user", Category: "subcommand"},
 		}
+	case "count":
+		return []Suggestion{{Value: "rows", Description: "count rows in a table", Category: "subcommand"}}
 	case "drop":
 		if len(req.Fields) == 1 || (len(req.Fields) == 2 && req.Fields[1] != "user") {
 			return []Suggestion{
@@ -566,6 +616,10 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "databases", Description: "alias for show databases", Category: "alias"},
 			{Value: "users", Description: "alias for show users", Category: "alias"},
 		}
+	case "peek":
+		return []Suggestion{{Value: "rows", Description: "peek bounded rows from a table", Category: "subcommand"}}
+	case "sample":
+		return []Suggestion{{Value: "rows", Description: "sample bounded rows from a table", Category: "subcommand"}}
 	case "show":
 		if len(req.Fields) == 1 {
 			return []Suggestion{
@@ -636,8 +690,11 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "connection show", Description: "connection show help", Category: "topic"},
 			{Value: "connection test", Description: "connection test help", Category: "topic"},
 			{Value: "connection doctor", Description: "connection doctor help", Category: "topic"},
+			{Value: "count rows", Description: "count rows help", Category: "topic"},
 			{Value: "create database", Description: "create database help", Category: "topic"},
 			{Value: "create user", Description: "create user help", Category: "topic"},
+			{Value: "peek rows", Description: "peek rows help", Category: "topic"},
+			{Value: "sample rows", Description: "sample rows help", Category: "topic"},
 			{Value: "show databases", Description: "show databases help", Category: "topic"},
 			{Value: "show columns", Description: "show columns help", Category: "topic"},
 			{Value: "show create table", Description: "show create table help", Category: "topic"},

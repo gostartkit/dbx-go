@@ -82,6 +82,18 @@ func (d *diagnosticConnector) ShowColumns(context.Context, *config.ConnectionCon
 	return nil, nil
 }
 
+func (d *diagnosticConnector) CountRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (int64, error) {
+	return 0, nil
+}
+
+func (d *diagnosticConnector) PeekRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string, int) (*driver.RowSet, error) {
+	return nil, nil
+}
+
+func (d *diagnosticConnector) SampleRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string, int) (*driver.RowSet, error) {
+	return nil, nil
+}
+
 func (d *diagnosticConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
 	return nil, nil
 }

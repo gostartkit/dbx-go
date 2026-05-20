@@ -44,6 +44,18 @@ func (f failingConnector) ShowColumns(context.Context, *config.ConnectionConfig,
 	return nil, nil
 }
 
+func (f failingConnector) CountRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (int64, error) {
+	return 0, nil
+}
+
+func (f failingConnector) PeekRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string, int) (*driver.RowSet, error) {
+	return nil, nil
+}
+
+func (f failingConnector) SampleRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string, int) (*driver.RowSet, error) {
+	return nil, nil
+}
+
 func (f failingConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
 	return nil, nil
 }

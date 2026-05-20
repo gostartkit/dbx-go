@@ -93,6 +93,9 @@ create database
 show databases
 drop database
 create user
+count rows <table>
+peek rows <table>
+sample rows <table>
 show users
 drop user
 show tables
@@ -137,6 +140,9 @@ dbx show dbs [flags]
 dbx list databases [flags]
 dbx drop database <name> [flags]
 dbx create user <name> [flags]
+dbx count rows <table> [flags]
+dbx peek rows <table> [flags]
+dbx sample rows <table> [flags]
 dbx show users [flags]
 dbx drop user <name> [flags]
 dbx show tables [flags]
@@ -201,6 +207,18 @@ prod
 dbx> use <TAB>
 app_demo
 app_prod
+
+dbx(prod/app_prod)> count rows <TAB>
+orders
+users
+
+dbx(prod/app_prod)> peek rows <TAB>
+orders
+users
+
+dbx(prod/app_prod)> sample rows <TAB>
+orders
+users
 
 dbx(prod/app_prod)> describe <TAB>
 orders
@@ -289,10 +307,13 @@ quit          -> exit
 conn          -> connect
 cx            -> connect
 conns         -> connections
+count <table> -> count rows <table>
 columns <table> -> show columns <table>
 list databases -> show databases
 show dbs      -> show databases
 ls db         -> show databases
+peek <table>  -> peek rows <table>
+sample <table> -> sample rows <table>
 show fks <table> -> show foreign keys <table>
 show index    -> show indexes
 show processes -> show processlist
@@ -318,7 +339,7 @@ Use `help aliases` inside the REPL to display the alias list.
 
 Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, and `show users`.
 
-Read-only schema and table inspection commands such as `show columns`, `show foreign keys`, `show create table`, `show table status`, `show triggers`, and `show views` also run immediately without confirmation.
+Read-only schema, table, and row inspection commands such as `show columns`, `show foreign keys`, `show create table`, `show table status`, `show triggers`, `show views`, `count rows`, `peek rows`, and `sample rows` also run immediately without confirmation.
 
 Mutating commands require confirmation in the REPL unless dry-run is active. `truncate table` requires typing the table name in the REPL before execution. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
 
@@ -377,6 +398,9 @@ show columns users
 show foreign keys organization_members
 show triggers
 show views
+count rows users
+peek rows users
+sample rows users
 describe users
 show indexes users
 show create table users
@@ -395,6 +419,10 @@ auth_sessions
 orders_2026
 tmp-users
 ```
+
+Row inspection commands default to a limit of `10` rows and cap the limit at `100`. `sample rows` uses `ORDER BY RAND()`, which can be expensive on large tables.
+
+Row inspection commands can display application data. Use with care.
 
 Database names accept letters, numbers, `_`, and `-`. Examples:
 

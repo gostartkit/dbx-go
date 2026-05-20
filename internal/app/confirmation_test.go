@@ -51,6 +51,18 @@ func (c *readOnlyConnector) ShowColumns(context.Context, *config.ConnectionConfi
 	return []driver.SchemaColumn{{Name: "id", Type: "bigint unsigned", Nullable: false, Key: "PRI", Extra: "auto_increment"}}, nil
 }
 
+func (c *readOnlyConnector) CountRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (int64, error) {
+	return 12813, nil
+}
+
+func (c *readOnlyConnector) PeekRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string, int) (*driver.RowSet, error) {
+	return &driver.RowSet{Columns: []string{"id", "email"}, Rows: [][]any{{1, "a@example.com"}}}, nil
+}
+
+func (c *readOnlyConnector) SampleRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string, int) (*driver.RowSet, error) {
+	return &driver.RowSet{Columns: []string{"id", "email"}, Rows: [][]any{{2, "b@example.com"}}}, nil
+}
+
 func (c *readOnlyConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
 	return []driver.TableIndex{{Name: "PRIMARY", Column: "id", Type: "BTREE", SeqInIndex: 1}}, nil
 }
@@ -196,6 +208,30 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 				return app.handleShowGrants(context.Background(), "analytics-ro", "%")
 			},
 			wantOut: "GRANT SELECT",
+		},
+		{
+			name: "count rows",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleCountRows(context.Background(), "users")
+			},
+			wantOut: "12813 rows",
+		},
+		{
+			name: "peek rows",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handlePeekRows(context.Background(), "users", "")
+			},
+			wantOut: "a@example.com",
+		},
+		{
+			name: "sample rows",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleSampleRows(context.Background(), "users", "")
+			},
+			wantOut: "b@example.com",
 		},
 		{
 			name: "show indexes",

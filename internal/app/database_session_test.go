@@ -17,6 +17,7 @@ type databaseSelectionConnector struct {
 	tables        []string
 	users         []string
 	columns       []driver.SchemaColumn
+	rowSet        *driver.RowSet
 	indexes       []driver.TableIndex
 	foreignKeys   []driver.ForeignKey
 	createDDL     string
@@ -25,6 +26,7 @@ type databaseSelectionConnector struct {
 	views         []string
 	processes     []driver.Process
 	variables     []driver.SystemVariable
+	rowCount      int64
 	dbErr         error
 	tableErr      error
 	userErr       error
@@ -32,6 +34,8 @@ type databaseSelectionConnector struct {
 	listCalls     int
 	tableCalls    int
 	userCalls     int
+	peekLimit     int
+	sampleLimit   int
 	truncateCalls int
 	renameCalls   int
 }
@@ -80,6 +84,40 @@ func (c *databaseSelectionConnector) ShowColumns(context.Context, *config.Connec
 		}, nil
 	}
 	return append([]driver.SchemaColumn(nil), c.columns...), nil
+}
+
+func (c *databaseSelectionConnector) CountRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (int64, error) {
+	if c.rowCount != 0 {
+		return c.rowCount, nil
+	}
+	return 12813, nil
+}
+
+func (c *databaseSelectionConnector) PeekRows(_ context.Context, _ *config.ConnectionConfig, _ *sql.DB, _ string, _ string, limit int) (*driver.RowSet, error) {
+	c.peekLimit = limit
+	if c.rowSet != nil {
+		return cloneRowSet(c.rowSet), nil
+	}
+	return &driver.RowSet{
+		Columns: []string{"id", "email", "created_at"},
+		Rows: [][]any{
+			{1, "a@example.com", "2026-01-01 12:00:00"},
+			{2, "b@example.com", "2026-01-02 12:00:00"},
+		},
+	}, nil
+}
+
+func (c *databaseSelectionConnector) SampleRows(_ context.Context, _ *config.ConnectionConfig, _ *sql.DB, _ string, _ string, limit int) (*driver.RowSet, error) {
+	c.sampleLimit = limit
+	if c.rowSet != nil {
+		return cloneRowSet(c.rowSet), nil
+	}
+	return &driver.RowSet{
+		Columns: []string{"id", "email", "created_at"},
+		Rows: [][]any{
+			{2, "b@example.com", "2026-01-02 12:00:00"},
+		},
+	}, nil
 }
 
 func (c *databaseSelectionConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
@@ -158,6 +196,20 @@ func (c *databaseSelectionConnector) QueryStrings(context.Context, *config.Conne
 		return nil, c.userErr
 	}
 	return append([]string(nil), c.users...), nil
+}
+
+func cloneRowSet(value *driver.RowSet) *driver.RowSet {
+	if value == nil {
+		return nil
+	}
+	result := &driver.RowSet{
+		Columns: append([]string(nil), value.Columns...),
+		Rows:    make([][]any, 0, len(value.Rows)),
+	}
+	for _, row := range value.Rows {
+		result.Rows = append(result.Rows, append([]any(nil), row...))
+	}
+	return result
 }
 
 func TestHandleLineUseParsesDatabase(t *testing.T) {

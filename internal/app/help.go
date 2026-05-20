@@ -35,6 +35,9 @@ create database       Create a database from a template
 show databases        List databases on the active connection
 drop database         Drop a database from a template
 create user           Create a MySQL user
+count rows            Count rows in a table
+peek rows             Peek bounded rows from a table
+sample rows           Sample bounded rows from a table
 show users            List MySQL users
 drop user             Drop a MySQL user
 show tables           List tables in the current database
@@ -222,6 +225,66 @@ This command:
 Examples:
   create user
   create user analytics-ro`),
+	},
+	"count rows": {
+		title: "count rows",
+		body: strings.TrimSpace(`
+Count rows in a table in the current database context.
+
+Usage:
+  count rows users
+  count users
+
+Aliases:
+  count <table>
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - does not require confirmation`),
+	},
+	"peek rows": {
+		title: "peek rows",
+		body: strings.TrimSpace(`
+Peek a bounded number of rows from a table in the current database context.
+
+Usage:
+  peek rows users
+  peek users
+  peek rows users 20
+
+Aliases:
+  peek <table>
+
+This command:
+  - defaults the limit to 10
+  - caps the limit at 100
+  - requires an active connection
+  - requires a selected database
+  - may display application data
+  - does not require confirmation`),
+	},
+	"sample rows": {
+		title: "sample rows",
+		body: strings.TrimSpace(`
+Sample a bounded number of rows from a table in the current database context.
+
+Usage:
+  sample rows users
+  sample users
+  sample rows users 10
+
+Aliases:
+  sample <table>
+
+This command:
+  - defaults the limit to 10
+  - caps the limit at 100
+  - uses ORDER BY RAND() and can be expensive on large tables
+  - requires an active connection
+  - requires a selected database
+  - may display application data
+  - does not require confirmation`),
 	},
 	"show databases": {
 		title: "show databases",
@@ -542,9 +605,12 @@ Supported aliases:
   conn     -> connect
   cx       -> connect
   conns    -> connections
+  count <table> -> count rows <table>
   ctx      -> context
   columns <table> -> show columns <table>
   ls db    -> show databases
+  peek <table> -> peek rows <table>
+  sample <table> -> sample rows <table>
   list databases -> show databases
   show dbs -> show databases
   show fks <table> -> show foreign keys <table>
