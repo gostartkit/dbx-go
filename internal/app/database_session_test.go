@@ -16,6 +16,9 @@ type databaseSelectionConnector struct {
 	databases  []string
 	tables     []string
 	users      []string
+	indexes    []driver.TableIndex
+	processes  []driver.Process
+	variables  []driver.SystemVariable
 	dbErr      error
 	tableErr   error
 	userErr    error
@@ -61,8 +64,29 @@ func (c *databaseSelectionConnector) DescribeTable(context.Context, *config.Conn
 	return []driver.TableColumn{{Name: "id", Type: "bigint"}}, nil
 }
 
+func (c *databaseSelectionConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
+	if len(c.indexes) == 0 {
+		return []driver.TableIndex{{Name: "PRIMARY", Column: "id", Type: "BTREE", SeqInIndex: 1}}, nil
+	}
+	return append([]driver.TableIndex(nil), c.indexes...), nil
+}
+
 func (c *databaseSelectionConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
 	return []string{"GRANT SELECT ON *.* TO 'analytics-ro'@'%'"}, nil
+}
+
+func (c *databaseSelectionConnector) ShowProcesslist(context.Context, *config.ConnectionConfig, *sql.DB) ([]driver.Process, error) {
+	if len(c.processes) == 0 {
+		return []driver.Process{{ID: 12, User: "app_user", Host: "10.0.0.2", Command: "Query", TimeSeconds: 2, Info: "SELECT 1"}}, nil
+	}
+	return append([]driver.Process(nil), c.processes...), nil
+}
+
+func (c *databaseSelectionConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
+	if len(c.variables) == 0 {
+		return []driver.SystemVariable{{Name: "max_connections", Value: "500"}}, nil
+	}
+	return append([]driver.SystemVariable(nil), c.variables...), nil
 }
 
 func (c *databaseSelectionConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {

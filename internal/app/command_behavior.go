@@ -27,11 +27,17 @@ var commandBehaviors = map[string]CommandBehavior{
 	"list databases":     {ReadOnly: true},
 	"list users":         {ReadOnly: true},
 	"show grants":        {ReadOnly: true},
+	"show index":         {ReadOnly: true},
+	"show indexes":       {ReadOnly: true},
 	"show databases":     {ReadOnly: true},
 	"show dbs":           {ReadOnly: true},
+	"show processlist":   {ReadOnly: true},
+	"show processes":     {ReadOnly: true},
 	"show user accounts": {ReadOnly: true},
 	"show tables":        {ReadOnly: true},
 	"show users":         {ReadOnly: true},
+	"show variables":     {ReadOnly: true},
+	"show vars":          {ReadOnly: true},
 	"status":             {ReadOnly: true},
 }
 

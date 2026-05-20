@@ -80,12 +80,45 @@ func (c *Connector) DescribeTable(ctx context.Context, cfg *config.ConnectionCon
 	}
 }
 
+func (c *Connector) ShowIndexes(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, database string, table string) ([]driver.TableIndex, error) {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.ShowIndexes(queryCtx, db, database, table)
+	default:
+		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
 func (c *Connector) ShowGrants(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, user string, host string) ([]string, error) {
 	switch cfg.Driver {
 	case "mysql":
 		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
 		defer cancel()
 		return driver.ShowGrants(queryCtx, db, user, host)
+	default:
+		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
+func (c *Connector) ShowProcesslist(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB) ([]driver.Process, error) {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.ShowProcesslist(queryCtx, db)
+	default:
+		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
+	}
+}
+
+func (c *Connector) ShowVariables(ctx context.Context, cfg *config.ConnectionConfig, db *sql.DB, pattern string) ([]driver.SystemVariable, error) {
+	switch cfg.Driver {
+	case "mysql":
+		queryCtx, cancel := context.WithTimeout(ctx, cfg.QueryTimeout())
+		defer cancel()
+		return driver.ShowVariables(queryCtx, db, pattern)
 	default:
 		return nil, fmt.Errorf("unsupported driver %q", cfg.Driver)
 	}

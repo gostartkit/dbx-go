@@ -40,7 +40,19 @@ func (f failingConnector) DescribeTable(context.Context, *config.ConnectionConfi
 	return nil, nil
 }
 
+func (f failingConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
+	return nil, nil
+}
+
 func (f failingConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
+	return nil, nil
+}
+
+func (f failingConnector) ShowProcesslist(context.Context, *config.ConnectionConfig, *sql.DB) ([]driver.Process, error) {
+	return nil, nil
+}
+
+func (f failingConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
 	return nil, nil
 }
 

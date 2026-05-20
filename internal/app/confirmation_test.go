@@ -47,8 +47,20 @@ func (c *readOnlyConnector) DescribeTable(context.Context, *config.ConnectionCon
 	}, nil
 }
 
+func (c *readOnlyConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
+	return []driver.TableIndex{{Name: "PRIMARY", Column: "id", Type: "BTREE", SeqInIndex: 1}}, nil
+}
+
 func (c *readOnlyConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
 	return []string{"GRANT SELECT ON `app_prod`.* TO 'analytics-ro'@'%'"}, nil
+}
+
+func (c *readOnlyConnector) ShowProcesslist(context.Context, *config.ConnectionConfig, *sql.DB) ([]driver.Process, error) {
+	return []driver.Process{{ID: 12, User: "app_user", Host: "10.0.0.2", Command: "Query", TimeSeconds: 2, Info: "SELECT 1"}}, nil
+}
+
+func (c *readOnlyConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
+	return []driver.SystemVariable{{Name: "max_connections", Value: "500"}}, nil
 }
 
 func (c *readOnlyConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
@@ -152,6 +164,28 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 				return app.handleShowGrants(context.Background(), "analytics-ro", "%")
 			},
 			wantOut: "GRANT SELECT",
+		},
+		{
+			name: "show indexes",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleShowIndexes(context.Background(), "users")
+			},
+			wantOut: "PRIMARY",
+		},
+		{
+			name: "show processlist",
+			run: func(app *Application) error {
+				return app.handleShowProcesslist(context.Background())
+			},
+			wantOut: "app_user",
+		},
+		{
+			name: "show variables",
+			run: func(app *Application) error {
+				return app.handleShowVariables(context.Background(), "max_connections")
+			},
+			wantOut: "max_connections",
 		},
 		{
 			name: "context",

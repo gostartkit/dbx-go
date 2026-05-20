@@ -135,6 +135,23 @@ func Builtins() []Template {
 		},
 		{
 			Version: 1,
+			Name:    "builtin_show_indexes",
+			Match: Match{
+				Command: "show indexes",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show indexes for table `{{table}}` in database `{{database}}`",
+					SQL:         "SHOW INDEXES FROM `{{table}}` FROM `{{database}}`",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show indexes",
+		},
+		{
+			Version: 1,
 			Name:    "builtin_show_grants",
 			Match: Match{
 				Command: "show grants",
@@ -149,6 +166,40 @@ func Builtins() []Template {
 			},
 			Layer:  "builtin",
 			Source: "builtin:show grants",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_show_processlist",
+			Match: Match{
+				Command: "show processlist",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show the active MySQL processlist on connection {{connection.name}}",
+					SQL:         "SHOW PROCESSLIST",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show processlist",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_show_variables",
+			Match: Match{
+				Command: "show variables",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show MySQL system variables{{variable_scope}}",
+					SQL:         "SHOW VARIABLES{{variable_like_clause}}",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show variables",
 		},
 		{
 			Version: 1,

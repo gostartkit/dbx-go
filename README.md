@@ -97,7 +97,10 @@ show users
 drop user
 show tables
 describe [table]
+show indexes [table]
 show grants <user> [host]
+show processlist
+show variables [name|pattern]
 use <database>
 dry-run on
 dry-run off
@@ -130,7 +133,10 @@ dbx show users [flags]
 dbx drop user <name> [flags]
 dbx show tables [flags]
 dbx describe <table> [flags]
+dbx show indexes <table> [flags]
 dbx show grants <user> [host] [flags]
+dbx show processlist [flags]
+dbx show variables [name|pattern] [flags]
 
 dbx status
 dbx context
@@ -184,6 +190,10 @@ dbx(prod/app_prod)> describe <TAB>
 orders
 users
 
+dbx(prod/app_prod)> show indexes <TAB>
+orders
+users
+
 dbx> drop user <TAB>
 analytics-ro
 app_user
@@ -191,6 +201,11 @@ app_user
 dbx(prod)> show grants <TAB>
 analytics-ro
 app_user
+
+dbx(prod)> show variables <TAB>
+max_connections
+wait_timeout
+innodb_buffer_pool_size
 ```
 
 Common command-tree examples:
@@ -207,9 +222,15 @@ user
 dbx> show <TAB>
 databases
 dbs
+indexes
+index
+processlist
+processes
 users
 tables
 grants
+variables
+vars
 
 dbx> help <TAB>
 connection
@@ -230,6 +251,9 @@ conns         -> connections
 ls db         -> list databases
 show databases -> list databases
 show dbs      -> list databases
+show index    -> show indexes
+show processes -> show processlist
+show vars     -> show variables
 create db     -> create database
 drop db       -> drop database
 list users    -> show users
@@ -432,11 +456,14 @@ These commands keep `dbx` in its operational REPL lane without turning it into a
 ```text
 show tables
 describe users
+show indexes users
 show grants analytics-ro
+show processlist
+show variables innodb%
 context
 ```
 
-`show tables` and `describe` require a selected database context. If none is selected, `dbx` returns:
+`show tables`, `describe`, and `show indexes` require a selected database context. If none is selected, `dbx` returns:
 
 ```text
 no database selected; use: use <database>
@@ -744,8 +771,19 @@ id               bigint
 email            varchar(255)
 created_at       datetime
 
+dbx(prod/app_prod)> show indexes users
+PRIMARY          BTREE    id
+idx_email        BTREE    email
+
 dbx(prod/app_prod)> show grants analytics-ro
 GRANT SELECT ON `app_prod`.* TO 'analytics-ro'@'%'
+
+dbx(prod)> show processlist
+12   app_user         10.0.0.2                 Query      2s SELECT * FROM users...
+
+dbx(prod)> show variables innodb%
+innodb_buffer_pool_size 4294967296
+innodb_flush_log_at_trx_commit 1
 ```
 
 Connection editing and deletion:
@@ -936,11 +974,24 @@ Describe a table:
 dbx --connection prod --database app_prod describe users
 ```
 
+Show indexes for a table:
+
+```bash
+dbx --connection prod --database app_prod show indexes users
+```
+
 Show grants for a MySQL user:
 
 ```bash
 dbx --connection prod show grants analytics-ro
 dbx --connection prod show grants analytics-ro localhost
+```
+
+Inspect operational state:
+
+```bash
+dbx --connection prod show processlist
+dbx --connection prod show variables innodb%
 ```
 
 Context output for scripts or quick checks:

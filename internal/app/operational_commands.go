@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
 	"pkg.gostartkit.com/dbx/internal/util"
 )
+
+var variablePatternRE = regexp.MustCompile(`^[a-zA-Z0-9_%]+$`)
 
 func (a *Application) handleContext(ctx context.Context) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "context", DryRun: a.dryRun}, func(meta *auditMetadata) error {
@@ -151,6 +154,66 @@ func (a *Application) handleDescribeTable(ctx context.Context, table string) err
 	})
 }
 
+func (a *Application) handleShowIndexes(ctx context.Context, table string) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show indexes", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		cfg, db, database, err := a.requireDatabaseContext(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+
+		table, err = a.resolveTableName(ctx, table)
+		if err != nil {
+			return err
+		}
+
+		template, err := a.templates.Resolve("show indexes", cfg)
+		if err != nil {
+			return util.WrapLayer("template", "resolve show indexes template", err)
+		}
+
+		values := map[string]string{
+			"database": database,
+			"table":    table,
+		}
+		plan, previewPlan, err := buildPlans(template, cfg, values)
+		if err != nil {
+			return err
+		}
+
+		if a.dryRun {
+			a.printPlanPreview(previewPlan, true)
+			a.printPlanResult(&PlanExecutionResult{
+				OK:         true,
+				Connection: cfg.Name,
+				Command:    "show indexes",
+				DryRun:     true,
+				Actions: []ActionResult{{
+					Description: plan.Actions[0].Description,
+					SQL:         previewPlan.Actions[0].SQL,
+					Status:      ActionStatusDryRun,
+				}},
+			})
+			return nil
+		}
+
+		indexes, err := a.connector.ShowIndexes(ctx, cfg, db, database, table)
+		if err != nil {
+			return err
+		}
+		indexes = sortedIndexes(indexes)
+		if len(indexes) == 0 {
+			a.prompt.Println("No indexes found.")
+			return nil
+		}
+		for _, index := range indexes {
+			a.prompt.Println(formatIndexLine(index))
+		}
+		return nil
+	})
+}
+
 func (a *Application) handleShowGrants(ctx context.Context, username string, host string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show grants", DryRun: a.dryRun}, func(meta *auditMetadata) error {
 		cfg, db, err := a.requireConnection(ctx)
@@ -220,6 +283,118 @@ func (a *Application) handleShowGrants(ctx context.Context, username string, hos
 	})
 }
 
+func (a *Application) handleShowProcesslist(ctx context.Context) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show processlist", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		cfg, db, err := a.requireConnection(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+
+		template, err := a.templates.Resolve("show processlist", cfg)
+		if err != nil {
+			return util.WrapLayer("template", "resolve show processlist template", err)
+		}
+
+		values := map[string]string{}
+		plan, previewPlan, err := buildPlans(template, cfg, values)
+		if err != nil {
+			return err
+		}
+
+		if a.dryRun {
+			a.printPlanPreview(previewPlan, true)
+			a.printPlanResult(&PlanExecutionResult{
+				OK:         true,
+				Connection: cfg.Name,
+				Command:    "show processlist",
+				DryRun:     true,
+				Actions: []ActionResult{{
+					Description: plan.Actions[0].Description,
+					SQL:         previewPlan.Actions[0].SQL,
+					Status:      ActionStatusDryRun,
+				}},
+			})
+			return nil
+		}
+
+		processes, err := a.connector.ShowProcesslist(ctx, cfg, db)
+		if err != nil {
+			return err
+		}
+		processes = sortedProcesses(processes)
+		if len(processes) == 0 {
+			a.prompt.Println("No processes found.")
+			return nil
+		}
+		for _, process := range processes {
+			a.prompt.Println(formatProcessLine(process))
+		}
+		return nil
+	})
+}
+
+func (a *Application) handleShowVariables(ctx context.Context, pattern string) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show variables", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		cfg, db, err := a.requireConnection(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+
+		pattern, likeClause, err := normalizeVariablePattern(pattern)
+		if err != nil {
+			return err
+		}
+
+		template, err := a.templates.Resolve("show variables", cfg)
+		if err != nil {
+			return util.WrapLayer("template", "resolve show variables template", err)
+		}
+
+		values := map[string]string{
+			"variable_like_clause": likeClause,
+			"variable_scope":       variableScopeLabel(pattern),
+		}
+		plan, previewPlan, err := buildPlans(template, cfg, values)
+		if err != nil {
+			return err
+		}
+
+		if a.dryRun {
+			a.printPlanPreview(previewPlan, true)
+			a.printPlanResult(&PlanExecutionResult{
+				OK:         true,
+				Connection: cfg.Name,
+				Command:    "show variables",
+				DryRun:     true,
+				Actions: []ActionResult{{
+					Description: plan.Actions[0].Description,
+					SQL:         previewPlan.Actions[0].SQL,
+					Status:      ActionStatusDryRun,
+				}},
+			})
+			return nil
+		}
+
+		variables, err := a.connector.ShowVariables(ctx, cfg, db, pattern)
+		if err != nil {
+			return util.WrapLayer("mysql", "variable query failed", err)
+		}
+		variables = sortedVariables(variables)
+		if len(variables) == 0 {
+			a.prompt.Println("No variables found.")
+			return nil
+		}
+		for _, variable := range variables {
+			a.prompt.Println(formatVariableLine(variable))
+		}
+		return nil
+	})
+}
+
 func (a *Application) requireDatabaseContext(ctx context.Context) (*config.ConnectionConfig, *sql.DB, string, error) {
 	cfg, db, err := a.requireConnection(ctx)
 	if err != nil {
@@ -257,6 +432,17 @@ func (a *Application) currentContextResult() *ContextResult {
 	result.Database = a.session.Database
 	result.Mode = a.session.Connection.Mode
 	return result
+}
+
+func normalizeVariablePattern(pattern string) (string, string, error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return "", "", nil
+	}
+	if !variablePatternRE.MatchString(pattern) {
+		return "", "", util.WrapLayer("validation", "validate variable pattern", fmt.Errorf("invalid variable pattern %q", pattern))
+	}
+	return pattern, " LIKE '" + util.EscapeMySQLString(pattern) + "'", nil
 }
 
 func emptyValue(value string, fallback string) string {

@@ -125,6 +125,29 @@ type TableColumn struct {
 	Extra   string `json:"extra,omitempty"`
 }
 
+type TableIndex struct {
+	Name       string `json:"name"`
+	Column     string `json:"column"`
+	Type       string `json:"type"`
+	SeqInIndex int    `json:"seq_in_index,omitempty"`
+}
+
+type Process struct {
+	ID          int64  `json:"id"`
+	User        string `json:"user"`
+	Host        string `json:"host"`
+	Database    string `json:"database,omitempty"`
+	Command     string `json:"command"`
+	TimeSeconds int64  `json:"time_seconds"`
+	State       string `json:"state,omitempty"`
+	Info        string `json:"info,omitempty"`
+}
+
+type SystemVariable struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 func Ping(ctx context.Context, db *sql.DB) error {
 	if err := db.PingContext(ctx); err != nil {
 		return util.WrapLayer("mysql", "ping database", err)
@@ -201,6 +224,74 @@ func DescribeTable(ctx context.Context, db *sql.DB, database string, table strin
 	return columns, nil
 }
 
+func ShowIndexes(ctx context.Context, db *sql.DB, database string, table string) ([]TableIndex, error) {
+	query := fmt.Sprintf(
+		"SHOW INDEXES FROM %s FROM %s",
+		util.QuoteMySQLIdentifier(table),
+		util.QuoteMySQLIdentifier(database),
+	)
+
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1146 {
+			return nil, util.WrapLayer("validation", "show indexes", fmt.Errorf("table not found: %s", table))
+		}
+		return nil, util.WrapLayer("sql execution", "run query", err)
+	}
+	defer rows.Close()
+
+	indexes := make([]TableIndex, 0)
+	for rows.Next() {
+		var (
+			tableName    string
+			nonUnique    sql.NullInt64
+			keyName      string
+			seqInIndex   int
+			columnName   string
+			collation    sql.NullString
+			cardinality  sql.NullInt64
+			subPart      sql.NullInt64
+			packed       sql.NullString
+			nullValue    sql.NullString
+			indexType    sql.NullString
+			comment      sql.NullString
+			indexComment sql.NullString
+			visible      sql.NullString
+			expression   sql.NullString
+		)
+		if err := rows.Scan(
+			&tableName,
+			&nonUnique,
+			&keyName,
+			&seqInIndex,
+			&columnName,
+			&collation,
+			&cardinality,
+			&subPart,
+			&packed,
+			&nullValue,
+			&indexType,
+			&comment,
+			&indexComment,
+			&visible,
+			&expression,
+		); err != nil {
+			return nil, util.WrapLayer("sql execution", "scan query result", err)
+		}
+		indexes = append(indexes, TableIndex{
+			Name:       keyName,
+			Column:     columnName,
+			Type:       indexType.String,
+			SeqInIndex: seqInIndex,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, util.WrapLayer("sql execution", "read query rows", err)
+	}
+	return indexes, nil
+}
+
 func ShowGrants(ctx context.Context, db *sql.DB, user string, host string) ([]string, error) {
 	query := fmt.Sprintf(
 		"SHOW GRANTS FOR '%s'@'%s'",
@@ -208,6 +299,77 @@ func ShowGrants(ctx context.Context, db *sql.DB, user string, host string) ([]st
 		util.EscapeMySQLString(host),
 	)
 	return QueryStrings(ctx, db, query)
+}
+
+func ShowProcesslist(ctx context.Context, db *sql.DB) ([]Process, error) {
+	rows, err := db.QueryContext(ctx, "SHOW PROCESSLIST")
+	if err != nil {
+		return nil, util.WrapLayer("sql execution", "run query", err)
+	}
+	defer rows.Close()
+
+	processes := make([]Process, 0)
+	for rows.Next() {
+		var (
+			id      int64
+			user    sql.NullString
+			host    sql.NullString
+			dbName  sql.NullString
+			command sql.NullString
+			timeVal sql.NullInt64
+			state   sql.NullString
+			info    sql.NullString
+		)
+		if err := rows.Scan(&id, &user, &host, &dbName, &command, &timeVal, &state, &info); err != nil {
+			return nil, util.WrapLayer("sql execution", "scan query result", err)
+		}
+		processes = append(processes, Process{
+			ID:          id,
+			User:        user.String,
+			Host:        host.String,
+			Database:    dbName.String,
+			Command:     command.String,
+			TimeSeconds: timeVal.Int64,
+			State:       state.String,
+			Info:        info.String,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, util.WrapLayer("sql execution", "read query rows", err)
+	}
+	return processes, nil
+}
+
+func ShowVariables(ctx context.Context, db *sql.DB, pattern string) ([]SystemVariable, error) {
+	query := "SHOW VARIABLES"
+	if strings.TrimSpace(pattern) != "" {
+		query += " LIKE '" + util.EscapeMySQLString(pattern) + "'"
+	}
+
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, util.WrapLayer("sql execution", "run query", err)
+	}
+	defer rows.Close()
+
+	variables := make([]SystemVariable, 0)
+	for rows.Next() {
+		var (
+			name  string
+			value sql.NullString
+		)
+		if err := rows.Scan(&name, &value); err != nil {
+			return nil, util.WrapLayer("sql execution", "scan query result", err)
+		}
+		variables = append(variables, SystemVariable{
+			Name:  name,
+			Value: value.String,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, util.WrapLayer("sql execution", "read query rows", err)
+	}
+	return variables, nil
 }
 
 func ExecStatement(ctx context.Context, db *sql.DB, statement string) error {

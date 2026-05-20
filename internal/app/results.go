@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
+	"pkg.gostartkit.com/dbx/internal/driver"
 	"pkg.gostartkit.com/dbx/internal/util"
 )
 
@@ -88,6 +89,20 @@ type TableDescriptionResult struct {
 	Columns    []TableColumnResult `json:"columns,omitempty"`
 }
 
+type TableIndexResult struct {
+	Name   string `json:"name"`
+	Column string `json:"column"`
+	Type   string `json:"type"`
+}
+
+type TableIndexesResult struct {
+	OK         bool               `json:"ok"`
+	Connection string             `json:"connection,omitempty"`
+	Database   string             `json:"database,omitempty"`
+	Table      string             `json:"table,omitempty"`
+	Indexes    []TableIndexResult `json:"indexes,omitempty"`
+}
+
 type GrantsResult struct {
 	OK         bool     `json:"ok"`
 	Connection string   `json:"connection,omitempty"`
@@ -100,6 +115,35 @@ type UsersResult struct {
 	OK         bool     `json:"ok"`
 	Connection string   `json:"connection,omitempty"`
 	Users      []string `json:"users,omitempty"`
+}
+
+type ProcessResult struct {
+	ID          int64  `json:"id"`
+	User        string `json:"user"`
+	Host        string `json:"host"`
+	Database    string `json:"database,omitempty"`
+	Command     string `json:"command"`
+	TimeSeconds int64  `json:"time_seconds"`
+	State       string `json:"state,omitempty"`
+	Info        string `json:"info,omitempty"`
+}
+
+type ProcesslistResult struct {
+	OK         bool            `json:"ok"`
+	Connection string          `json:"connection,omitempty"`
+	Processes  []ProcessResult `json:"processes,omitempty"`
+}
+
+type VariableResult struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type VariablesResult struct {
+	OK         bool             `json:"ok"`
+	Connection string           `json:"connection,omitempty"`
+	Pattern    string           `json:"pattern,omitempty"`
+	Variables  []VariableResult `json:"variables,omitempty"`
 }
 
 type UserMutationResult struct {
@@ -282,6 +326,46 @@ func redactConnection(cfg *config.ConnectionConfig) *RedactedConnection {
 	}
 
 	return result
+}
+
+func toTableIndexResults(indexes []driver.TableIndex) []TableIndexResult {
+	results := make([]TableIndexResult, 0, len(indexes))
+	for _, index := range indexes {
+		results = append(results, TableIndexResult{
+			Name:   index.Name,
+			Column: index.Column,
+			Type:   index.Type,
+		})
+	}
+	return results
+}
+
+func toProcessResults(processes []driver.Process) []ProcessResult {
+	results := make([]ProcessResult, 0, len(processes))
+	for _, process := range processes {
+		results = append(results, ProcessResult{
+			ID:          process.ID,
+			User:        process.User,
+			Host:        process.Host,
+			Database:    process.Database,
+			Command:     process.Command,
+			TimeSeconds: process.TimeSeconds,
+			State:       process.State,
+			Info:        process.Info,
+		})
+	}
+	return results
+}
+
+func toVariableResults(variables []driver.SystemVariable) []VariableResult {
+	results := make([]VariableResult, 0, len(variables))
+	for _, variable := range variables {
+		results = append(results, VariableResult{
+			Name:  variable.Name,
+			Value: variable.Value,
+		})
+	}
+	return results
 }
 
 func redactPassword(cfg *config.ConnectionConfig) RedactedPassword {

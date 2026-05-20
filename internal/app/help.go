@@ -39,7 +39,10 @@ show users            List MySQL users
 drop user             Drop a MySQL user
 show tables           List tables in the current database
 describe [table]      Describe a table in the current database
+show indexes <table>  Show indexes for a table in the current database
 show grants <user>    Show MySQL grants for a user
+show processlist      Show the active MySQL processlist
+show variables [name] Show MySQL system variables
 use <database>        Select a database for the active REPL session
 
 status                Show the current session status
@@ -245,6 +248,24 @@ This command:
 Example:
   show tables`),
 	},
+	"show indexes": {
+		title: "show indexes",
+		body: strings.TrimSpace(`
+Show indexes for a table in the current database context.
+
+Usage:
+  show indexes users
+  show indexes on users
+
+Aliases:
+  show index
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - reuses the current table completion cache
+  - does not require confirmation`),
+	},
 	"describe": {
 		title: "describe",
 		body: strings.TrimSpace(`
@@ -270,6 +291,40 @@ Usage:
 
 This command:
   - defaults the host to %
+  - does not require confirmation`),
+	},
+	"show processlist": {
+		title: "show processlist",
+		body: strings.TrimSpace(`
+Show the active MySQL processlist for the selected connection.
+
+Aliases:
+  show processes
+
+This command:
+  - requires an active connection
+  - truncates long query text in text output
+  - does not require confirmation
+
+Example:
+  show processlist`),
+	},
+	"show variables": {
+		title: "show variables",
+		body: strings.TrimSpace(`
+Show MySQL system variables.
+
+Usage:
+  show variables
+  show variables max_connections
+  show variables innodb%
+
+Aliases:
+  show vars
+
+This command:
+  - supports exact names and LIKE patterns
+  - requires an active connection
   - does not require confirmation`),
 	},
 	"use": {
@@ -359,6 +414,9 @@ Supported aliases:
   ls db    -> list databases
   show databases -> list databases
   show dbs -> list databases
+  show index -> show indexes
+  show processes -> show processlist
+  show vars -> show variables
   list users -> show users
   show user accounts -> show users
   desc table -> describe table

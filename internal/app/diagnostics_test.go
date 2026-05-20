@@ -78,7 +78,19 @@ func (d *diagnosticConnector) DescribeTable(context.Context, *config.ConnectionC
 	return nil, nil
 }
 
+func (d *diagnosticConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
+	return nil, nil
+}
+
 func (d *diagnosticConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
+	return nil, nil
+}
+
+func (d *diagnosticConnector) ShowProcesslist(context.Context, *config.ConnectionConfig, *sql.DB) ([]driver.Process, error) {
+	return nil, nil
+}
+
+func (d *diagnosticConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
 	return nil, nil
 }
 

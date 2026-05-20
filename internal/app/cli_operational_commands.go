@@ -28,6 +28,33 @@ func (b *cliBuilder) showTablesCommand() *cmd.Command {
 	}
 }
 
+func (b *cliBuilder) showIndexesCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:        "indexes",
+		UsageLine:   "dbx show indexes <table>",
+		Short:       "Show indexes for a table in the selected database",
+		Long:        helpEntries["show indexes"].body,
+		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true}},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			table := ""
+			switch len(args) {
+			case 1:
+				table = args[0]
+			case 2:
+				if args[0] != "on" {
+					return util.WrapLayer("validation", "show indexes", fmt.Errorf("usage: dbx show indexes <table>"))
+				}
+				table = args[1]
+			default:
+				return util.WrapLayer("validation", "show indexes", fmt.Errorf("usage: dbx show indexes <table>"))
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show indexes", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runShowIndexes(ctx, application, table, meta)
+			})
+		},
+	}
+}
+
 func (b *cliBuilder) showGrantsCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "grants",
@@ -45,6 +72,45 @@ func (b *cliBuilder) showGrantsCommand() *cmd.Command {
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "show grants", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
 				return b.runShowGrants(ctx, application, args[0], host, meta)
+			})
+		},
+	}
+}
+
+func (b *cliBuilder) showProcesslistCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "processlist",
+		UsageLine: "dbx show processlist",
+		Short:     "Show the active MySQL processlist",
+		Long:      helpEntries["show processlist"].body,
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if err := b.requireNoArgs(args); err != nil {
+				return util.WrapLayer("validation", "show processlist", err)
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show processlist", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runShowProcesslist(ctx, application, meta)
+			})
+		},
+	}
+}
+
+func (b *cliBuilder) showVariablesCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:        "variables",
+		UsageLine:   "dbx show variables [pattern]",
+		Short:       "Show MySQL system variables",
+		Long:        helpEntries["show variables"].body,
+		Positionals: []cmd.PositionalArg{{Name: "pattern", Usage: "exact name or LIKE pattern"}},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) > 1 {
+				return util.WrapLayer("validation", "show variables", fmt.Errorf("usage: dbx show variables [pattern]"))
+			}
+			pattern := ""
+			if len(args) == 1 {
+				pattern = args[0]
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show variables", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runShowVariables(ctx, application, pattern, meta)
 			})
 		},
 	}
@@ -169,6 +235,76 @@ func (b *cliBuilder) runShowTables(ctx context.Context, application *Application
 		}
 		for _, table := range tables {
 			fmt.Fprintln(b.out, table)
+		}
+		return nil
+	})
+}
+
+func (b *cliBuilder) runShowIndexes(ctx context.Context, application *Application, table string, meta *auditMetadata) error {
+	if err := util.ValidateTableName(table); err != nil {
+		return util.WrapLayer("validation", "validate table name", err)
+	}
+	cfg, database, err := b.resolveConnectionAndDatabase(ctx, application, "show indexes")
+	if err != nil {
+		return err
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+	}
+
+	template, err := application.selectTemplateForCLI("show indexes", cfg, "")
+	if err != nil {
+		return err
+	}
+	values := map[string]string{
+		"database": database,
+		"table":    table,
+	}
+	plan, previewPlan, err := buildPlans(template, cfg, values)
+	if err != nil {
+		return err
+	}
+
+	if b.globals.DryRun {
+		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
+		if result != nil {
+			result.Connection = cfg.Name
+			result.Command = "show indexes"
+			applyPreviewSQL(result, previewPlan)
+		}
+		return b.writeOutput(result, func() error {
+			application.printPlanPreview(previewPlan, true)
+			application.printPlanResult(result)
+			return runErr
+		})
+	}
+
+	db, err := application.openConnection(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	indexes, err := application.connector.ShowIndexes(ctx, cfg, db, database, table)
+	if err != nil {
+		return err
+	}
+	indexes = sortedIndexes(indexes)
+	result := &TableIndexesResult{
+		OK:         true,
+		Connection: cfg.Name,
+		Database:   database,
+		Table:      table,
+		Indexes:    toTableIndexResults(indexes),
+	}
+	return b.writeOutput(result, func() error {
+		if len(indexes) == 0 {
+			fmt.Fprintln(b.out, "No indexes found.")
+			return nil
+		}
+		for _, index := range indexes {
+			fmt.Fprintln(b.out, formatIndexLine(index))
 		}
 		return nil
 	})
@@ -311,6 +447,138 @@ func (b *cliBuilder) runShowGrants(ctx context.Context, application *Application
 		}
 		for _, grant := range grants {
 			fmt.Fprintln(b.out, grant)
+		}
+		return nil
+	})
+}
+
+func (b *cliBuilder) runShowProcesslist(ctx context.Context, application *Application, meta *auditMetadata) error {
+	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	if err != nil {
+		return err
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+	}
+
+	template, err := application.selectTemplateForCLI("show processlist", cfg, "")
+	if err != nil {
+		return err
+	}
+	plan, previewPlan, err := buildPlans(template, cfg, map[string]string{})
+	if err != nil {
+		return err
+	}
+
+	if b.globals.DryRun {
+		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
+		if result != nil {
+			result.Connection = cfg.Name
+			result.Command = "show processlist"
+			applyPreviewSQL(result, previewPlan)
+		}
+		return b.writeOutput(result, func() error {
+			application.printPlanPreview(previewPlan, true)
+			application.printPlanResult(result)
+			return runErr
+		})
+	}
+
+	db, err := application.openConnection(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	processes, err := application.connector.ShowProcesslist(ctx, cfg, db)
+	if err != nil {
+		return err
+	}
+	processes = sortedProcesses(processes)
+	result := &ProcesslistResult{
+		OK:         true,
+		Connection: cfg.Name,
+		Processes:  toProcessResults(processes),
+	}
+	return b.writeOutput(result, func() error {
+		if len(processes) == 0 {
+			fmt.Fprintln(b.out, "No processes found.")
+			return nil
+		}
+		for _, process := range processes {
+			fmt.Fprintln(b.out, formatProcessLine(process))
+		}
+		return nil
+	})
+}
+
+func (b *cliBuilder) runShowVariables(ctx context.Context, application *Application, pattern string, meta *auditMetadata) error {
+	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	if err != nil {
+		return err
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+	}
+
+	pattern, likeClause, err := normalizeVariablePattern(pattern)
+	if err != nil {
+		return err
+	}
+
+	template, err := application.selectTemplateForCLI("show variables", cfg, "")
+	if err != nil {
+		return err
+	}
+	values := map[string]string{
+		"variable_like_clause": likeClause,
+		"variable_scope":       variableScopeLabel(pattern),
+	}
+	plan, previewPlan, err := buildPlans(template, cfg, values)
+	if err != nil {
+		return err
+	}
+
+	if b.globals.DryRun {
+		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
+		if result != nil {
+			result.Connection = cfg.Name
+			result.Command = "show variables"
+			applyPreviewSQL(result, previewPlan)
+		}
+		return b.writeOutput(result, func() error {
+			application.printPlanPreview(previewPlan, true)
+			application.printPlanResult(result)
+			return runErr
+		})
+	}
+
+	db, err := application.openConnection(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	variables, err := application.connector.ShowVariables(ctx, cfg, db, pattern)
+	if err != nil {
+		return util.WrapLayer("mysql", "variable query failed", err)
+	}
+	variables = sortedVariables(variables)
+	result := &VariablesResult{
+		OK:         true,
+		Connection: cfg.Name,
+		Pattern:    pattern,
+		Variables:  toVariableResults(variables),
+	}
+	return b.writeOutput(result, func() error {
+		if len(variables) == 0 {
+			fmt.Fprintln(b.out, "No variables found.")
+			return nil
+		}
+		for _, variable := range variables {
+			fmt.Fprintln(b.out, formatVariableLine(variable))
 		}
 		return nil
 	})

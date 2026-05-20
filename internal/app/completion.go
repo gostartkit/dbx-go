@@ -69,8 +69,11 @@ var rootSuggestions = []Suggestion{
 	{Value: "show databases", Description: "alias for list databases", Category: "alias"},
 	{Value: "show dbs", Description: "alias for list databases", Category: "alias"},
 	{Value: "show tables", Description: "list tables in current database", Category: "command"},
+	{Value: "show indexes", Description: "show indexes for a table", Category: "command"},
 	{Value: "show users", Description: "list MySQL users", Category: "command"},
 	{Value: "show grants", Description: "show grants for a MySQL user", Category: "command"},
+	{Value: "show processlist", Description: "show the active MySQL processlist", Category: "command"},
+	{Value: "show variables", Description: "show MySQL system variables", Category: "command"},
 	{Value: "drop database", Description: "drop a database", Category: "command"},
 	{Value: "drop user", Description: "drop a MySQL user", Category: "command"},
 	{Value: "describe", Description: "describe a table", Category: "command"},
@@ -82,6 +85,9 @@ var rootSuggestions = []Suggestion{
 	{Value: "exit", Description: "exit the REPL", Category: "command"},
 	{Value: "ctx", Description: "alias for context", Category: "alias"},
 	{Value: "desc table", Description: "alias for describe table", Category: "alias"},
+	{Value: "show index", Description: "alias for show indexes", Category: "alias"},
+	{Value: "show processes", Description: "alias for show processlist", Category: "alias"},
+	{Value: "show vars", Description: "alias for show variables", Category: "alias"},
 	{Value: "list users", Description: "alias for show users", Category: "alias"},
 	{Value: "show user accounts", Description: "alias for show users", Category: "alias"},
 }
@@ -100,6 +106,8 @@ func newCompletionEngine() completionEngine {
 			completionProviderFunc(completeConnectNames),
 			completionProviderFunc(completeUseDatabases),
 			completionProviderFunc(completeShowGrantsUsers),
+			completionProviderFunc(completeShowIndexesTables),
+			completionProviderFunc(completeShowVariablesPatterns),
 			completionProviderFunc(completeDropUsers),
 			completionProviderFunc(completeDescribeTables),
 			completionProviderFunc(completeShowTables),
@@ -331,6 +339,53 @@ func completeShowTables(_ CompletionContext, req completionRequest) []Suggestion
 	return nil
 }
 
+func completeShowIndexesTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "show" {
+		return nil
+	}
+	if req.Fields[1] != "indexes" && req.Fields[1] != "index" {
+		return nil
+	}
+
+	switch len(req.Fields) {
+	case 2:
+		if req.TrailingSpace {
+			suggestions := []Suggestion{{Value: "on", Description: "show indexes on a table", Category: "keyword"}}
+			return append(suggestions, stringSuggestions(ctx.Tables, "table")...)
+		}
+		return []Suggestion{{Value: req.Fields[1], Description: "show indexes for a table", Category: "subcommand"}}
+	case 3:
+		if req.Fields[2] == "on" {
+			if req.TrailingSpace {
+				return stringSuggestions(ctx.Tables, "table")
+			}
+			return []Suggestion{{Value: "on", Description: "show indexes on a table", Category: "keyword"}}
+		}
+		return stringSuggestions(ctx.Tables, "table")
+	case 4:
+		if req.Fields[2] == "on" {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+	}
+	return nil
+}
+
+func completeShowVariablesPatterns(_ CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "show" {
+		return nil
+	}
+	if req.Fields[1] != "variables" && req.Fields[1] != "vars" {
+		return nil
+	}
+	if len(req.Fields) == 2 && !req.TrailingSpace {
+		return []Suggestion{{Value: req.Fields[1], Description: "show MySQL system variables", Category: "subcommand"}}
+	}
+	if (len(req.Fields) == 2 && req.TrailingSpace) || len(req.Fields) == 3 {
+		return commonVariableSuggestions()
+	}
+	return nil
+}
+
 func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completionRequest) []Suggestion {
 	if len(req.Fields) == 0 {
 		return nil
@@ -359,14 +414,36 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			return []Suggestion{
 				{Value: "databases", Description: "list databases", Category: "subcommand"},
 				{Value: "dbs", Description: "alias for list databases", Category: "alias"},
+				{Value: "index", Description: "alias for show indexes", Category: "alias"},
+				{Value: "indexes", Description: "show indexes for a table", Category: "subcommand"},
+				{Value: "processes", Description: "alias for show processlist", Category: "alias"},
+				{Value: "processlist", Description: "show the active MySQL processlist", Category: "subcommand"},
 				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
 				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
 				{Value: "grants", Description: "show grants for a MySQL user", Category: "subcommand"},
 				{Value: "user", Description: "show user aliases", Category: "alias"},
+				{Value: "variables", Description: "show MySQL system variables", Category: "subcommand"},
+				{Value: "vars", Description: "alias for show variables", Category: "alias"},
 			}
 		}
 		if len(req.Fields) == 2 && req.Fields[1] == "user" {
 			return []Suggestion{{Value: "accounts", Description: "alias for show users", Category: "alias"}}
+		}
+		if len(req.Fields) == 2 {
+			return []Suggestion{
+				{Value: "databases", Description: "list databases", Category: "subcommand"},
+				{Value: "dbs", Description: "alias for list databases", Category: "alias"},
+				{Value: "index", Description: "alias for show indexes", Category: "alias"},
+				{Value: "indexes", Description: "show indexes for a table", Category: "subcommand"},
+				{Value: "processes", Description: "alias for show processlist", Category: "alias"},
+				{Value: "processlist", Description: "show the active MySQL processlist", Category: "subcommand"},
+				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
+				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
+				{Value: "grants", Description: "show grants for a MySQL user", Category: "subcommand"},
+				{Value: "user", Description: "show user aliases", Category: "alias"},
+				{Value: "variables", Description: "show MySQL system variables", Category: "subcommand"},
+				{Value: "vars", Description: "alias for show variables", Category: "alias"},
+			}
 		}
 	case "help":
 		return []Suggestion{
@@ -384,8 +461,11 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "create user", Description: "create user help", Category: "topic"},
 			{Value: "list databases", Description: "list databases help", Category: "topic"},
 			{Value: "show tables", Description: "show tables help", Category: "topic"},
+			{Value: "show indexes", Description: "show indexes help", Category: "topic"},
 			{Value: "show users", Description: "show users help", Category: "topic"},
 			{Value: "show grants", Description: "show grants help", Category: "topic"},
+			{Value: "show processlist", Description: "show processlist help", Category: "topic"},
+			{Value: "show variables", Description: "show variables help", Category: "topic"},
 			{Value: "drop database", Description: "drop database help", Category: "topic"},
 			{Value: "drop user", Description: "drop user help", Category: "topic"},
 			{Value: "describe", Description: "describe help", Category: "topic"},
@@ -441,6 +521,17 @@ func stringSuggestions(values []string, category string) []Suggestion {
 		suggestions = append(suggestions, Suggestion{
 			Value:    value,
 			Category: category,
+		})
+	}
+	return suggestions
+}
+
+func commonVariableSuggestions() []Suggestion {
+	suggestions := make([]Suggestion, 0, len(commonVariableNames))
+	for _, name := range commonVariableNames {
+		suggestions = append(suggestions, Suggestion{
+			Value:    name,
+			Category: "variable",
 		})
 	}
 	return suggestions

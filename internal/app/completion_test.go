@@ -23,7 +23,8 @@ func TestCalculateCompletionCommands(t *testing.T) {
 		{name: "connection subcommands", input: "connection ", wantFirst: "create", wantCount: 6},
 		{name: "create subcommand", input: "create ", wantFirst: "database", wantCount: 2},
 		{name: "list subcommand", input: "list ", wantFirst: "databases", wantCount: 2},
-		{name: "show subcommand", input: "show ", wantFirst: "databases", wantCount: 6},
+		{name: "show subcommand", input: "show ", wantFirst: "databases", wantCount: 12},
+		{name: "show partial subcommand", input: "show pro", wantFirst: "processes", wantCount: 2},
 		{name: "show user alias subcommand", input: "show user ", wantFirst: "accounts", wantCount: 1},
 		{name: "drop subcommand", input: "drop ", wantFirst: "database", wantCount: 2},
 		{name: "connect saved", input: "connect ", saved: []string{"prod", "dev"}, wantFirst: "dev", wantCount: 2},
@@ -34,7 +35,10 @@ func TestCalculateCompletionCommands(t *testing.T) {
 		{name: "use databases", input: "use ", databases: []string{"app_prod", "app_demo"}, wantFirst: "app_demo", wantCount: 2},
 		{name: "drop user users", input: "drop user ", users: []string{"analytics-ro", "app_user"}, wantFirst: "analytics-ro", wantCount: 2},
 		{name: "describe tables", input: "describe ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
+		{name: "show indexes tables", input: "show indexes ", wantFirst: "on", wantCount: 3, tables: []string{"users", "orders"}},
+		{name: "show indexes on tables", input: "show indexes on ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
 		{name: "show grants users", input: "show grants ", wantFirst: "analytics-ro", wantCount: 2, users: []string{"analytics-ro", "app_user"}},
+		{name: "show variables suggestions", input: "show variables ", wantFirst: "max_connections", wantCount: 6},
 	}
 
 	for _, tc := range cases {
@@ -159,6 +163,15 @@ func TestCalculateCompletionPreservesArgumentPrefixes(t *testing.T) {
 			wantFrom:    11,
 			wantTo:      11,
 			wantApplied: "connection create",
+		},
+		{
+			name:        "show indexes table completion",
+			input:       "show indexes us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    13,
+			wantTo:      15,
+			wantApplied: "show indexes users",
 		},
 	}
 

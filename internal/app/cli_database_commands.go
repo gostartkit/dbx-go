@@ -57,10 +57,16 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 		SubCommands: []*cmd.Command{
 			b.showDatabasesCommand(),
 			b.showDBsCommand(),
+			b.showIndexCommand(),
+			b.showIndexesCommand(),
+			b.showProcessesCommand(),
+			b.showProcesslistCommand(),
 			b.showTablesCommand(),
 			b.showGrantsCommand(),
 			b.showUsersCommand(),
 			b.showUserGroupCommand(),
+			b.showVariablesCommand(),
+			b.showVarsCommand(),
 		},
 	}
 }
@@ -90,6 +96,30 @@ func (b *cliBuilder) showDBsCommand() *cmd.Command {
 	command.Name = "dbs"
 	command.UsageLine = "dbx show dbs [flags]"
 	command.Short = "Alias for list databases"
+	return command
+}
+
+func (b *cliBuilder) showIndexCommand() *cmd.Command {
+	command := b.showIndexesCommand()
+	command.Name = "index"
+	command.UsageLine = "dbx show index <table>"
+	command.Short = "Alias for show indexes"
+	return command
+}
+
+func (b *cliBuilder) showProcessesCommand() *cmd.Command {
+	command := b.showProcesslistCommand()
+	command.Name = "processes"
+	command.UsageLine = "dbx show processes"
+	command.Short = "Alias for show processlist"
+	return command
+}
+
+func (b *cliBuilder) showVarsCommand() *cmd.Command {
+	command := b.showVariablesCommand()
+	command.Name = "vars"
+	command.UsageLine = "dbx show vars [pattern]"
+	command.Short = "Alias for show variables"
 	return command
 }
 

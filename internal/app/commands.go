@@ -63,6 +63,18 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(line, "help")))
 	case len(fields) == 2 && fields[0] == "show" && fields[1] == "tables":
 		return false, a.handleShowTables(ctx)
+	case len(fields) == 2 && fields[0] == "show" && fields[1] == "indexes":
+		return false, a.handleShowIndexes(ctx, "")
+	case len(fields) == 3 && fields[0] == "show" && fields[1] == "indexes":
+		return false, a.handleShowIndexes(ctx, fields[2])
+	case len(fields) == 4 && fields[0] == "show" && fields[1] == "indexes" && fields[2] == "on":
+		return false, a.handleShowIndexes(ctx, fields[3])
+	case len(fields) == 2 && fields[0] == "show" && fields[1] == "processlist":
+		return false, a.handleShowProcesslist(ctx)
+	case len(fields) == 2 && fields[0] == "show" && fields[1] == "variables":
+		return false, a.handleShowVariables(ctx, "")
+	case len(fields) == 3 && fields[0] == "show" && fields[1] == "variables":
+		return false, a.handleShowVariables(ctx, fields[2])
 	case len(fields) == 3 && fields[0] == "show" && fields[1] == "grants":
 		return false, a.handleShowGrants(ctx, fields[2], "")
 	case len(fields) == 4 && fields[0] == "show" && fields[1] == "grants":
@@ -94,6 +106,8 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleShowUsers(ctx)
 	case "show tables":
 		return false, a.handleShowTables(ctx)
+	case "show processlist":
+		return false, a.handleShowProcesslist(ctx)
 	case "drop database":
 		return false, a.handleDropDatabase(ctx)
 	case "dry-run on":
