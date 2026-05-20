@@ -11,10 +11,14 @@ var commandAliases = map[string]string{
 	"ctx":                "context",
 	"ls db":              "show databases",
 	"list databases":     "show databases",
+	"columns":            "show columns",
 	"show dbs":           "show databases",
+	"show fks":           "show foreign keys",
 	"show index":         "show indexes",
 	"show processes":     "show processlist",
+	"show trigger":       "show triggers",
 	"show vars":          "show variables",
+	"show view":          "show views",
 	"list users":         "show users",
 	"show user accounts": "show users",
 	"desc table":         "describe table",
@@ -59,15 +63,23 @@ func resolveAlias(line string) string {
 		if len(fields) >= 2 && fields[1] == "table" {
 			return strings.Join(append([]string{"describe", "table"}, fields[2:]...), " ")
 		}
+	case "columns":
+		return strings.Join(append([]string{"show", "columns"}, fields[1:]...), " ")
 	case "show":
 		if len(fields) >= 2 {
 			switch fields[1] {
+			case "fks":
+				return strings.Join(append([]string{"show", "foreign", "keys"}, fields[2:]...), " ")
 			case "index":
 				return strings.Join(append([]string{"show", "indexes"}, fields[2:]...), " ")
 			case "processes":
 				return strings.Join(append([]string{"show", "processlist"}, fields[2:]...), " ")
+			case "trigger":
+				return "show triggers"
 			case "vars":
 				return strings.Join(append([]string{"show", "variables"}, fields[2:]...), " ")
+			case "view":
+				return "show views"
 			}
 		}
 	case "q", "quit":

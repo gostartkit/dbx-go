@@ -40,7 +40,15 @@ func (f failingConnector) DescribeTable(context.Context, *config.ConnectionConfi
 	return nil, nil
 }
 
+func (f failingConnector) ShowColumns(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.SchemaColumn, error) {
+	return nil, nil
+}
+
 func (f failingConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
+	return nil, nil
+}
+
+func (f failingConnector) ShowForeignKeys(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.ForeignKey, error) {
 	return nil, nil
 }
 
@@ -49,6 +57,14 @@ func (f failingConnector) ShowCreateTable(context.Context, *config.ConnectionCon
 }
 
 func (f failingConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
+	return nil, nil
+}
+
+func (f failingConnector) ShowTriggers(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.Trigger, error) {
+	return nil, nil
+}
+
+func (f failingConnector) ShowViews(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
 	return nil, nil
 }
 

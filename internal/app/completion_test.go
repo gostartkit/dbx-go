@@ -23,7 +23,7 @@ func TestCalculateCompletionCommands(t *testing.T) {
 		{name: "connection subcommands", input: "connection ", wantFirst: "create", wantCount: 6},
 		{name: "create subcommand", input: "create ", wantFirst: "database", wantCount: 2},
 		{name: "list subcommand", input: "list ", wantFirst: "databases", wantCount: 2},
-		{name: "show subcommand", input: "show ", wantFirst: "create", wantCount: 14},
+		{name: "show subcommand", input: "show ", wantFirst: "columns", wantCount: 21},
 		{name: "show partial subcommand", input: "show pro", wantFirst: "processes", wantCount: 2},
 		{name: "show user alias subcommand", input: "show user ", wantFirst: "accounts", wantCount: 1},
 		{name: "drop subcommand", input: "drop ", wantFirst: "database", wantCount: 2},
@@ -34,7 +34,11 @@ func TestCalculateCompletionCommands(t *testing.T) {
 		{name: "connection doctor saved", input: "connection doctor ", saved: []string{"prod", "dev"}, wantFirst: "dev", wantCount: 2},
 		{name: "use databases", input: "use ", databases: []string{"app_prod", "app_demo"}, wantFirst: "app_demo", wantCount: 2},
 		{name: "drop user users", input: "drop user ", users: []string{"analytics-ro", "app_user"}, wantFirst: "analytics-ro", wantCount: 2},
+		{name: "columns alias tables", input: "columns ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
+		{name: "show columns tables", input: "show columns ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
 		{name: "describe tables", input: "describe ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
+		{name: "show foreign keys tables", input: "show foreign keys ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
+		{name: "show fks tables", input: "show fks ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
 		{name: "show create table tables", input: "show create table ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
 		{name: "show table status tables", input: "show table status ", wantFirst: "orders", wantCount: 2, tables: []string{"users", "orders"}},
 		{name: "show indexes tables", input: "show indexes ", wantFirst: "on", wantCount: 3, tables: []string{"users", "orders"}},
@@ -88,7 +92,7 @@ func TestCalculateCompletionIncludesConnectionDescriptionsAndHint(t *testing.T) 
 	}
 
 	showCompletion := calculateCompletion("show ", CompletionContext{})
-	if len(showCompletion.Suggestions) == 0 || showCompletion.Suggestions[0].Value != "create" {
+	if len(showCompletion.Suggestions) == 0 || showCompletion.Suggestions[0].Value != "columns" {
 		t.Fatalf("show suggestions = %#v", showCompletion.Suggestions)
 	}
 
@@ -174,6 +178,24 @@ func TestCalculateCompletionPreservesArgumentPrefixes(t *testing.T) {
 			wantApplied: "connection create",
 		},
 		{
+			name:        "columns alias completion",
+			input:       "columns us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    8,
+			wantTo:      10,
+			wantApplied: "columns users",
+		},
+		{
+			name:        "show columns completion",
+			input:       "show columns us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    13,
+			wantTo:      15,
+			wantApplied: "show columns users",
+		},
+		{
 			name:        "show indexes table completion",
 			input:       "show indexes us",
 			ctx:         CompletionContext{Tables: []string{"users"}},
@@ -181,6 +203,24 @@ func TestCalculateCompletionPreservesArgumentPrefixes(t *testing.T) {
 			wantFrom:    13,
 			wantTo:      15,
 			wantApplied: "show indexes users",
+		},
+		{
+			name:        "show foreign keys completion",
+			input:       "show foreign keys us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    18,
+			wantTo:      20,
+			wantApplied: "show foreign keys users",
+		},
+		{
+			name:        "show fks completion",
+			input:       "show fks us",
+			ctx:         CompletionContext{Tables: []string{"users"}},
+			wantValue:   "users",
+			wantFrom:    9,
+			wantTo:      11,
+			wantApplied: "show fks users",
 		},
 		{
 			name:        "show create table completion",

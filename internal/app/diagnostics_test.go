@@ -78,7 +78,15 @@ func (d *diagnosticConnector) DescribeTable(context.Context, *config.ConnectionC
 	return nil, nil
 }
 
+func (d *diagnosticConnector) ShowColumns(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.SchemaColumn, error) {
+	return nil, nil
+}
+
 func (d *diagnosticConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
+	return nil, nil
+}
+
+func (d *diagnosticConnector) ShowForeignKeys(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.ForeignKey, error) {
 	return nil, nil
 }
 
@@ -87,6 +95,14 @@ func (d *diagnosticConnector) ShowCreateTable(context.Context, *config.Connectio
 }
 
 func (d *diagnosticConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
+	return nil, nil
+}
+
+func (d *diagnosticConnector) ShowTriggers(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.Trigger, error) {
+	return nil, nil
+}
+
+func (d *diagnosticConnector) ShowViews(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
 	return nil, nil
 }
 

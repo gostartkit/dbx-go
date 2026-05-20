@@ -38,13 +38,17 @@ create user           Create a MySQL user
 show users            List MySQL users
 drop user             Drop a MySQL user
 show tables           List tables in the current database
+show columns          Show columns for a table in the current database
 describe [table]      Describe a table in the current database
 show indexes <table>  Show indexes for a table in the current database
 show create table     Show CREATE TABLE for a table
+show foreign keys     Show foreign keys for a table in the current database
 show table status     Show compact table status
 show grants <user>    Show MySQL grants for a user
 show processlist      Show the active MySQL processlist
+show triggers         Show triggers in the current database
 show variables [name] Show MySQL system variables
+show views            Show views in the current database
 truncate table        Delete all rows from a table
 rename table          Rename a table
 use <database>        Select a database for the active REPL session
@@ -257,6 +261,22 @@ This command:
 Example:
   show tables`),
 	},
+	"show columns": {
+		title: "show columns",
+		body: strings.TrimSpace(`
+Show columns for a table in the current database context.
+
+Usage:
+  show columns users
+
+Aliases:
+  columns users
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - does not require confirmation`),
+	},
 	"show indexes": {
 		title: "show indexes",
 		body: strings.TrimSpace(`
@@ -282,6 +302,22 @@ Show the CREATE TABLE DDL for a table in the current database context.
 
 Usage:
   show create table users
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - does not require confirmation`),
+	},
+	"show foreign keys": {
+		title: "show foreign keys",
+		body: strings.TrimSpace(`
+Show foreign keys for a table in the current database context.
+
+Usage:
+  show foreign keys organization_members
+
+Aliases:
+  show fks organization_members
 
 This command:
   - requires an active connection
@@ -345,6 +381,22 @@ This command:
 Example:
   show processlist`),
 	},
+	"show triggers": {
+		title: "show triggers",
+		body: strings.TrimSpace(`
+Show triggers in the current database context.
+
+Usage:
+  show triggers
+
+Aliases:
+  show trigger
+
+This command:
+  - requires an active connection
+  - requires a selected database
+  - does not require confirmation`),
+	},
 	"show variables": {
 		title: "show variables",
 		body: strings.TrimSpace(`
@@ -361,6 +413,22 @@ Aliases:
 This command:
   - supports exact names and LIKE patterns
   - requires an active connection
+  - does not require confirmation`),
+	},
+	"show views": {
+		title: "show views",
+		body: strings.TrimSpace(`
+Show views in the current database context.
+
+Usage:
+  show views
+
+Aliases:
+  show view
+
+This command:
+  - requires an active connection
+  - requires a selected database
   - does not require confirmation`),
 	},
 	"use": {
@@ -475,12 +543,16 @@ Supported aliases:
   cx       -> connect
   conns    -> connections
   ctx      -> context
+  columns <table> -> show columns <table>
   ls db    -> show databases
   list databases -> show databases
   show dbs -> show databases
+  show fks <table> -> show foreign keys <table>
   show index -> show indexes
   show processes -> show processlist
+  show trigger -> show triggers
   show vars -> show variables
+  show view -> show views
   list users -> show users
   show user accounts -> show users
   desc table -> describe table

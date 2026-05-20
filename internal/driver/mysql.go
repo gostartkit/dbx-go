@@ -125,11 +125,26 @@ type TableColumn struct {
 	Extra   string `json:"extra,omitempty"`
 }
 
+type SchemaColumn struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Nullable bool   `json:"nullable"`
+	Key      string `json:"key,omitempty"`
+	Extra    string `json:"extra,omitempty"`
+}
+
 type TableIndex struct {
 	Name       string `json:"name"`
 	Column     string `json:"column"`
 	Type       string `json:"type"`
 	SeqInIndex int    `json:"seq_in_index,omitempty"`
+}
+
+type ForeignKey struct {
+	Constraint       string `json:"constraint"`
+	Column           string `json:"column"`
+	ReferencedTable  string `json:"referenced_table"`
+	ReferencedColumn string `json:"referenced_column"`
 }
 
 type TableStatus struct {
@@ -139,6 +154,13 @@ type TableStatus struct {
 	DataLength  int64  `json:"data_length"`
 	IndexLength int64  `json:"index_length"`
 	Collation   string `json:"collation,omitempty"`
+}
+
+type Trigger struct {
+	Name   string `json:"name"`
+	Timing string `json:"timing"`
+	Event  string `json:"event"`
+	Table  string `json:"table"`
 }
 
 type Process struct {
@@ -301,6 +323,98 @@ func ShowIndexes(ctx context.Context, db *sql.DB, database string, table string)
 	return indexes, nil
 }
 
+func ShowColumns(ctx context.Context, db *sql.DB, database string, table string) ([]SchemaColumn, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+ORDER BY ORDINAL_POSITION
+`, database, table)
+	if err != nil {
+		return nil, util.WrapLayer("sql execution", "run query", err)
+	}
+	defer rows.Close()
+
+	columns := make([]SchemaColumn, 0)
+	for rows.Next() {
+		var (
+			name       string
+			columnType string
+			nullable   string
+			key        sql.NullString
+			extra      sql.NullString
+		)
+		if err := rows.Scan(&name, &columnType, &nullable, &key, &extra); err != nil {
+			return nil, util.WrapLayer("sql execution", "scan query result", err)
+		}
+		columns = append(columns, SchemaColumn{
+			Name:     name,
+			Type:     columnType,
+			Nullable: strings.EqualFold(nullable, "YES"),
+			Key:      key.String,
+			Extra:    extra.String,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, util.WrapLayer("sql execution", "read query rows", err)
+	}
+	if len(columns) == 0 {
+		exists, err := tableExists(ctx, db, database, table)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, util.WrapLayer("validation", "show columns", fmt.Errorf("table not found: %s", table))
+		}
+	}
+	return columns, nil
+}
+
+func ShowForeignKeys(ctx context.Context, db *sql.DB, database string, table string) ([]ForeignKey, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND REFERENCED_TABLE_NAME IS NOT NULL
+ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION
+`, database, table)
+	if err != nil {
+		return nil, util.WrapLayer("sql execution", "run query", err)
+	}
+	defer rows.Close()
+
+	keys := make([]ForeignKey, 0)
+	for rows.Next() {
+		var (
+			constraint string
+			column     string
+			refTable   string
+			refColumn  string
+		)
+		if err := rows.Scan(&constraint, &column, &refTable, &refColumn); err != nil {
+			return nil, util.WrapLayer("sql execution", "scan query result", err)
+		}
+		keys = append(keys, ForeignKey{
+			Constraint:       constraint,
+			Column:           column,
+			ReferencedTable:  refTable,
+			ReferencedColumn: refColumn,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, util.WrapLayer("sql execution", "read query rows", err)
+	}
+	if len(keys) == 0 {
+		exists, err := tableExists(ctx, db, database, table)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, util.WrapLayer("validation", "show foreign keys", fmt.Errorf("table not found: %s", table))
+		}
+	}
+	return keys, nil
+}
+
 func ShowCreateTable(ctx context.Context, db *sql.DB, database string, table string) (string, error) {
 	var ddl string
 	err := withDatabaseConn(ctx, db, database, func(conn *sql.Conn) error {
@@ -412,6 +526,88 @@ func ShowTableStatus(ctx context.Context, db *sql.DB, database string, table str
 	return statuses, nil
 }
 
+func ShowTriggers(ctx context.Context, db *sql.DB, database string) ([]Trigger, error) {
+	triggers := make([]Trigger, 0)
+	err := withDatabaseConn(ctx, db, database, func(conn *sql.Conn) error {
+		rows, err := conn.QueryContext(ctx, "SHOW TRIGGERS")
+		if err != nil {
+			return util.WrapLayer("sql execution", "run query", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				name          string
+				event         string
+				tableName     string
+				statement     sql.NullString
+				timing        string
+				created       sql.NullTime
+				sqlMode       sql.NullString
+				definer       sql.NullString
+				charsetClient sql.NullString
+				collationConn sql.NullString
+				dbCollation   sql.NullString
+			)
+			if err := rows.Scan(
+				&name,
+				&event,
+				&tableName,
+				&statement,
+				&timing,
+				&created,
+				&sqlMode,
+				&definer,
+				&charsetClient,
+				&collationConn,
+				&dbCollation,
+			); err != nil {
+				return util.WrapLayer("sql execution", "scan query result", err)
+			}
+			triggers = append(triggers, Trigger{
+				Name:   name,
+				Timing: timing,
+				Event:  event,
+				Table:  tableName,
+			})
+		}
+		if err := rows.Err(); err != nil {
+			return util.WrapLayer("sql execution", "read query rows", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return triggers, nil
+}
+
+func ShowViews(ctx context.Context, db *sql.DB, database string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT TABLE_NAME
+FROM INFORMATION_SCHEMA.VIEWS
+WHERE TABLE_SCHEMA = ?
+ORDER BY TABLE_NAME
+`, database)
+	if err != nil {
+		return nil, util.WrapLayer("sql execution", "run query", err)
+	}
+	defer rows.Close()
+
+	views := make([]string, 0)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, util.WrapLayer("sql execution", "scan query result", err)
+		}
+		views = append(views, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, util.WrapLayer("sql execution", "read query rows", err)
+	}
+	return views, nil
+}
+
 func ShowGrants(ctx context.Context, db *sql.DB, user string, host string) ([]string, error) {
 	query := fmt.Sprintf(
 		"SHOW GRANTS FOR '%s'@'%s'",
@@ -506,6 +702,23 @@ func ExecStatement(ctx context.Context, db *sql.DB, statement string) error {
 		return util.WrapLayer("sql execution", "execute statement", err)
 	}
 	return nil
+}
+
+func tableExists(ctx context.Context, db *sql.DB, database string, table string) (bool, error) {
+	row := db.QueryRowContext(ctx, `
+SELECT 1
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+LIMIT 1
+`, database, table)
+	var marker int
+	if err := row.Scan(&marker); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, util.WrapLayer("sql execution", "run query", err)
+	}
+	return true, nil
 }
 
 func withDatabaseConn(ctx context.Context, db *sql.DB, database string, fn func(conn *sql.Conn) error) error {

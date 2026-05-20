@@ -47,8 +47,16 @@ func (c *readOnlyConnector) DescribeTable(context.Context, *config.ConnectionCon
 	}, nil
 }
 
+func (c *readOnlyConnector) ShowColumns(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.SchemaColumn, error) {
+	return []driver.SchemaColumn{{Name: "id", Type: "bigint unsigned", Nullable: false, Key: "PRI", Extra: "auto_increment"}}, nil
+}
+
 func (c *readOnlyConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
 	return []driver.TableIndex{{Name: "PRIMARY", Column: "id", Type: "BTREE", SeqInIndex: 1}}, nil
+}
+
+func (c *readOnlyConnector) ShowForeignKeys(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.ForeignKey, error) {
+	return []driver.ForeignKey{{Constraint: "fk_members_org", Column: "organization_id", ReferencedTable: "organizations", ReferencedColumn: "id"}}, nil
 }
 
 func (c *readOnlyConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
@@ -57,6 +65,14 @@ func (c *readOnlyConnector) ShowCreateTable(context.Context, *config.ConnectionC
 
 func (c *readOnlyConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
 	return []driver.TableStatus{{Name: "users", Engine: "InnoDB", Rows: 12813, DataLength: 44040192, IndexLength: 12582912, Collation: "utf8mb4_unicode_ci"}}, nil
+}
+
+func (c *readOnlyConnector) ShowTriggers(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.Trigger, error) {
+	return []driver.Trigger{{Name: "users_before_insert", Timing: "BEFORE", Event: "INSERT", Table: "users"}}, nil
+}
+
+func (c *readOnlyConnector) ShowViews(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
+	return []string{"active_users"}, nil
 }
 
 func (c *readOnlyConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
@@ -190,6 +206,22 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 			wantOut: "PRIMARY",
 		},
 		{
+			name: "show columns",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleShowColumns(context.Background(), "users")
+			},
+			wantOut: "auto_increment",
+		},
+		{
+			name: "show foreign keys",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleShowForeignKeys(context.Background(), "organization_members")
+			},
+			wantOut: "organization_id -> organizations.id",
+		},
+		{
 			name: "show create table",
 			run: func(app *Application) error {
 				app.session.Database = "app_prod"
@@ -213,11 +245,27 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 			wantOut: "app_user",
 		},
 		{
+			name: "show triggers",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleShowTriggers(context.Background())
+			},
+			wantOut: "users_before_insert",
+		},
+		{
 			name: "show variables",
 			run: func(app *Application) error {
 				return app.handleShowVariables(context.Background(), "max_connections")
 			},
 			wantOut: "max_connections",
+		},
+		{
+			name: "show views",
+			run: func(app *Application) error {
+				app.session.Database = "app_prod"
+				return app.handleShowViews(context.Background())
+			},
+			wantOut: "active_users",
 		},
 		{
 			name: "context",

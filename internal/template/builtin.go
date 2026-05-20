@@ -118,6 +118,23 @@ func Builtins() []Template {
 		},
 		{
 			Version: 1,
+			Name:    "builtin_show_columns",
+			Match: Match{
+				Command: "show columns",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show columns for table `{{table}}` in database `{{database}}`",
+					SQL:         "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{{database}}' AND TABLE_NAME = '{{table}}' ORDER BY ORDINAL_POSITION",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show columns",
+		},
+		{
+			Version: 1,
 			Name:    "builtin_show_create_table",
 			Match: Match{
 				Command: "show create table",
@@ -186,6 +203,23 @@ func Builtins() []Template {
 		},
 		{
 			Version: 1,
+			Name:    "builtin_show_foreign_keys",
+			Match: Match{
+				Command: "show foreign keys",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show foreign keys for table `{{table}}` in database `{{database}}`",
+					SQL:         "SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = '{{database}}' AND TABLE_NAME = '{{table}}' AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show foreign keys",
+		},
+		{
+			Version: 1,
 			Name:    "builtin_show_grants",
 			Match: Match{
 				Command: "show grants",
@@ -220,6 +254,23 @@ func Builtins() []Template {
 		},
 		{
 			Version: 1,
+			Name:    "builtin_show_triggers",
+			Match: Match{
+				Command: "show triggers",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show triggers in database `{{database}}`",
+					SQL:         "SHOW TRIGGERS",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show triggers",
+		},
+		{
+			Version: 1,
 			Name:    "builtin_show_variables",
 			Match: Match{
 				Command: "show variables",
@@ -234,6 +285,23 @@ func Builtins() []Template {
 			},
 			Layer:  "builtin",
 			Source: "builtin:show variables",
+		},
+		{
+			Version: 1,
+			Name:    "builtin_show_views",
+			Match: Match{
+				Command: "show views",
+				Driver:  "mysql",
+			},
+			Actions: []Action{
+				{
+					Type:        "sql",
+					Description: "Show views in database `{{database}}`",
+					SQL:         "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = '{{database}}' ORDER BY TABLE_NAME",
+				},
+			},
+			Layer:  "builtin",
+			Source: "builtin:show views",
 		},
 		{
 			Version: 1,

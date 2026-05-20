@@ -177,13 +177,17 @@ create user
 show users
 drop user
 show tables
+show columns <table>
 describe [table]
+show foreign keys <table>
 show indexes [table]
 show create table <table>
 show table status [table]
 show grants <user> [host]
 show processlist
+show triggers
 show variables [name|pattern]
+show views
 truncate table <table>
 rename table <from> <to>
 use <database>
@@ -258,13 +262,17 @@ dbx create user <name> [flags]
 dbx show users [flags]
 dbx drop user <name> [flags]
 dbx show tables [flags]
+dbx show columns <table> [flags]
 dbx describe <table> [flags]
+dbx show foreign keys <table> [flags]
 dbx show indexes <table> [flags]
 dbx show create table <table> [flags]
 dbx show table status [table] [flags]
 dbx show grants <user> [host] [flags]
 dbx show processlist [flags]
+dbx show triggers [flags]
 dbx show variables [name|pattern] [flags]
+dbx show views [flags]
 dbx truncate table <table> [flags]
 dbx rename table <from> <to> [flags]
 

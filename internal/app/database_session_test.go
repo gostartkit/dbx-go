@@ -16,9 +16,13 @@ type databaseSelectionConnector struct {
 	databases     []string
 	tables        []string
 	users         []string
+	columns       []driver.SchemaColumn
 	indexes       []driver.TableIndex
+	foreignKeys   []driver.ForeignKey
 	createDDL     string
 	statuses      []driver.TableStatus
+	triggers      []driver.Trigger
+	views         []string
 	processes     []driver.Process
 	variables     []driver.SystemVariable
 	dbErr         error
@@ -68,11 +72,28 @@ func (c *databaseSelectionConnector) DescribeTable(context.Context, *config.Conn
 	return []driver.TableColumn{{Name: "id", Type: "bigint"}}, nil
 }
 
+func (c *databaseSelectionConnector) ShowColumns(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.SchemaColumn, error) {
+	if len(c.columns) == 0 {
+		return []driver.SchemaColumn{
+			{Name: "id", Type: "bigint unsigned", Nullable: false, Key: "PRI", Extra: "auto_increment"},
+			{Name: "email", Type: "varchar(255)", Nullable: false, Key: "UNI"},
+		}, nil
+	}
+	return append([]driver.SchemaColumn(nil), c.columns...), nil
+}
+
 func (c *databaseSelectionConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
 	if len(c.indexes) == 0 {
 		return []driver.TableIndex{{Name: "PRIMARY", Column: "id", Type: "BTREE", SeqInIndex: 1}}, nil
 	}
 	return append([]driver.TableIndex(nil), c.indexes...), nil
+}
+
+func (c *databaseSelectionConnector) ShowForeignKeys(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.ForeignKey, error) {
+	if len(c.foreignKeys) == 0 {
+		return []driver.ForeignKey{{Constraint: "fk_members_org", Column: "organization_id", ReferencedTable: "organizations", ReferencedColumn: "id"}}, nil
+	}
+	return append([]driver.ForeignKey(nil), c.foreignKeys...), nil
 }
 
 func (c *databaseSelectionConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
@@ -87,6 +108,20 @@ func (c *databaseSelectionConnector) ShowTableStatus(context.Context, *config.Co
 		return []driver.TableStatus{{Name: "users", Engine: "InnoDB", Rows: 12813, DataLength: 44040192, IndexLength: 12582912, Collation: "utf8mb4_unicode_ci"}}, nil
 	}
 	return append([]driver.TableStatus(nil), c.statuses...), nil
+}
+
+func (c *databaseSelectionConnector) ShowTriggers(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.Trigger, error) {
+	if len(c.triggers) == 0 {
+		return []driver.Trigger{{Name: "users_before_insert", Timing: "BEFORE", Event: "INSERT", Table: "users"}}, nil
+	}
+	return append([]driver.Trigger(nil), c.triggers...), nil
+}
+
+func (c *databaseSelectionConnector) ShowViews(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
+	if len(c.views) == 0 {
+		return []string{"active_users", "monthly_reports"}, nil
+	}
+	return append([]string(nil), c.views...), nil
 }
 
 func (c *databaseSelectionConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {

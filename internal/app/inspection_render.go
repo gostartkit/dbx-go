@@ -46,6 +46,33 @@ func sortedIndexes(indexes []driver.TableIndex) []driver.TableIndex {
 	return sorted
 }
 
+func sortedForeignKeys(keys []driver.ForeignKey) []driver.ForeignKey {
+	sorted := append([]driver.ForeignKey(nil), keys...)
+	slices.SortFunc(sorted, func(a driver.ForeignKey, b driver.ForeignKey) int {
+		switch {
+		case a.Constraint < b.Constraint:
+			return -1
+		case a.Constraint > b.Constraint:
+			return 1
+		case a.Column < b.Column:
+			return -1
+		case a.Column > b.Column:
+			return 1
+		case a.ReferencedTable < b.ReferencedTable:
+			return -1
+		case a.ReferencedTable > b.ReferencedTable:
+			return 1
+		case a.ReferencedColumn < b.ReferencedColumn:
+			return -1
+		case a.ReferencedColumn > b.ReferencedColumn:
+			return 1
+		default:
+			return 0
+		}
+	})
+	return sorted
+}
+
 func sortedProcesses(processes []driver.Process) []driver.Process {
 	sorted := append([]driver.Process(nil), processes...)
 	slices.SortFunc(sorted, func(a driver.Process, b driver.Process) int {
@@ -61,6 +88,33 @@ func sortedProcesses(processes []driver.Process) []driver.Process {
 		case a.Host < b.Host:
 			return -1
 		case a.Host > b.Host:
+			return 1
+		default:
+			return 0
+		}
+	})
+	return sorted
+}
+
+func sortedTriggers(triggers []driver.Trigger) []driver.Trigger {
+	sorted := append([]driver.Trigger(nil), triggers...)
+	slices.SortFunc(sorted, func(a driver.Trigger, b driver.Trigger) int {
+		switch {
+		case a.Name < b.Name:
+			return -1
+		case a.Name > b.Name:
+			return 1
+		case a.Timing < b.Timing:
+			return -1
+		case a.Timing > b.Timing:
+			return 1
+		case a.Event < b.Event:
+			return -1
+		case a.Event > b.Event:
+			return 1
+		case a.Table < b.Table:
+			return -1
+		case a.Table > b.Table:
 			return 1
 		default:
 			return 0
@@ -107,6 +161,22 @@ func formatIndexLine(index driver.TableIndex) string {
 	return fmt.Sprintf("%-16s %-8s %s", index.Name, emptyValue(index.Type, "<unknown>"), index.Column)
 }
 
+func formatSchemaColumnLine(column driver.SchemaColumn) string {
+	line := fmt.Sprintf(
+		"%-12s %-18s %-4s %-4s %s",
+		column.Name,
+		column.Type,
+		boolToNullable(column.Nullable),
+		emptyValue(column.Key, ""),
+		emptyValue(column.Extra, ""),
+	)
+	return strings.TrimRight(line, " ")
+}
+
+func formatForeignKeyLine(key driver.ForeignKey) string {
+	return fmt.Sprintf("%-16s %s -> %s.%s", key.Constraint, key.Column, key.ReferencedTable, key.ReferencedColumn)
+}
+
 func formatProcessLine(process driver.Process) string {
 	base := fmt.Sprintf(
 		"%-4d %-16s %-24s %-8s %4s",
@@ -125,6 +195,10 @@ func formatProcessLine(process driver.Process) string {
 
 func formatVariableLine(variable driver.SystemVariable) string {
 	return fmt.Sprintf("%-24s %s", variable.Name, variable.Value)
+}
+
+func formatTriggerLine(trigger driver.Trigger) string {
+	return fmt.Sprintf("%-20s %-13s %s", trigger.Name, strings.TrimSpace(trigger.Timing+" "+trigger.Event), trigger.Table)
 }
 
 func formatTableStatusSummary(status driver.TableStatus) string {
@@ -195,4 +269,11 @@ func formatByteSize(size int64) string {
 		}
 	}
 	return fmt.Sprintf("%dB", size)
+}
+
+func boolToNullable(nullable bool) string {
+	if nullable {
+		return "YES"
+	}
+	return "NO"
 }

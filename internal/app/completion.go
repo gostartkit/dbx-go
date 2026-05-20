@@ -65,17 +65,25 @@ var rootSuggestions = []Suggestion{
 	{Value: "context", Description: "show current REPL context", Category: "command"},
 	{Value: "create database", Description: "create a database", Category: "command"},
 	{Value: "create user", Description: "create a MySQL user", Category: "command"},
+	{Value: "columns", Description: "alias for show columns", Category: "alias"},
 	{Value: "show databases", Description: "list databases on the active connection", Category: "command"},
 	{Value: "show dbs", Description: "alias for show databases", Category: "alias"},
 	{Value: "list databases", Description: "alias for show databases", Category: "alias"},
+	{Value: "show columns", Description: "show columns for a table", Category: "command"},
 	{Value: "show tables", Description: "list tables in current database", Category: "command"},
+	{Value: "show foreign keys", Description: "show foreign keys for a table", Category: "command"},
+	{Value: "show fks", Description: "alias for show foreign keys", Category: "alias"},
 	{Value: "show indexes", Description: "show indexes for a table", Category: "command"},
 	{Value: "show create table", Description: "show CREATE TABLE for a table", Category: "command"},
 	{Value: "show table status", Description: "show compact table status", Category: "command"},
 	{Value: "show users", Description: "list MySQL users", Category: "command"},
 	{Value: "show grants", Description: "show grants for a MySQL user", Category: "command"},
 	{Value: "show processlist", Description: "show the active MySQL processlist", Category: "command"},
+	{Value: "show triggers", Description: "show triggers in current database", Category: "command"},
+	{Value: "show trigger", Description: "alias for show triggers", Category: "alias"},
 	{Value: "show variables", Description: "show MySQL system variables", Category: "command"},
+	{Value: "show views", Description: "show views in current database", Category: "command"},
+	{Value: "show view", Description: "alias for show views", Category: "alias"},
 	{Value: "drop database", Description: "drop a database", Category: "command"},
 	{Value: "drop user", Description: "drop a MySQL user", Category: "command"},
 	{Value: "truncate table", Description: "delete all rows from a table", Category: "command"},
@@ -110,6 +118,8 @@ func newCompletionEngine() completionEngine {
 			completionProviderFunc(completeConnectNames),
 			completionProviderFunc(completeUseDatabases),
 			completionProviderFunc(completeShowGrantsUsers),
+			completionProviderFunc(completeShowColumnsTables),
+			completionProviderFunc(completeShowForeignKeysTables),
 			completionProviderFunc(completeShowIndexesTables),
 			completionProviderFunc(completeShowCreateTables),
 			completionProviderFunc(completeShowTableStatusTables),
@@ -315,6 +325,71 @@ func completeShowGrantsUsers(ctx CompletionContext, req completionRequest) []Sug
 	return nil
 }
 
+func completeShowColumnsTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) == 0 {
+		return nil
+	}
+	if req.Fields[0] == "columns" {
+		if len(req.Fields) == 1 && req.TrailingSpace {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		if len(req.Fields) == 2 {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		return nil
+	}
+	if len(req.Fields) < 2 || req.Fields[0] != "show" || req.Fields[1] != "columns" {
+		return nil
+	}
+	if len(req.Fields) == 2 && !req.TrailingSpace {
+		return []Suggestion{{Value: "columns", Description: "show columns for a table", Category: "subcommand"}}
+	}
+	if len(req.Fields) == 2 && req.TrailingSpace {
+		return stringSuggestions(ctx.Tables, "table")
+	}
+	if len(req.Fields) == 3 {
+		return stringSuggestions(ctx.Tables, "table")
+	}
+	return nil
+}
+
+func completeShowForeignKeysTables(ctx CompletionContext, req completionRequest) []Suggestion {
+	if len(req.Fields) < 2 || req.Fields[0] != "show" {
+		return nil
+	}
+	if req.Fields[1] == "fks" {
+		if len(req.Fields) == 2 && !req.TrailingSpace {
+			return []Suggestion{{Value: "fks", Description: "alias for show foreign keys", Category: "alias"}}
+		}
+		if len(req.Fields) == 2 && req.TrailingSpace {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		if len(req.Fields) == 3 {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		return nil
+	}
+	if req.Fields[1] != "foreign" {
+		return nil
+	}
+	if len(req.Fields) == 2 && !req.TrailingSpace {
+		return []Suggestion{{Value: "foreign", Description: "show foreign key details", Category: "subcommand"}}
+	}
+	if len(req.Fields) == 2 && req.TrailingSpace {
+		return []Suggestion{{Value: "keys", Description: "show foreign keys for a table", Category: "subcommand"}}
+	}
+	if len(req.Fields) == 3 && req.Fields[2] == "keys" {
+		if req.TrailingSpace {
+			return stringSuggestions(ctx.Tables, "table")
+		}
+		return []Suggestion{{Value: "keys", Description: "show foreign keys for a table", Category: "subcommand"}}
+	}
+	if len(req.Fields) == 4 && req.Fields[2] == "keys" {
+		return stringSuggestions(ctx.Tables, "table")
+	}
+	return nil
+}
+
 func completeDescribeTables(ctx CompletionContext, req completionRequest) []Suggestion {
 	if len(req.Fields) == 0 || req.Fields[0] != "describe" {
 		return nil
@@ -494,15 +569,22 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 	case "show":
 		if len(req.Fields) == 1 {
 			return []Suggestion{
+				{Value: "columns", Description: "show columns for a table", Category: "subcommand"},
 				{Value: "create", Description: "show CREATE statements", Category: "subcommand"},
 				{Value: "databases", Description: "list databases on the active connection", Category: "subcommand"},
 				{Value: "dbs", Description: "alias for show databases", Category: "alias"},
+				{Value: "foreign", Description: "show foreign key details", Category: "subcommand"},
+				{Value: "fks", Description: "alias for show foreign keys", Category: "alias"},
+				{Value: "view", Description: "alias for show views", Category: "alias"},
+				{Value: "views", Description: "show views in current database", Category: "subcommand"},
 				{Value: "index", Description: "alias for show indexes", Category: "alias"},
 				{Value: "indexes", Description: "show indexes for a table", Category: "subcommand"},
 				{Value: "processes", Description: "alias for show processlist", Category: "alias"},
 				{Value: "processlist", Description: "show the active MySQL processlist", Category: "subcommand"},
 				{Value: "table", Description: "show table details", Category: "subcommand"},
 				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
+				{Value: "trigger", Description: "alias for show triggers", Category: "alias"},
+				{Value: "triggers", Description: "show triggers in current database", Category: "subcommand"},
 				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
 				{Value: "grants", Description: "show grants for a MySQL user", Category: "subcommand"},
 				{Value: "user", Description: "show user aliases", Category: "alias"},
@@ -515,15 +597,22 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 		}
 		if len(req.Fields) == 2 {
 			return []Suggestion{
+				{Value: "columns", Description: "show columns for a table", Category: "subcommand"},
 				{Value: "create", Description: "show CREATE statements", Category: "subcommand"},
 				{Value: "databases", Description: "list databases on the active connection", Category: "subcommand"},
 				{Value: "dbs", Description: "alias for show databases", Category: "alias"},
+				{Value: "foreign", Description: "show foreign key details", Category: "subcommand"},
+				{Value: "fks", Description: "alias for show foreign keys", Category: "alias"},
+				{Value: "view", Description: "alias for show views", Category: "alias"},
+				{Value: "views", Description: "show views in current database", Category: "subcommand"},
 				{Value: "index", Description: "alias for show indexes", Category: "alias"},
 				{Value: "indexes", Description: "show indexes for a table", Category: "subcommand"},
 				{Value: "processes", Description: "alias for show processlist", Category: "alias"},
 				{Value: "processlist", Description: "show the active MySQL processlist", Category: "subcommand"},
 				{Value: "table", Description: "show table details", Category: "subcommand"},
 				{Value: "tables", Description: "list tables in current database", Category: "subcommand"},
+				{Value: "trigger", Description: "alias for show triggers", Category: "alias"},
+				{Value: "triggers", Description: "show triggers in current database", Category: "subcommand"},
 				{Value: "users", Description: "list MySQL users", Category: "subcommand"},
 				{Value: "grants", Description: "show grants for a MySQL user", Category: "subcommand"},
 				{Value: "user", Description: "show user aliases", Category: "alias"},
@@ -550,14 +639,18 @@ func completeCreateDropShowListHelpAuditTree(_ CompletionContext, req completion
 			{Value: "create database", Description: "create database help", Category: "topic"},
 			{Value: "create user", Description: "create user help", Category: "topic"},
 			{Value: "show databases", Description: "show databases help", Category: "topic"},
+			{Value: "show columns", Description: "show columns help", Category: "topic"},
 			{Value: "show create table", Description: "show create table help", Category: "topic"},
+			{Value: "show foreign keys", Description: "show foreign keys help", Category: "topic"},
 			{Value: "show tables", Description: "show tables help", Category: "topic"},
 			{Value: "show indexes", Description: "show indexes help", Category: "topic"},
 			{Value: "show table status", Description: "show table status help", Category: "topic"},
 			{Value: "show users", Description: "show users help", Category: "topic"},
 			{Value: "show grants", Description: "show grants help", Category: "topic"},
 			{Value: "show processlist", Description: "show processlist help", Category: "topic"},
+			{Value: "show triggers", Description: "show triggers help", Category: "topic"},
 			{Value: "show variables", Description: "show variables help", Category: "topic"},
+			{Value: "show views", Description: "show views help", Category: "topic"},
 			{Value: "drop database", Description: "drop database help", Category: "topic"},
 			{Value: "drop user", Description: "drop user help", Category: "topic"},
 			{Value: "describe", Description: "describe help", Category: "topic"},

@@ -59,6 +59,7 @@ func newCommandAppWithOptions(in io.Reader, out io.Writer, err io.Writer, option
 	}
 	cli.Commands = []*cmd.Command{
 		builder.connectCommand(),
+		builder.columnsCommand(),
 		builder.connectionsCommand(),
 		builder.auditGroupCommand(),
 		builder.connectionGroupCommand(),

@@ -89,6 +89,22 @@ type TableDescriptionResult struct {
 	Columns    []TableColumnResult `json:"columns,omitempty"`
 }
 
+type SchemaColumnResult struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Nullable bool   `json:"nullable"`
+	Key      string `json:"key,omitempty"`
+	Extra    string `json:"extra,omitempty"`
+}
+
+type ColumnsResult struct {
+	OK         bool                 `json:"ok"`
+	Connection string               `json:"connection,omitempty"`
+	Database   string               `json:"database,omitempty"`
+	Table      string               `json:"table,omitempty"`
+	Columns    []SchemaColumnResult `json:"columns,omitempty"`
+}
+
 type TableIndexResult struct {
 	Name   string `json:"name"`
 	Column string `json:"column"`
@@ -128,6 +144,21 @@ type TableStatusResult struct {
 	Tables     []TableStatusEntryResult `json:"tables,omitempty"`
 }
 
+type ForeignKeyResult struct {
+	Constraint       string `json:"constraint"`
+	Column           string `json:"column"`
+	ReferencedTable  string `json:"referenced_table"`
+	ReferencedColumn string `json:"referenced_column"`
+}
+
+type ForeignKeysResult struct {
+	OK          bool               `json:"ok"`
+	Connection  string             `json:"connection,omitempty"`
+	Database    string             `json:"database,omitempty"`
+	Table       string             `json:"table,omitempty"`
+	ForeignKeys []ForeignKeyResult `json:"foreign_keys,omitempty"`
+}
+
 type GrantsResult struct {
 	OK         bool     `json:"ok"`
 	Connection string   `json:"connection,omitempty"`
@@ -159,6 +190,20 @@ type ProcesslistResult struct {
 	Processes  []ProcessResult `json:"processes,omitempty"`
 }
 
+type TriggerResult struct {
+	Name   string `json:"name"`
+	Timing string `json:"timing"`
+	Event  string `json:"event"`
+	Table  string `json:"table"`
+}
+
+type TriggersResult struct {
+	OK         bool            `json:"ok"`
+	Connection string          `json:"connection,omitempty"`
+	Database   string          `json:"database,omitempty"`
+	Triggers   []TriggerResult `json:"triggers,omitempty"`
+}
+
 type VariableResult struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
@@ -169,6 +214,13 @@ type VariablesResult struct {
 	Connection string           `json:"connection,omitempty"`
 	Pattern    string           `json:"pattern,omitempty"`
 	Variables  []VariableResult `json:"variables,omitempty"`
+}
+
+type ViewsResult struct {
+	OK         bool     `json:"ok"`
+	Connection string   `json:"connection,omitempty"`
+	Database   string   `json:"database,omitempty"`
+	Views      []string `json:"views,omitempty"`
 }
 
 type TableMutationResult struct {
@@ -373,6 +425,20 @@ func toTableIndexResults(indexes []driver.TableIndex) []TableIndexResult {
 	return results
 }
 
+func toSchemaColumnResults(columns []driver.SchemaColumn) []SchemaColumnResult {
+	results := make([]SchemaColumnResult, 0, len(columns))
+	for _, column := range columns {
+		results = append(results, SchemaColumnResult{
+			Name:     column.Name,
+			Type:     column.Type,
+			Nullable: column.Nullable,
+			Key:      column.Key,
+			Extra:    column.Extra,
+		})
+	}
+	return results
+}
+
 func toTableStatusResults(statuses []driver.TableStatus) []TableStatusEntryResult {
 	results := make([]TableStatusEntryResult, 0, len(statuses))
 	for _, status := range statuses {
@@ -383,6 +449,19 @@ func toTableStatusResults(statuses []driver.TableStatus) []TableStatusEntryResul
 			DataLength:  status.DataLength,
 			IndexLength: status.IndexLength,
 			Collation:   status.Collation,
+		})
+	}
+	return results
+}
+
+func toForeignKeyResults(keys []driver.ForeignKey) []ForeignKeyResult {
+	results := make([]ForeignKeyResult, 0, len(keys))
+	for _, key := range keys {
+		results = append(results, ForeignKeyResult{
+			Constraint:       key.Constraint,
+			Column:           key.Column,
+			ReferencedTable:  key.ReferencedTable,
+			ReferencedColumn: key.ReferencedColumn,
 		})
 	}
 	return results
@@ -400,6 +479,19 @@ func toProcessResults(processes []driver.Process) []ProcessResult {
 			TimeSeconds: process.TimeSeconds,
 			State:       process.State,
 			Info:        process.Info,
+		})
+	}
+	return results
+}
+
+func toTriggerResults(triggers []driver.Trigger) []TriggerResult {
+	results := make([]TriggerResult, 0, len(triggers))
+	for _, trigger := range triggers {
+		results = append(results, TriggerResult{
+			Name:   trigger.Name,
+			Timing: trigger.Timing,
+			Event:  trigger.Event,
+			Table:  trigger.Table,
 		})
 	}
 	return results

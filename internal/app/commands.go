@@ -28,6 +28,8 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleConnectByName(ctx, fields[1])
 	case len(fields) == 2 && fields[0] == "use":
 		return false, a.handleUseDatabase(ctx, fields[1])
+	case len(fields) == 2 && fields[0] == "columns":
+		return false, a.handleShowColumns(ctx, fields[1])
 	case len(fields) == 2 && fields[0] == "describe":
 		return false, a.handleDescribeTable(ctx, fields[1])
 	case len(fields) == 3 && fields[0] == "describe" && fields[1] == "table":
@@ -63,8 +65,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleHelp(strings.TrimSpace(strings.TrimPrefix(line, "help")))
 	case len(fields) == 2 && fields[0] == "show" && fields[1] == "tables":
 		return false, a.handleShowTables(ctx)
+	case len(fields) == 3 && fields[0] == "show" && fields[1] == "columns":
+		return false, a.handleShowColumns(ctx, fields[2])
 	case len(fields) == 4 && fields[0] == "show" && fields[1] == "create" && fields[2] == "table":
 		return false, a.handleShowCreateTable(ctx, fields[3])
+	case len(fields) == 4 && fields[0] == "show" && fields[1] == "foreign" && fields[2] == "keys":
+		return false, a.handleShowForeignKeys(ctx, fields[3])
 	case len(fields) == 3 && fields[0] == "show" && fields[1] == "table" && fields[2] == "status":
 		return false, a.handleShowTableStatus(ctx, "")
 	case len(fields) == 4 && fields[0] == "show" && fields[1] == "table" && fields[2] == "status":
@@ -77,10 +83,14 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleShowIndexes(ctx, fields[3])
 	case len(fields) == 2 && fields[0] == "show" && fields[1] == "processlist":
 		return false, a.handleShowProcesslist(ctx)
+	case len(fields) == 2 && fields[0] == "show" && fields[1] == "triggers":
+		return false, a.handleShowTriggers(ctx)
 	case len(fields) == 2 && fields[0] == "show" && fields[1] == "variables":
 		return false, a.handleShowVariables(ctx, "")
 	case len(fields) == 3 && fields[0] == "show" && fields[1] == "variables":
 		return false, a.handleShowVariables(ctx, fields[2])
+	case len(fields) == 2 && fields[0] == "show" && fields[1] == "views":
+		return false, a.handleShowViews(ctx)
 	case len(fields) == 3 && fields[0] == "truncate" && fields[1] == "table":
 		return false, a.handleTruncateTable(ctx, fields[2])
 	case len(fields) == 4 && fields[0] == "rename" && fields[1] == "table":
@@ -118,8 +128,12 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 		return false, a.handleShowUsers(ctx)
 	case "show tables":
 		return false, a.handleShowTables(ctx)
+	case "show triggers":
+		return false, a.handleShowTriggers(ctx)
 	case "show processlist":
 		return false, a.handleShowProcesslist(ctx)
+	case "show views":
+		return false, a.handleShowViews(ctx)
 	case "drop database":
 		return false, a.handleDropDatabase(ctx)
 	case "dry-run on":

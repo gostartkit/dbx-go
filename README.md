@@ -96,13 +96,17 @@ create user
 show users
 drop user
 show tables
+show columns <table>
 describe [table]
+show foreign keys <table>
 show create table <table>
 show table status [table]
 show indexes [table]
 show grants <user> [host]
 show processlist
+show triggers
 show variables [name|pattern]
+show views
 truncate table <table>
 rename table <from> <to>
 use <database>
@@ -136,13 +140,17 @@ dbx create user <name> [flags]
 dbx show users [flags]
 dbx drop user <name> [flags]
 dbx show tables [flags]
+dbx show columns <table> [flags]
 dbx describe <table> [flags]
+dbx show foreign keys <table> [flags]
 dbx show create table <table> [flags]
 dbx show table status [table] [flags]
 dbx show indexes <table> [flags]
 dbx show grants <user> [host] [flags]
 dbx show processlist [flags]
+dbx show triggers [flags]
 dbx show variables [name|pattern] [flags]
+dbx show views [flags]
 dbx truncate table <table> [flags]
 dbx rename table <from> <to> [flags]
 
@@ -198,6 +206,14 @@ dbx(prod/app_prod)> describe <TAB>
 orders
 users
 
+dbx(prod/app_prod)> show columns <TAB>
+orders
+users
+
+dbx(prod/app_prod)> show foreign keys <TAB>
+orders
+users
+
 dbx(prod/app_prod)> show indexes <TAB>
 orders
 users
@@ -236,19 +252,26 @@ database
 user
 
 dbx> show <TAB>
+columns
+create
 databases
 dbs
-create
+foreign
+fks
 indexes
 index
 processlist
 processes
 table
-users
 tables
+trigger
+triggers
+users
 grants
 variables
 vars
+view
+views
 
 dbx> help <TAB>
 connection
@@ -266,12 +289,16 @@ quit          -> exit
 conn          -> connect
 cx            -> connect
 conns         -> connections
+columns <table> -> show columns <table>
 list databases -> show databases
 show dbs      -> show databases
 ls db         -> show databases
+show fks <table> -> show foreign keys <table>
 show index    -> show indexes
 show processes -> show processlist
+show trigger  -> show triggers
 show vars     -> show variables
+show view     -> show views
 create db     -> create database
 drop db       -> drop database
 list users    -> show users
@@ -291,7 +318,7 @@ Use `help aliases` inside the REPL to display the alias list.
 
 Read-only commands run immediately. This includes commands such as `status`, `connections`, `connection show`, `connection test`, `connection doctor`, `show databases`, `show dbs`, `list databases`, and `show users`.
 
-Read-only table inspection commands such as `show create table` and `show table status` also run immediately without confirmation.
+Read-only schema and table inspection commands such as `show columns`, `show foreign keys`, `show create table`, `show table status`, `show triggers`, and `show views` also run immediately without confirmation.
 
 Mutating commands require confirmation in the REPL unless dry-run is active. `truncate table` requires typing the table name in the REPL before execution. For one-shot CLI commands, mutating operations require `--yes` unless `--dry-run` is active for SQL execution commands.
 
@@ -339,13 +366,17 @@ Mode: proxy-ssh
 Dry-run: off
 ```
 
-Operational table workflow example:
+Operational schema inspection and table workflow example:
 
 ```text
 connect prod
 use app_prod
 
 show tables
+show columns users
+show foreign keys organization_members
+show triggers
+show views
 describe users
 show indexes users
 show create table users
