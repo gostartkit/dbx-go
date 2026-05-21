@@ -18,7 +18,7 @@ var commandBehaviors = map[string]CommandBehavior{
 	"drop database":     {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"drop user":         {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"help":              {ReadOnly: true},
-	"run template":      {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
+	"run":               {Mutating: true, RequiresConfirmation: true, SkipConfirmOnDryRun: true},
 	"show columns":      {ReadOnly: true},
 	"show connection":   {ReadOnly: true},
 	"show connections":  {ReadOnly: true},

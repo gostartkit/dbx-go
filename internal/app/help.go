@@ -37,7 +37,7 @@ Examples:
   create database appdb
 
   run
-  run template seed-users --validate`),
+  run seed-users --validate`),
 		},
 		"connect": {
 			title: "connect",
@@ -239,21 +239,10 @@ Usage:
 		"run": {
 			title: "run",
 			body: strings.TrimSpace(`
-Run database workflows.
+Run a named workflow template.
 
 Usage:
-  dbx run <subcommand>
-
-Subcommands:
-  template <name>`),
-		},
-		"template run": {
-			title: "run template",
-			body: strings.TrimSpace(`
-Run or validate a workflow template.
-
-Usage:
-  run template <name> [--preview] [--verbose] [--validate]`),
+  dbx run <name> [--preview] [--verbose] [--validate]`),
 		},
 		"use": {
 			title: "use database",
@@ -301,7 +290,6 @@ Aliases:
 	entries["create connection"] = entries["connection create"]
 	entries["drop connection"] = entries["connection delete"]
 	entries["show connection"] = entries["connection show"]
-	entries["run template"] = entries["template run"]
 	entries["use database"] = entries["use"]
 	entries["show context"] = entries["context"]
 

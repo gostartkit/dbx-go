@@ -78,7 +78,7 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"drop connection",
 		"drop database",
 		"drop user",
-		"run template",
+		"run",
 		"doctor",
 		"audit log",
 		"help",
@@ -149,6 +149,7 @@ func TestRemovedCommandsReturnErrors(t *testing.T) {
 		"show template readonly_user",
 		"doctor connection prod",
 		`run sql "SELECT 1"`,
+		"run template readonly_user",
 	} {
 		if err := app.RunLine(context.Background(), line); err == nil {
 			t.Fatalf("expected removed command to fail: %q", line)
@@ -193,10 +194,13 @@ func TestHelpCompletionContainsFinalTopics(t *testing.T) {
 		have[suggestion.Value] = struct{}{}
 	}
 
-	for _, want := range []string{"doctor", "show templates", "run template", "show rows", "show users"} {
+	for _, want := range []string{"doctor", "show templates", "run", "show rows", "show users"} {
 		if _, ok := have[want]; !ok {
 			t.Fatalf("missing help topic %q", want)
 		}
+	}
+	if _, ok := have["run template"]; ok {
+		t.Fatalf("unexpected removed help topic %q", "run template")
 	}
 	if _, ok := have["run sql"]; ok {
 		t.Fatalf("unexpected removed help topic %q", "run sql")

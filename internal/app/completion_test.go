@@ -53,7 +53,7 @@ func TestCalculateCompletionDynamicValues(t *testing.T) {
 	})
 	assertSuggestionsContainAll(t, suggestionValues(rowCompletion), []string{"orders", "users"})
 
-	templateCompletion := calculateCompletion("run template ", CompletionContext{
+	templateCompletion := calculateCompletion("run ", CompletionContext{
 		Templates: []string{"readonly_user", "create_database_with_user"},
 	})
 	assertSuggestionsContainAll(t, suggestionValues(templateCompletion), []string{"create_database_with_user", "readonly_user"})
@@ -69,7 +69,8 @@ func TestCalculateCompletionHelpTopics(t *testing.T) {
 	t.Parallel()
 
 	values := suggestionValues(calculateCompletion("help ", CompletionContext{}))
-	assertSuggestionsContainAll(t, values, []string{"doctor", "show templates", "run template", "show rows", "show users"})
+	assertSuggestionsContainAll(t, values, []string{"doctor", "show templates", "run", "show rows", "show users"})
+	assertSuggestionsMissingAll(t, values, []string{"run template"})
 	assertSuggestionsMissingAll(t, values, []string{"show user"})
 	assertSuggestionsMissingAll(t, values, []string{"describe", "show template", "doctor connection"})
 }
@@ -89,9 +90,11 @@ func TestCalculateCompletionOmitsRemovedSubcommands(t *testing.T) {
 	assertSuggestionsMissingAll(t, showValues, []string{"user"})
 	assertSuggestionsMissingAll(t, showValues, []string{"template"})
 
-	runValues := suggestionValues(calculateCompletion("run ", CompletionContext{}))
-	assertSuggestionsContainAll(t, runValues, []string{"template"})
-	assertSuggestionsMissingAll(t, runValues, []string{"sql"})
+	runValues := suggestionValues(calculateCompletion("run ", CompletionContext{
+		Templates: []string{"readonly_user", "create_database_with_user"},
+	}))
+	assertSuggestionsContainAll(t, runValues, []string{"readonly_user", "create_database_with_user"})
+	assertSuggestionsMissingAll(t, runValues, []string{"template", "sql"})
 
 	doctorValues := suggestionValues(calculateCompletion("doctor ", CompletionContext{}))
 	assertSuggestionsMissingAll(t, doctorValues, []string{"connection"})

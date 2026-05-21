@@ -39,7 +39,7 @@ func (a *Application) handleShowTemplates(ctx context.Context, filters templateL
 }
 
 func (a *Application) handleTemplateValidate(ctx context.Context, name string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "validate template"}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "run"}, func(meta *auditMetadata) error {
 		cfg, err := a.templateScopeConfig("")
 		if err != nil {
 			return err
@@ -80,7 +80,7 @@ func (a *Application) handleDescribeTemplate(ctx context.Context, name string, v
 
 func (a *Application) handleTemplateRun(ctx context.Context, name string, preview bool, verbose bool, dryRunFlag bool) error {
 	effectiveDryRun := a.dryRun || dryRunFlag
-	return a.auditCommand(ctx, auditMetadata{Command: "run template", DryRun: effectiveDryRun || preview}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "run", DryRun: effectiveDryRun || preview}, func(meta *auditMetadata) error {
 		cfg, err := a.requireTemplateRunConnection(ctx)
 		if err != nil {
 			return err
@@ -115,7 +115,7 @@ func (a *Application) handleTemplateRun(ctx context.Context, name string, previe
 			return runErr
 		}
 
-		confirmed, err := a.confirmExecutionIfNeeded(ctx, "run template")
+		confirmed, err := a.confirmExecutionIfNeeded(ctx, "run")
 		if err != nil {
 			return err
 		}
@@ -253,7 +253,7 @@ func (a *Application) templateRunResult(ctx context.Context, cfg *config.Connect
 	result := &TemplateRunResult{
 		OK:           true,
 		Connection:   cfg.Name,
-		Command:      "template run",
+		Command:      "run",
 		Template:     selectedTemplate.Name,
 		Layer:        selectedTemplate.Layer,
 		Category:     selectedTemplate.EffectiveCategory(),
@@ -551,10 +551,10 @@ func (a *Application) templateScopeConfig(connectionName string) (*config.Connec
 func (a *Application) requireTemplateRunConnection(ctx context.Context) (*config.ConnectionConfig, error) {
 	cfg, db, err := a.requireConnection(ctx)
 	if err != nil {
-		return nil, util.WrapLayer("validation", "template run", fmt.Errorf("no active database connection; run connect first"))
+		return nil, util.WrapLayer("validation", "run", fmt.Errorf("no active database connection; run connect first"))
 	}
 	if db == nil {
-		return nil, util.WrapLayer("validation", "template run", fmt.Errorf("no active database connection; run connect first"))
+		return nil, util.WrapLayer("validation", "run", fmt.Errorf("no active database connection; run connect first"))
 	}
 	return cfg, nil
 }
@@ -681,7 +681,7 @@ func parseShowTemplatesArgs(args []string) (templateListFilters, error) {
 
 func parseTemplateRunArgs(args []string) (string, bool, bool, bool, error) {
 	if len(args) == 0 {
-		return "", false, false, false, fmt.Errorf("usage: template run <name> [--preview] [--dry-run] [--verbose]")
+		return "", false, false, false, fmt.Errorf("usage: run <name> [--preview] [--dry-run] [--verbose]")
 	}
 	name := args[0]
 	preview := false
@@ -696,7 +696,7 @@ func parseTemplateRunArgs(args []string) (string, bool, bool, bool, error) {
 		case "--dry-run", "dry-run":
 			dryRunFlag = true
 		default:
-			return "", false, false, false, fmt.Errorf("usage: template run <name> [--preview] [--dry-run] [--verbose]")
+			return "", false, false, false, fmt.Errorf("usage: run <name> [--preview] [--dry-run] [--verbose]")
 		}
 	}
 	return name, preview, verbose, dryRunFlag, nil

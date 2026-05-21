@@ -20,24 +20,65 @@ type showTemplatesFlags struct {
 }
 
 func (b *cliBuilder) runGroupCommand() *cmd.Command {
-	subcommands := []*cmd.Command{
-		b.runTemplateCommand(),
-	}
+	flags := &templateRunFlags{inputs: inputValues{}}
 	return &cmd.Command{
-		Name:        "run",
-		UsageLine:   "dbx run <subcommand>",
-		Short:       "Run workflows",
-		Long:        helpEntries["run"].body,
-		SubCommands: subcommands,
+		Name:      "run",
+		UsageLine: "dbx run <name> [flags]",
+		Short:     "Run a workflow template",
+		Long:      helpEntries["run"].body,
+		SetFlags: func(f *cmd.FlagSet) {
+			bindInputFlag(f, flags.inputs)
+			f.BoolVar(&flags.preview, "preview", false, "render the workflow plan without executing", "")
+			f.BoolVar(&flags.verbose, "verbose", false, "include redacted SQL preview", "")
+			f.BoolVar(&flags.validate, "validate", false, "validate the template without running it", "")
+		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if len(args) == 0 {
-				usage := "dbx run <subcommand>"
+				usage := "dbx run <name> [flags]"
 				if b.mode == ModeREPL {
-					usage = "run <subcommand>"
+					usage = "run <name> [flags]"
 				}
 				return util.WrapLayer("validation", "run", fmt.Errorf("usage: %s", usage))
 			}
-			return util.WrapLayer("validation", "run", unknownTargetError("run", args[0], subcommands))
+			if len(args) > 1 && args[0] == "template" {
+				return util.WrapLayer("validation", "run", fmt.Errorf(`unknown command "template"`))
+			}
+			if len(args) != 1 {
+				usage := "dbx run <name> [flags]"
+				if b.mode == ModeREPL {
+					usage = "run <name> [flags]"
+				}
+				return util.WrapLayer("validation", "run", fmt.Errorf("usage: %s", usage))
+			}
+			if flags.validate {
+				if b.mode == ModeREPL {
+					return b.application.handleTemplateValidate(ctx, args[0])
+				}
+				return b.withAuditedApplication(ctx, auditMetadata{Command: "run"}, func(application *Application, meta *auditMetadata) error {
+					cfg, err := application.templateScopeConfig(b.globals.Connection)
+					if err != nil {
+						return err
+					}
+					if cfg != nil && cfg.Name != "" {
+						meta.Connection = cfg.Name
+						meta.Mode = cfg.Mode
+					}
+					result, err := application.templateValidateResult(cfg, args[0])
+					if err != nil {
+						return err
+					}
+					return b.writeOutput(result, func() error {
+						application.printTemplateValidation(result)
+						return nil
+					})
+				})
+			}
+			if b.mode == ModeREPL {
+				return b.application.handleTemplateRun(ctx, args[0], flags.preview, flags.verbose, b.globals.DryRun)
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "run", DryRun: b.globals.DryRun || flags.preview}, func(application *Application, meta *auditMetadata) error {
+				return b.runNamedTemplate(ctx, application, args[0], flags, meta)
+			})
 		},
 	}
 }
@@ -94,58 +135,7 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) runTemplateCommand() *cmd.Command {
-	flags := &templateRunFlags{inputs: inputValues{}}
-	return &cmd.Command{
-		Name:        "template",
-		UsageLine:   "dbx run template <name> [flags]",
-		Short:       "Run a workflow template",
-		Long:        helpEntries["template run"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "template name", Required: true, Completion: b.completeTemplates}},
-		SetFlags: func(f *cmd.FlagSet) {
-			bindInputFlag(f, flags.inputs)
-			f.BoolVar(&flags.preview, "preview", false, "render the workflow plan without executing", "")
-			f.BoolVar(&flags.verbose, "verbose", false, "include redacted SQL preview", "")
-			f.BoolVar(&flags.validate, "validate", false, "validate the template without running it", "")
-		},
-		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "run template", fmt.Errorf("usage: dbx run template <name> [flags]"))
-			}
-			if flags.validate {
-				if b.mode == ModeREPL {
-					return b.application.handleTemplateValidate(ctx, args[0])
-				}
-				return b.withAuditedApplication(ctx, auditMetadata{Command: "run template"}, func(application *Application, meta *auditMetadata) error {
-					cfg, err := application.templateScopeConfig(b.globals.Connection)
-					if err != nil {
-						return err
-					}
-					if cfg != nil && cfg.Name != "" {
-						meta.Connection = cfg.Name
-						meta.Mode = cfg.Mode
-					}
-					result, err := application.templateValidateResult(cfg, args[0])
-					if err != nil {
-						return err
-					}
-					return b.writeOutput(result, func() error {
-						application.printTemplateValidation(result)
-						return nil
-					})
-				})
-			}
-			if b.mode == ModeREPL {
-				return b.application.handleTemplateRun(ctx, args[0], flags.preview, flags.verbose, b.globals.DryRun)
-			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "run template", DryRun: b.globals.DryRun || flags.preview}, func(application *Application, meta *auditMetadata) error {
-				return b.runTemplateWorkflow(ctx, application, args[0], flags, meta)
-			})
-		},
-	}
-}
-
-func (b *cliBuilder) runTemplateWorkflow(ctx context.Context, application *Application, name string, flags *templateRunFlags, meta *auditMetadata) error {
+func (b *cliBuilder) runNamedTemplate(ctx context.Context, application *Application, name string, flags *templateRunFlags, meta *auditMetadata) error {
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
 		return err
@@ -155,7 +145,7 @@ func (b *cliBuilder) runTemplateWorkflow(ctx context.Context, application *Appli
 		meta.Mode = cfg.Mode
 	}
 	if !flags.preview {
-		if err := b.requireCLIConfirmation("run template"); err != nil {
+		if err := b.requireCLIConfirmation("run"); err != nil {
 			return err
 		}
 	}

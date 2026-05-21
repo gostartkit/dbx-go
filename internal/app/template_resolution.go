@@ -77,7 +77,7 @@ func buildCLITemplateAmbiguityError(command string, match *tpl.LayerMatch) error
 	for _, candidate := range match.Templates {
 		lines = append(lines, "  - "+templateCandidateOption(candidate))
 	}
-	lines = append(lines, "choose one explicitly with run template <name> or --template <name>")
+	lines = append(lines, "choose one explicitly with run <name> or --template <name>")
 	return fmt.Errorf("%s", strings.Join(lines, "\n"))
 }
 

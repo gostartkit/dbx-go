@@ -156,10 +156,20 @@ func completionFromApp(app *cmd.App, line string, resolver completionResolver) u
 		return helpTopicCompletion(line)
 	}
 
-	results := app.CompleteLineDetailed(line, len(line))
 	args, current, _ := cmd.SplitLineForCompletion(line)
 	replaceFrom := len(line) - len(current)
 	replaceTo := len(line)
+
+	if len(args) == 1 && args[0] == "run" && !strings.HasPrefix(current, "-") {
+		suggestions := templateNameCompletion(resolverTemplates(resolver), current, replaceFrom, replaceTo)
+		return ui.Completion{
+			Prefix:      current,
+			Suggestions: suggestions,
+			Hint:        completionHint(current, suggestions),
+		}
+	}
+
+	results := app.CompleteLineDetailed(line, len(line))
 
 	suggestions := make([]ui.Suggestion, 0, len(results))
 	for _, result := range results {
@@ -185,6 +195,24 @@ func completionFromApp(app *cmd.App, line string, resolver completionResolver) u
 		Suggestions: suggestions,
 		Hint:        completionHint(current, suggestions),
 	}
+}
+
+func templateNameCompletion(values []string, current string, replaceFrom int, replaceTo int) []ui.Suggestion {
+	suggestions := make([]ui.Suggestion, 0, len(values))
+	for _, value := range values {
+		if current != "" && !strings.HasPrefix(value, current) {
+			continue
+		}
+		suggestions = append(suggestions, ui.Suggestion{
+			Value:       value,
+			Description: "template",
+			Category:    "value",
+			Replacement: value,
+			ReplaceFrom: replaceFrom,
+			ReplaceTo:   replaceTo,
+		})
+	}
+	return suggestions
 }
 
 func helpTopicCompletion(line string) ui.Completion {
@@ -253,7 +281,7 @@ func dynamicCompletionDescription(args []string, value string, resolver completi
 		}
 	case len(args) == 2 && args[0] == "show" && args[1] == "context":
 		return "context"
-	case len(args) == 2 && args[0] == "run" && args[1] == "template":
+	case len(args) == 1 && args[0] == "run":
 		if value != "" {
 			return "template"
 		}
@@ -308,4 +336,11 @@ func resolverConnections(resolver completionResolver) []CompletionConnection {
 		return nil
 	}
 	return resolver.Connections()
+}
+
+func resolverTemplates(resolver completionResolver) []string {
+	if resolver == nil {
+		return nil
+	}
+	return resolver.Templates()
 }

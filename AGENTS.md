@@ -32,7 +32,7 @@ This enters:
 dbx>
 ```
 
-One-shot CLI commands such as `dbx connection show prod` and `dbx create database appdb` are supported, but the product should stay optimized for the interactive flow first.
+One-shot CLI commands such as `dbx show connection prod` and `dbx create database appdb` are supported, but the product should stay optimized for the interactive flow first.
 
 ### 2. No SQL From Users
 
@@ -146,63 +146,41 @@ Keep files and functions small. Prefer extending the current packages over intro
 
 ## REPL Design
 
-Commands no longer use a `/` prefix.
-
-`/` is reserved only for command discovery.
-
 Current REPL commands:
 
 ```text
-/
 help
 help <command>
-help aliases
-
-connect
 connect <name>
-connections
+use database <name>
+
+show databases
+show tables
+show table <name>
+show columns <table>
+show rows <table> [--limit n]
+show connections
+show connection <name>
+show users
+show templates
+show context
+
+create connection <name>
+create database
+create user
+
+drop connection <name>
+drop database
+drop user
+
+run <name>
+
+doctor
 audit log
 
-connection create
-connection edit <name>
-connection delete <name>
-connection show <name>
-connection test [name] [verbose]
-connection doctor [name]
-
-create database
-show databases
-drop database
-create user
-count rows <table>
-peek rows <table>
-sample rows <table>
-show users
-drop user
-show tables
-show columns <table>
-describe [table]
-show foreign keys <table>
-show indexes [table]
-show create table <table>
-show table status [table]
-show grants <user> [host]
-show processlist
-show triggers
-show variables [name|pattern]
-show views
-show templates
-describe template <name>
-template run <name>
-truncate table <table>
-rename table <from> <to>
-use <database>
-context
-
-status
-dry-run on
-dry-run off
 exit
+quit
+q
 ```
 
 ### REPL Input UX
@@ -249,47 +227,30 @@ Current non-interactive command families include:
 
 ```text
 dbx connect <name>
-dbx connections
+dbx use database <name>
 dbx audit log
 
-dbx connection create <name> [flags]
-dbx connection edit <name> [flags]
-dbx connection delete <name> [flags]
-dbx connection show <name>
-dbx connection test <name> [--verbose]
-dbx connection doctor <name>
-
-dbx create database <name> [flags]
 dbx show databases [flags]
-dbx show dbs [flags]
-dbx list databases [flags]
-dbx drop database <name> [flags]
-dbx create user <name> [flags]
-dbx count rows <table> [flags]
-dbx peek rows <table> [flags]
-dbx sample rows <table> [flags]
-dbx show users [flags]
-dbx drop user <name> [flags]
 dbx show tables [flags]
+dbx show table <name> [flags]
 dbx show columns <table> [flags]
-dbx describe <table> [flags]
-dbx show foreign keys <table> [flags]
-dbx show indexes <table> [flags]
-dbx show create table <table> [flags]
-dbx show table status [table] [flags]
-dbx show grants <user> [host] [flags]
-dbx show processlist [flags]
-dbx show triggers [flags]
-dbx show variables [name|pattern] [flags]
-dbx show views [flags]
-dbx show templates [flags]
-dbx describe template <name> [flags]
-dbx template run <name> [flags]
-dbx truncate table <table> [flags]
-dbx rename table <from> <to> [flags]
+dbx show rows <table> [--limit n] [flags]
+dbx show connections [flags]
+dbx show connection <name> [flags]
+dbx show users [flags]
+dbx show templates [query] [--tag value] [flags]
+dbx show context [flags]
 
-dbx status
-dbx context
+dbx create connection <name> [--overwrite] [flags]
+dbx create database <name> [flags]
+dbx create user <name> [flags]
+dbx drop connection <name> [flags]
+dbx drop database <name> [flags]
+dbx drop user <name> [flags]
+
+dbx run <name> [flags]
+
+dbx doctor
 dbx help
 dbx help <command>
 ```
@@ -432,21 +393,7 @@ All identifiers must still be validated before SQL rendering, and MySQL object n
 
 ## Diagnostics
 
-Two different connection diagnostics exist today:
-
-- `connection test`: live connectivity test
-- `connection doctor`: static configuration inspection
-
-`connection test` checks layers in order depending on mode:
-
-```text
-direct    -> config, mysql
-ssh       -> config, ssh, mysql
-proxy     -> config, proxy, mysql
-proxy-ssh -> config, proxy, ssh, mysql
-```
-
-`connection doctor` must stay static:
+`doctor` must stay static:
 
 - no network calls
 - no live proxy dialing
@@ -586,16 +533,17 @@ direct MySQL
 SSH MySQL
 proxy MySQL
 proxy-SSH MySQL
-connection test
-connection doctor
+doctor
 create/list/drop database
-create/show/drop user
+create/list/drop user
 show tables
-describe table
-show grants
+show table
+show columns
+show rows
 template system
 global templates
 connection templates
+builtin templates
 dry-run
 audit log
 history persistence
@@ -627,7 +575,6 @@ Possible future commands may include:
 list tables
 create table
 table desc
-template run
 history export
 schema inspection
 ```
