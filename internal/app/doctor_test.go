@@ -26,7 +26,7 @@ func TestHandleLineRemovedDoctorConnectionCommandFails(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	connector := &diagnosticConnector{}
+	connector := &spyConnector{}
 	app, err := NewWithOptions(strings.NewReader(""), &out, &out, Options{
 		ConfigDir: root,
 		Connector: connector,
@@ -526,7 +526,7 @@ func TestCLIConnectionDoctorParsesName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	connector := &diagnosticConnector{}
+	connector := &spyConnector{}
 	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
 		ConfigDir: root,
 		Connector: connector,

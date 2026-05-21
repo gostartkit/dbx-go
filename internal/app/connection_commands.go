@@ -86,59 +86,6 @@ func (a *Application) handleConnectionCreate(ctx context.Context) error {
 	})
 }
 
-func (a *Application) handleConnectionEdit(ctx context.Context, name string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "edit connection", Connection: name}, func(meta *auditMetadata) error {
-		cfg, err := a.store.LoadConnection(name)
-		if err != nil {
-			return util.WrapLayer("config", "load connection "+name, err)
-		}
-		meta.Mode = cfg.Mode
-
-		a.prompt.Printf("Edit Connection: %s\n", name)
-		if err := a.promptConnectionConfig(ctx, cfg, false); err != nil {
-			return err
-		}
-		meta.Mode = cfg.Mode
-
-		testConnection, err := a.confirm(ctx, "Test connection?", true)
-		if err != nil {
-			return err
-		}
-		if testConnection {
-			if err := a.testConnection(ctx, cfg); err != nil {
-				return err
-			}
-			a.prompt.Println("Connection successful.")
-		}
-
-		saveChanges, err := a.confirm(ctx, "Save changes?", true)
-		if err != nil {
-			return err
-		}
-		if !saveChanges {
-			a.prompt.Println("Cancelled.")
-			return nil
-		}
-
-		if err := a.store.SaveConnection(cfg); err != nil {
-			return util.WrapLayer("config", "save connection "+cfg.Name, err)
-		}
-		a.clearDatabaseCompletion()
-		a.clearTableCompletion()
-		a.clearUserCompletion()
-		a.prompt.Printf("Saved: %s\n", a.store.ConnectionConfigPath(cfg.Name))
-
-		connectNow, err := a.confirm(ctx, "Connect now?", true)
-		if err != nil {
-			return err
-		}
-		if !connectNow {
-			return nil
-		}
-		return a.connectWithConfig(ctx, cfg, true)
-	})
-}
-
 func (a *Application) handleConnectionDelete(ctx context.Context, name string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "drop connection", Connection: name}, func(meta *auditMetadata) error {
 		if !a.store.ConnectionExists(name) {

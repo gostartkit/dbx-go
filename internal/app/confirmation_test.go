@@ -19,15 +19,6 @@ func (c *readOnlyConnector) Open(context.Context, *config.ConnectionConfig) (*sq
 	return nil, nil
 }
 
-func (c *readOnlyConnector) Diagnose(context.Context, *config.ConnectionConfig) (*driver.DiagnosticTrace, error) {
-	return &driver.DiagnosticTrace{
-		Steps: []driver.DiagnosticStep{
-			{Name: "config", Status: "ok"},
-			{Name: "mysql", Status: "ok"},
-		},
-	}, nil
-}
-
 func (c *readOnlyConnector) Ping(context.Context, *config.ConnectionConfig, *sql.DB) error {
 	return nil
 }
@@ -40,19 +31,8 @@ func (c *readOnlyConnector) ListTables(context.Context, *config.ConnectionConfig
 	return []string{"users", "orders"}, nil
 }
 
-func (c *readOnlyConnector) DescribeTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableColumn, error) {
-	return []driver.TableColumn{
-		{Name: "id", Type: "bigint"},
-		{Name: "email", Type: "varchar(255)"},
-	}, nil
-}
-
 func (c *readOnlyConnector) ShowColumns(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.SchemaColumn, error) {
 	return []driver.SchemaColumn{{Name: "id", Type: "bigint unsigned", Nullable: false, Key: "PRI", Extra: "auto_increment"}}, nil
-}
-
-func (c *readOnlyConnector) CountRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (int64, error) {
-	return 12813, nil
 }
 
 func (c *readOnlyConnector) PeekRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string, int) (*driver.RowSet, error) {
@@ -63,48 +43,12 @@ func (c *readOnlyConnector) SampleRows(context.Context, *config.ConnectionConfig
 	return &driver.RowSet{Columns: []string{"id", "email"}, Rows: [][]any{{2, "b@example.com"}}}, nil
 }
 
-func (c *readOnlyConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
-	return []driver.TableIndex{{Name: "PRIMARY", Column: "id", Type: "BTREE", SeqInIndex: 1}}, nil
-}
-
-func (c *readOnlyConnector) ShowForeignKeys(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.ForeignKey, error) {
-	return []driver.ForeignKey{{Constraint: "fk_members_org", Column: "organization_id", ReferencedTable: "organizations", ReferencedColumn: "id"}}, nil
-}
-
 func (c *readOnlyConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
 	return "CREATE TABLE `users` (\n  `id` bigint NOT NULL\n)", nil
 }
 
 func (c *readOnlyConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
 	return []driver.TableStatus{{Name: "users", Engine: "InnoDB", Rows: 12813, DataLength: 44040192, IndexLength: 12582912, Collation: "utf8mb4_unicode_ci"}}, nil
-}
-
-func (c *readOnlyConnector) ShowTriggers(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.Trigger, error) {
-	return []driver.Trigger{{Name: "users_before_insert", Timing: "BEFORE", Event: "INSERT", Table: "users"}}, nil
-}
-
-func (c *readOnlyConnector) ShowViews(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
-	return []string{"active_users"}, nil
-}
-
-func (c *readOnlyConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
-	return []string{"GRANT SELECT ON `app_prod`.* TO 'analytics-ro'@'%'"}, nil
-}
-
-func (c *readOnlyConnector) ShowProcesslist(context.Context, *config.ConnectionConfig, *sql.DB) ([]driver.Process, error) {
-	return []driver.Process{{ID: 12, User: "app_user", Host: "10.0.0.2", Command: "Query", TimeSeconds: 2, Info: "SELECT 1"}}, nil
-}
-
-func (c *readOnlyConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
-	return []driver.SystemVariable{{Name: "max_connections", Value: "500"}}, nil
-}
-
-func (c *readOnlyConnector) TruncateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) error {
-	return nil
-}
-
-func (c *readOnlyConnector) RenameTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string, string) error {
-	return nil
 }
 
 func (c *readOnlyConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
@@ -152,13 +96,6 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 			wantOut: "Databases:",
 		},
 		{
-			name: "status",
-			run: func(app *Application) error {
-				return app.handleStatus(context.Background())
-			},
-			wantOut: "Connection: prod",
-		},
-		{
 			name: "connection show",
 			run: func(app *Application) error {
 				return app.handleConnectionShow(context.Background(), "prod")
@@ -166,25 +103,11 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 			wantOut: "Name: prod",
 		},
 		{
-			name: "connection test",
-			run: func(app *Application) error {
-				return app.handleConnectionTest(context.Background(), "prod", false)
-			},
-			wantOut: "[OK] mysql",
-		},
-		{
 			name: "connection doctor",
 			run: func(app *Application) error {
 				return app.handleConnectionDoctor(context.Background(), "prod")
 			},
 			wantOut: "Connection doctor: prod",
-		},
-		{
-			name: "show users",
-			run: func(app *Application) error {
-				return app.handleShowUsers(context.Background())
-			},
-			wantOut: "Users:",
 		},
 		{
 			name: "show tables",
@@ -195,67 +118,12 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 			wantOut: "Tables:",
 		},
 		{
-			name: "describe",
-			run: func(app *Application) error {
-				app.session.Database = "app_prod"
-				return app.handleDescribeTable(context.Background(), "users")
-			},
-			wantOut: "id",
-		},
-		{
-			name: "show grants",
-			run: func(app *Application) error {
-				return app.handleShowGrants(context.Background(), "analytics-ro", "%")
-			},
-			wantOut: "GRANT SELECT",
-		},
-		{
-			name: "count rows",
-			run: func(app *Application) error {
-				app.session.Database = "app_prod"
-				return app.handleCountRows(context.Background(), "users")
-			},
-			wantOut: "12813 rows",
-		},
-		{
-			name: "peek rows",
-			run: func(app *Application) error {
-				app.session.Database = "app_prod"
-				return app.handlePeekRows(context.Background(), "users", "")
-			},
-			wantOut: "a@example.com",
-		},
-		{
-			name: "sample rows",
-			run: func(app *Application) error {
-				app.session.Database = "app_prod"
-				return app.handleSampleRows(context.Background(), "users", "")
-			},
-			wantOut: "b@example.com",
-		},
-		{
-			name: "show indexes",
-			run: func(app *Application) error {
-				app.session.Database = "app_prod"
-				return app.handleShowIndexes(context.Background(), "users")
-			},
-			wantOut: "PRIMARY",
-		},
-		{
 			name: "show columns",
 			run: func(app *Application) error {
 				app.session.Database = "app_prod"
 				return app.handleShowColumns(context.Background(), "users")
 			},
 			wantOut: "auto_increment",
-		},
-		{
-			name: "show foreign keys",
-			run: func(app *Application) error {
-				app.session.Database = "app_prod"
-				return app.handleShowForeignKeys(context.Background(), "organization_members")
-			},
-			wantOut: "organization_id -> organizations.id",
 		},
 		{
 			name: "show create table",
@@ -272,36 +140,6 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 				return app.handleShowTableStatus(context.Background(), "users")
 			},
 			wantOut: "Name: users",
-		},
-		{
-			name: "show processlist",
-			run: func(app *Application) error {
-				return app.handleShowProcesslist(context.Background())
-			},
-			wantOut: "app_user",
-		},
-		{
-			name: "show triggers",
-			run: func(app *Application) error {
-				app.session.Database = "app_prod"
-				return app.handleShowTriggers(context.Background())
-			},
-			wantOut: "users_before_insert",
-		},
-		{
-			name: "show variables",
-			run: func(app *Application) error {
-				return app.handleShowVariables(context.Background(), "max_connections")
-			},
-			wantOut: "max_connections",
-		},
-		{
-			name: "show views",
-			run: func(app *Application) error {
-				app.session.Database = "app_prod"
-				return app.handleShowViews(context.Background())
-			},
-			wantOut: "active_users",
 		},
 		{
 			name: "context",

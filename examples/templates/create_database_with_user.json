@@ -1,5 +1,9 @@
 {
+  "version": 1,
   "name": "create_database_with_user",
+  "category": "database",
+  "tags": ["grant", "tenant"],
+  "description": "Create a database, create a same-name MySQL user, and grant privileges on that database.",
   "transaction": true,
   "match": {
     "command": "create database",
@@ -23,7 +27,18 @@
       "type": "select",
       "prompt": "Collation",
       "default": "utf8mb4_unicode_ci",
-      "options": ["utf8mb4_unicode_ci", "utf8mb4_general_ci"]
+      "options": [
+        "utf8mb4_unicode_ci",
+        "utf8mb4_general_ci",
+        "utf8_unicode_ci",
+        "utf8_general_ci"
+      ]
+    },
+    {
+      "name": "user_host",
+      "type": "string",
+      "prompt": "User host",
+      "default": "%"
     },
     {
       "name": "password",
@@ -39,13 +54,13 @@
     },
     {
       "type": "sql",
-      "description": "Create user `{{database}}`",
-      "sql": "CREATE USER IF NOT EXISTS '{{database}}'@'%' IDENTIFIED BY '{{password}}'"
+      "description": "Create user `{{database}}`@`{{user_host}}`",
+      "sql": "CREATE USER IF NOT EXISTS '{{database}}'@'{{user_host}}' IDENTIFIED BY '{{password}}'"
     },
     {
       "type": "sql",
-      "description": "Grant privileges to `{{database}}`",
-      "sql": "GRANT ALL PRIVILEGES ON `{{database}}`.* TO '{{database}}'@'%'"
+      "description": "Grant all privileges on `{{database}}` to `{{database}}`@`{{user_host}}`",
+      "sql": "GRANT ALL PRIVILEGES ON `{{database}}`.* TO '{{database}}'@'{{user_host}}'"
     }
   ]
 }

@@ -159,62 +159,6 @@ func (a *Application) handleDropUser(ctx context.Context, username string) error
 	})
 }
 
-func (a *Application) handleShowUsers(ctx context.Context) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "show users", DryRun: a.dryRun}, func(meta *auditMetadata) error {
-		cfg, db, err := a.requireConnection(ctx)
-		if err != nil {
-			return err
-		}
-		meta.Connection = cfg.Name
-		meta.Mode = cfg.Mode
-
-		template, err := a.templates.Resolve("show users", cfg)
-		if err != nil {
-			return util.WrapLayer("template", "resolve show users template", err)
-		}
-
-		values := map[string]string{}
-		if err := a.collectTemplateInputs(ctx, template, values); err != nil {
-			return util.WrapLayer("template", "collect template inputs", err)
-		}
-		plan, previewPlan, err := buildPlans(template, cfg, values)
-		if err != nil {
-			return err
-		}
-
-		if a.dryRun {
-			a.printPlanPreview(previewPlan, true)
-			a.printPlanResult(&PlanExecutionResult{
-				OK:         true,
-				Connection: cfg.Name,
-				Command:    "show users",
-				DryRun:     true,
-				Actions: []ActionResult{{
-					Description: plan.Actions[0].Description,
-					SQL:         previewPlan.Actions[0].SQL,
-					Status:      ActionStatusDryRun,
-				}},
-			})
-			return nil
-		}
-
-		results, err := a.connector.QueryStrings(ctx, cfg, db, plan.Actions[0].SQL)
-		if err != nil {
-			return err
-		}
-		if len(results) == 0 {
-			a.prompt.Println("No users found.")
-			return nil
-		}
-
-		a.prompt.Println("Users:")
-		for _, user := range results {
-			a.prompt.Printf("  - %s\n", user)
-		}
-		return nil
-	})
-}
-
 func (a *Application) resolveUsernameInput(ctx context.Context, username string) (string, error) {
 	if strings.TrimSpace(username) == "" {
 		value, err := a.ask(ctx, "Username", "")

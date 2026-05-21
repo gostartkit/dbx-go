@@ -289,14 +289,6 @@ Checks:
 Usage:
   doctor`),
 		},
-		"status": {
-			title: "status",
-			body: strings.TrimSpace(`
-Legacy status summary for internal compatibility.
-
-Prefer:
-  show context`),
-		},
 		"exit": {
 			title: "exit",
 			body: strings.TrimSpace(`

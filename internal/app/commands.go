@@ -192,44 +192,6 @@ func (a *Application) handleConnections(ctx context.Context) error {
 	})
 }
 
-func (a *Application) handleStatus(ctx context.Context) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "status", DryRun: a.dryRun}, func(meta *auditMetadata) error {
-		if a.session.Connection == nil {
-			a.prompt.Println("No active connection.")
-			return nil
-		}
-		meta.Connection = a.session.Connection.Name
-		meta.Mode = a.session.Connection.Mode
-
-		a.prompt.Printf("Connection: %s\n", a.session.Connection.Name)
-		if strings.TrimSpace(a.session.Database) != "" {
-			a.prompt.Printf("Database: %s\n", a.session.Database)
-		}
-		a.prompt.Printf("Driver: %s\n", a.session.Connection.Driver)
-		a.prompt.Printf("Mode: %s\n", a.session.Connection.Mode)
-		a.prompt.Printf("Address: %s\n", a.session.Connection.Address())
-		a.prompt.Printf("Connect timeout: %s\n", a.session.Connection.ConnectTimeout())
-		a.prompt.Printf("Query timeout: %s\n", a.session.Connection.QueryTimeout())
-		a.prompt.Printf("Dry run: %t\n", a.dryRun)
-
-		if a.session.DB == nil {
-			a.prompt.Println("Status: selected but not connected")
-			return nil
-		}
-
-		if err := a.connector.Ping(ctx, a.session.Connection, a.session.DB); err != nil {
-			_ = a.session.Close()
-			failed := false
-			meta.Success = &failed
-			a.prompt.Printf("Status: stale connection (%v)\n", err)
-			return nil
-		}
-
-		a.prompt.Println("Status: connected")
-		return nil
-	})
-}
-
 func (a *Application) handleUseDatabase(ctx context.Context, database string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "use database"}, func(meta *auditMetadata) error {
 		cfg, db, err := a.requireConnection(ctx)

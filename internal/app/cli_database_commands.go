@@ -207,54 +207,6 @@ func (b *cliBuilder) useDatabaseCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) statusCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "status",
-		UsageLine: "dbx status",
-		Short:     "Show the current session status",
-		Long:      helpEntries["status"].body,
-		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if b.mode == ModeREPL {
-				if err := b.requireNoArgs(args); err != nil {
-					return util.WrapLayer("validation", "status", err)
-				}
-				return b.application.handleStatus(ctx)
-			}
-			if err := b.requireNoArgs(args); err != nil {
-				return util.WrapLayer("validation", "status", err)
-			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "status", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
-				result, err := application.statusForCLI(ctx, b.globals.Connection, b.globals.Database)
-				if err != nil {
-					return err
-				}
-				if result.Connection != nil {
-					meta.Connection = result.Connection.Name
-					meta.Mode = result.Connection.Mode
-				}
-				return b.writeOutput(result, func() error {
-					if result.Connection == nil {
-						fmt.Fprintln(b.out, result.Message)
-						return nil
-					}
-					fmt.Fprintf(b.out, "Connection: %s\n", result.Connection.Name)
-					if result.Database != "" {
-						fmt.Fprintf(b.out, "Database: %s\n", result.Database)
-					}
-					fmt.Fprintf(b.out, "Driver: %s\n", result.Connection.Driver)
-					fmt.Fprintf(b.out, "Mode: %s\n", result.Connection.Mode)
-					fmt.Fprintf(b.out, "Address: %s:%d\n", result.Connection.Host, result.Connection.Port)
-					fmt.Fprintf(b.out, "Connect timeout: %d\n", result.Connection.ConnectTimeout)
-					fmt.Fprintf(b.out, "Query timeout: %d\n", result.Connection.QueryTimeout)
-					fmt.Fprintf(b.out, "Dry run: %t\n", result.DryRun)
-					fmt.Fprintf(b.out, "Status: %s\n", result.Message)
-					return nil
-				})
-			})
-		},
-	}
-}
-
 func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Application, name string, flags *createDatabaseFlags, meta *auditMetadata) error {
 	if err := util.ValidateDatabaseName(name); err != nil {
 		return util.WrapLayer("validation", "validate database name", err)
@@ -406,10 +358,6 @@ func (b *cliBuilder) runShowDatabases(ctx context.Context, application *Applicat
 		}
 		return nil
 	})
-}
-
-func (b *cliBuilder) runListDatabases(ctx context.Context, application *Application, flags *planOnlyFlags, meta *auditMetadata) error {
-	return b.runShowDatabases(ctx, application, flags, meta)
 }
 
 func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Application, name string, flags *planOnlyFlags, meta *auditMetadata) error {

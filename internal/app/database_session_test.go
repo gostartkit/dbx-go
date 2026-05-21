@@ -13,40 +13,25 @@ import (
 )
 
 type databaseSelectionConnector struct {
-	databases     []string
-	tables        []string
-	users         []string
-	columns       []driver.SchemaColumn
-	rowSet        *driver.RowSet
-	indexes       []driver.TableIndex
-	foreignKeys   []driver.ForeignKey
-	createDDL     string
-	statuses      []driver.TableStatus
-	triggers      []driver.Trigger
-	views         []string
-	processes     []driver.Process
-	variables     []driver.SystemVariable
-	rowCount      int64
-	dbErr         error
-	tableErr      error
-	userErr       error
-	openCalls     int
-	listCalls     int
-	tableCalls    int
-	userCalls     int
-	peekLimit     int
-	sampleLimit   int
-	truncateCalls int
-	renameCalls   int
+	databases   []string
+	tables      []string
+	columns     []driver.SchemaColumn
+	rowSet      *driver.RowSet
+	createDDL   string
+	statuses    []driver.TableStatus
+	dbErr       error
+	tableErr    error
+	userErr     error
+	openCalls   int
+	listCalls   int
+	tableCalls  int
+	peekLimit   int
+	sampleLimit int
 }
 
 func (c *databaseSelectionConnector) Open(context.Context, *config.ConnectionConfig) (*sql.DB, error) {
 	c.openCalls++
 	return sql.Open("mysql", "root@tcp(127.0.0.1:3306)/mysql")
-}
-
-func (c *databaseSelectionConnector) Diagnose(context.Context, *config.ConnectionConfig) (*driver.DiagnosticTrace, error) {
-	return nil, nil
 }
 
 func (c *databaseSelectionConnector) Ping(context.Context, *config.ConnectionConfig, *sql.DB) error {
@@ -72,10 +57,6 @@ func (c *databaseSelectionConnector) ListTables(context.Context, *config.Connect
 	return append([]string(nil), c.tables...), nil
 }
 
-func (c *databaseSelectionConnector) DescribeTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableColumn, error) {
-	return []driver.TableColumn{{Name: "id", Type: "bigint"}}, nil
-}
-
 func (c *databaseSelectionConnector) ShowColumns(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.SchemaColumn, error) {
 	if len(c.columns) == 0 {
 		return []driver.SchemaColumn{
@@ -84,13 +65,6 @@ func (c *databaseSelectionConnector) ShowColumns(context.Context, *config.Connec
 		}, nil
 	}
 	return append([]driver.SchemaColumn(nil), c.columns...), nil
-}
-
-func (c *databaseSelectionConnector) CountRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (int64, error) {
-	if c.rowCount != 0 {
-		return c.rowCount, nil
-	}
-	return 12813, nil
 }
 
 func (c *databaseSelectionConnector) PeekRows(_ context.Context, _ *config.ConnectionConfig, _ *sql.DB, _ string, _ string, limit int) (*driver.RowSet, error) {
@@ -120,20 +94,6 @@ func (c *databaseSelectionConnector) SampleRows(_ context.Context, _ *config.Con
 	}, nil
 }
 
-func (c *databaseSelectionConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
-	if len(c.indexes) == 0 {
-		return []driver.TableIndex{{Name: "PRIMARY", Column: "id", Type: "BTREE", SeqInIndex: 1}}, nil
-	}
-	return append([]driver.TableIndex(nil), c.indexes...), nil
-}
-
-func (c *databaseSelectionConnector) ShowForeignKeys(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.ForeignKey, error) {
-	if len(c.foreignKeys) == 0 {
-		return []driver.ForeignKey{{Constraint: "fk_members_org", Column: "organization_id", ReferencedTable: "organizations", ReferencedColumn: "id"}}, nil
-	}
-	return append([]driver.ForeignKey(nil), c.foreignKeys...), nil
-}
-
 func (c *databaseSelectionConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
 	if c.createDDL == "" {
 		return "CREATE TABLE `users` (\n  `id` bigint NOT NULL\n)", nil
@@ -148,54 +108,11 @@ func (c *databaseSelectionConnector) ShowTableStatus(context.Context, *config.Co
 	return append([]driver.TableStatus(nil), c.statuses...), nil
 }
 
-func (c *databaseSelectionConnector) ShowTriggers(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.Trigger, error) {
-	if len(c.triggers) == 0 {
-		return []driver.Trigger{{Name: "users_before_insert", Timing: "BEFORE", Event: "INSERT", Table: "users"}}, nil
-	}
-	return append([]driver.Trigger(nil), c.triggers...), nil
-}
-
-func (c *databaseSelectionConnector) ShowViews(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
-	if len(c.views) == 0 {
-		return []string{"active_users", "monthly_reports"}, nil
-	}
-	return append([]string(nil), c.views...), nil
-}
-
-func (c *databaseSelectionConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
-	return []string{"GRANT SELECT ON *.* TO 'analytics-ro'@'%'"}, nil
-}
-
-func (c *databaseSelectionConnector) ShowProcesslist(context.Context, *config.ConnectionConfig, *sql.DB) ([]driver.Process, error) {
-	if len(c.processes) == 0 {
-		return []driver.Process{{ID: 12, User: "app_user", Host: "10.0.0.2", Command: "Query", TimeSeconds: 2, Info: "SELECT 1"}}, nil
-	}
-	return append([]driver.Process(nil), c.processes...), nil
-}
-
-func (c *databaseSelectionConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
-	if len(c.variables) == 0 {
-		return []driver.SystemVariable{{Name: "max_connections", Value: "500"}}, nil
-	}
-	return append([]driver.SystemVariable(nil), c.variables...), nil
-}
-
-func (c *databaseSelectionConnector) TruncateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) error {
-	c.truncateCalls++
-	return nil
-}
-
-func (c *databaseSelectionConnector) RenameTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string, string) error {
-	c.renameCalls++
-	return nil
-}
-
 func (c *databaseSelectionConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
-	c.userCalls++
 	if c.userErr != nil {
 		return nil, c.userErr
 	}
-	return append([]string(nil), c.users...), nil
+	return nil, nil
 }
 
 func cloneRowSet(value *driver.RowSet) *driver.RowSet {
@@ -311,25 +228,6 @@ func TestPromptLabelFormatsDatabaseSelection(t *testing.T) {
 	app.dryRun = true
 	if got := app.promptLabel(); got != "dbx[prod/app_prod][disconnected][dry-run]> " {
 		t.Fatalf("promptLabel() with disconnected dry-run = %q", got)
-	}
-}
-
-func TestStatusIncludesDatabase(t *testing.T) {
-	t.Parallel()
-
-	var out bytes.Buffer
-	app, err := NewWithOptions(strings.NewReader("y\n"), &out, &out, Options{ConfigDir: t.TempDir()})
-	if err != nil {
-		t.Fatalf("NewWithOptions returned error: %v", err)
-	}
-	app.session.Connection = sampleConnection("prod")
-	app.session.Database = "app_prod"
-
-	if err := app.handleStatus(context.Background()); err != nil {
-		t.Fatalf("handleStatus returned error: %v", err)
-	}
-	if !strings.Contains(out.String(), "Database: app_prod") {
-		t.Fatalf("status output missing database: %q", out.String())
 	}
 }
 

@@ -12,7 +12,6 @@ import (
 
 	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/config"
-	"pkg.gostartkit.com/dbx/internal/driver"
 	"pkg.gostartkit.com/dbx/internal/util"
 )
 
@@ -232,7 +231,7 @@ func TestCLIConnectionTestCommandRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	connector := &diagnosticConnector{}
+	connector := &spyConnector{}
 	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
 		ConfigDir: root,
 		Connector: connector,
@@ -260,20 +259,7 @@ func TestCLIConnectionTestVerboseCommandRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	connector := &diagnosticConnector{
-		trace: &driver.DiagnosticTrace{
-			Steps: []driver.DiagnosticStep{
-				{
-					Name:   "mysql",
-					Status: "ok",
-					Details: map[string]any{
-						"target":      "127.0.0.1:3306",
-						"duration_ms": int64(42),
-					},
-				},
-			},
-		},
-	}
+	connector := &spyConnector{}
 	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{
 		ConfigDir: root,
 		Connector: connector,
@@ -401,7 +387,7 @@ func TestCLIDoctorConnectionJSONOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	connector := &diagnosticConnector{
+	connector := &spyConnector{
 		openErr: util.WrapLayer("proxy", "dial socks5://proxy_user:***@127.0.0.1:1080", errors.New("connection refused")),
 	}
 	app, stdout, stderr := newCLIAppWithOptions(t, "", Options{

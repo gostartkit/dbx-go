@@ -20,10 +20,6 @@ func (f failingConnector) Open(context.Context, *config.ConnectionConfig) (*sql.
 	return nil, f.openErr
 }
 
-func (f failingConnector) Diagnose(context.Context, *config.ConnectionConfig) (*driver.DiagnosticTrace, error) {
-	return nil, f.openErr
-}
-
 func (f failingConnector) Ping(context.Context, *config.ConnectionConfig, *sql.DB) error {
 	return nil
 }
@@ -36,16 +32,8 @@ func (f failingConnector) ListTables(context.Context, *config.ConnectionConfig, 
 	return nil, nil
 }
 
-func (f failingConnector) DescribeTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableColumn, error) {
-	return nil, nil
-}
-
 func (f failingConnector) ShowColumns(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.SchemaColumn, error) {
 	return nil, nil
-}
-
-func (f failingConnector) CountRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (int64, error) {
-	return 0, nil
 }
 
 func (f failingConnector) PeekRows(context.Context, *config.ConnectionConfig, *sql.DB, string, string, int) (*driver.RowSet, error) {
@@ -56,48 +44,12 @@ func (f failingConnector) SampleRows(context.Context, *config.ConnectionConfig, 
 	return nil, nil
 }
 
-func (f failingConnector) ShowIndexes(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableIndex, error) {
-	return nil, nil
-}
-
-func (f failingConnector) ShowForeignKeys(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.ForeignKey, error) {
-	return nil, nil
-}
-
 func (f failingConnector) ShowCreateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) (string, error) {
 	return "", nil
 }
 
 func (f failingConnector) ShowTableStatus(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]driver.TableStatus, error) {
 	return nil, nil
-}
-
-func (f failingConnector) ShowTriggers(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.Trigger, error) {
-	return nil, nil
-}
-
-func (f failingConnector) ShowViews(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
-	return nil, nil
-}
-
-func (f failingConnector) ShowGrants(context.Context, *config.ConnectionConfig, *sql.DB, string, string) ([]string, error) {
-	return nil, nil
-}
-
-func (f failingConnector) ShowProcesslist(context.Context, *config.ConnectionConfig, *sql.DB) ([]driver.Process, error) {
-	return nil, nil
-}
-
-func (f failingConnector) ShowVariables(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]driver.SystemVariable, error) {
-	return nil, nil
-}
-
-func (f failingConnector) TruncateTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string) error {
-	return nil
-}
-
-func (f failingConnector) RenameTable(context.Context, *config.ConnectionConfig, *sql.DB, string, string, string) error {
-	return nil
 }
 
 func (f failingConnector) QueryStrings(context.Context, *config.ConnectionConfig, *sql.DB, string) ([]string, error) {
