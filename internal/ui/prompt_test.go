@@ -63,6 +63,34 @@ func TestPromptRedrawLineWithCursorRestoresCursorPosition(t *testing.T) {
 	}
 }
 
+func TestPromptRedrawLineWithWideCharactersUsesVisualWidth(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	prompt := NewPrompt(strings.NewReader(""), &out)
+
+	prompt.redrawLineWithCursor("dbx> ", "你a好", 1, "")
+
+	want := "\r\033[2Kdbx> 你a好\033[3D"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestPromptRedrawLineWithCombiningMarksUsesZeroWidth(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	prompt := NewPrompt(strings.NewReader(""), &out)
+
+	prompt.redrawLineWithCursor("dbx> ", "e\u0301x", 2, "")
+
+	want := "\r\033[2Kdbx> e\u0301x\033[1D"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
 func TestPromptPrintSuggestionsWithDescriptions(t *testing.T) {
 	t.Parallel()
 
@@ -193,7 +221,7 @@ func TestPromptCompletionSessionReset(t *testing.T) {
 	t.Parallel()
 
 	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
-	prompt.session = newCompletionSession("conn", []Suggestion{{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 4}})
+	prompt.session = newCompletionSession("conn", len([]rune("conn")), []Suggestion{{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 4}})
 
 	prompt.resetCompletionSession()
 
@@ -216,7 +244,7 @@ func TestPromptApplyCompletionNoCandidatesLeavesInputUnchanged(t *testing.T) {
 func TestCompletionSessionDeduplicatesSuggestionsDeterministically(t *testing.T) {
 	t.Parallel()
 
-	session := newCompletionSession("conn", []Suggestion{
+	session := newCompletionSession("conn", len([]rune("conn")), []Suggestion{
 		{Value: "connect"},
 		{Value: "connections"},
 		{Value: "connect"},
@@ -245,7 +273,7 @@ func TestPromptApplyCompletionResetsSessionWhenInputDiverges(t *testing.T) {
 			},
 		}
 	}
-	prompt.session = newCompletionSession("conn", []Suggestion{
+	prompt.session = newCompletionSession("conn", len([]rune("conn")), []Suggestion{
 		{Value: "connect", Replacement: "connect", ReplaceFrom: 0, ReplaceTo: 4},
 		{Value: "connections", Replacement: "connections", ReplaceFrom: 0, ReplaceTo: 4},
 	})
@@ -322,7 +350,7 @@ func TestPromptApplyCompletionUsesCommonPrefixForCommands(t *testing.T) {
 	if got := prompt.applyCompletion("con"); got != "connect" {
 		t.Fatalf("completion = %q", got)
 	}
-	if prompt.session == nil || prompt.session.CommonInput != "connect" {
+	if prompt.session == nil || !prompt.session.HasCommon || prompt.session.CommonResult.Line != "connect" {
 		t.Fatalf("unexpected session: %#v", prompt.session)
 	}
 }
@@ -364,7 +392,7 @@ func TestPromptApplyCompletionDoubleTabPrintsCandidateListAndRedraws(t *testing.
 			},
 		}
 	}
-	prompt.session = newCompletionSession("use ", []Suggestion{
+	prompt.session = newCompletionSession("use ", len([]rune("use ")), []Suggestion{
 		{Value: "db1", Replacement: "db1", ReplaceFrom: 4, ReplaceTo: 4},
 		{Value: "db2", Replacement: "db2", ReplaceFrom: 4, ReplaceTo: 4},
 	})
@@ -447,5 +475,54 @@ func TestPromptReadKeyEventReadsUTF8RuneAndIgnoresEscapeText(t *testing.T) {
 	}
 	if event.kind != keyIgnored {
 		t.Fatalf("escape event = %v, want ignored", event.kind)
+	}
+}
+
+func TestPromptApplyCompletionAtCursorPreservesSuffix(t *testing.T) {
+	t.Parallel()
+
+	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
+	prompt.completer = func(line string) Completion {
+		if line != "show us" {
+			t.Fatalf("completion input = %q, want %q", line, "show us")
+		}
+		return Completion{
+			Suggestions: []Suggestion{
+				{Value: "users", Replacement: "users", ReplaceFrom: 5, ReplaceTo: 7},
+			},
+		}
+	}
+
+	result := prompt.applyCompletionAtCursor("show us where id = 1", len([]rune("show us")))
+	if result.Line != "show users where id = 1" {
+		t.Fatalf("line = %q", result.Line)
+	}
+	if result.Cursor != len([]rune("show users")) {
+		t.Fatalf("cursor = %d, want %d", result.Cursor, len([]rune("show users")))
+	}
+}
+
+func TestPromptApplyCompletionAtCursorKeepsCursorAtReplacementEnd(t *testing.T) {
+	t.Parallel()
+
+	prompt := NewPrompt(strings.NewReader(""), &bytes.Buffer{})
+	prompt.completer = func(string) Completion {
+		return Completion{
+			Suggestions: []Suggestion{
+				{Value: "database", Replacement: "database", ReplaceFrom: 4, ReplaceTo: 6},
+				{Value: "databases", Replacement: "databases", ReplaceFrom: 4, ReplaceTo: 6},
+			},
+		}
+	}
+
+	result := prompt.applyCompletionAtCursor("use da tail", len([]rune("use da")))
+	if result.Line != "use database tail" {
+		t.Fatalf("line = %q", result.Line)
+	}
+	if result.Cursor != len([]rune("use database")) {
+		t.Fatalf("cursor = %d, want %d", result.Cursor, len([]rune("use database")))
+	}
+	if result.Cursor >= len([]rune(result.Line)) {
+		t.Fatalf("cursor should stop before suffix, got line %q cursor %d", result.Line, result.Cursor)
 	}
 }

@@ -48,12 +48,19 @@ type rawModeWriter struct {
 	writer io.Writer
 }
 
+type completionResult struct {
+	Line   string
+	Cursor int
+}
+
 type CompletionSession struct {
-	BaseInput   string
-	Suggestions []Suggestion
-	Index       int
-	CommonInput string
-	ListShown   bool
+	BaseInput    string
+	BaseCursor   int
+	Suggestions  []Suggestion
+	Index        int
+	CommonResult completionResult
+	HasCommon    bool
+	ListShown    bool
 }
 
 var ErrPromptCanceled = errors.New("prompt canceled")
@@ -232,8 +239,9 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 		}
 
 		if event.kind == keyTab {
-			current := p.applyCompletion(editor.String())
-			editor.SetLine(current)
+			completed := p.applyCompletionAtCursor(editor.String(), editor.Cursor())
+			editor.SetLine(completed.Line)
+			editor.cursor = completed.Cursor
 			p.redrawCurrentLine(label, editor.String(), editor.Cursor())
 			continue
 		}
@@ -382,11 +390,16 @@ func (p *Prompt) readSS3Sequence() (keyEvent, error) {
 }
 
 func (p *Prompt) applyCompletion(current string) string {
+	return p.applyCompletionAtCursor(current, len([]rune(current))).Line
+}
+
+func (p *Prompt) applyCompletionAtCursor(current string, cursor int) completionResult {
+	result := completionResult{Line: current, Cursor: cursor}
 	if p.completer == nil {
-		return current
+		return result
 	}
 
-	if p.session != nil && current != p.session.BaseInput && !containsSuggestionResult(p.session, current) {
+	if p.session != nil && (current != p.session.BaseInput || cursor != p.session.BaseCursor) && !containsSuggestionResult(p.session, result) {
 		p.resetCompletionSession()
 	}
 
@@ -397,28 +410,30 @@ func (p *Prompt) applyCompletion(current string) string {
 				fmt.Fprintln(w)
 			})
 			p.session.ListShown = true
-			return current
+			return result
 		}
 		selected := p.session.current()
 		p.session.advance()
-		return applySuggestion(p.session.BaseInput, selected)
+		return applySuggestionWithCursor(p.session.BaseInput, selected)
 	}
 
-	completion := p.completer(current)
+	prefix := current[:runeIndexToByteIndex(current, cursor)]
+	completion := p.completer(prefix)
 	candidates := completionValues(completion)
 	if len(candidates) == 0 {
 		p.resetCompletionSession()
-		return current
+		return result
 	}
 
 	if len(candidates) == 1 {
 		p.resetCompletionSession()
-		return applySuggestion(current, completion.Suggestions[0])
+		return applySuggestionWithCursor(current, completion.Suggestions[0])
 	}
 
-	p.session = newCompletionSession(current, completion.Suggestions)
-	if common := commonSuggestionResult(current, p.session.Suggestions); common != "" && common != current {
-		p.session.CommonInput = common
+	p.session = newCompletionSession(current, cursor, completion.Suggestions)
+	if common, ok := commonSuggestionResult(current, p.session.Suggestions); ok && (common.Line != current || common.Cursor != cursor) {
+		p.session.CommonResult = common
+		p.session.HasCommon = true
 		if matched := matchingSuggestionIndex(p.session.BaseInput, p.session.Suggestions, common); matched >= 0 {
 			p.session.Index = (matched + 1) % len(p.session.Suggestions)
 		}
@@ -426,7 +441,7 @@ func (p *Prompt) applyCompletion(current string) string {
 	}
 	selected := p.session.current()
 	p.session.advance()
-	return applySuggestion(p.session.BaseInput, selected)
+	return applySuggestionWithCursor(p.session.BaseInput, selected)
 }
 
 func (p *Prompt) redrawLine(label string, current string, hint string) {
@@ -436,14 +451,14 @@ func (p *Prompt) redrawLine(label string, current string, hint string) {
 func (p *Prompt) redrawLineWithCursor(label string, current string, cursor int, hint string) {
 	_ = hint
 	fmt.Fprintf(p.out, "\r\033[2K%s%s", label, current)
-	bufferLen := len([]rune(current))
+	runes := []rune(current)
 	if cursor < 0 {
 		cursor = 0
 	}
-	if cursor > bufferLen {
-		cursor = bufferLen
+	if cursor > len(runes) {
+		cursor = len(runes)
 	}
-	if moveLeft := bufferLen - cursor; moveLeft > 0 {
+	if moveLeft := displayWidthRunes(runes[cursor:]); moveLeft > 0 {
 		fmt.Fprintf(p.out, "\033[%dD", moveLeft)
 	}
 }
@@ -507,7 +522,7 @@ func completionValues(completion Completion) []string {
 	return values
 }
 
-func newCompletionSession(baseInput string, suggestions []Suggestion) *CompletionSession {
+func newCompletionSession(baseInput string, baseCursor int, suggestions []Suggestion) *CompletionSession {
 	if len(suggestions) == 0 {
 		return nil
 	}
@@ -525,6 +540,7 @@ func newCompletionSession(baseInput string, suggestions []Suggestion) *Completio
 	}
 	return &CompletionSession{
 		BaseInput:   baseInput,
+		BaseCursor:  baseCursor,
 		Suggestions: cloned,
 	}
 }
@@ -546,15 +562,15 @@ func (s *CompletionSession) advance() {
 	s.Index = (s.Index + 1) % len(s.Suggestions)
 }
 
-func containsSuggestionResult(session *CompletionSession, current string) bool {
+func containsSuggestionResult(session *CompletionSession, current completionResult) bool {
 	if session == nil {
 		return false
 	}
-	if session.CommonInput != "" && current == session.CommonInput {
+	if session.HasCommon && current == session.CommonResult {
 		return true
 	}
 	for _, suggestion := range session.Suggestions {
-		if applySuggestion(session.BaseInput, suggestion) == current {
+		if applySuggestionWithCursor(session.BaseInput, suggestion) == current {
 			return true
 		}
 	}
@@ -562,51 +578,53 @@ func containsSuggestionResult(session *CompletionSession, current string) bool {
 }
 
 func applySuggestion(base string, suggestion Suggestion) string {
+	return applySuggestionWithCursor(base, suggestion).Line
+}
+
+func applySuggestionWithCursor(base string, suggestion Suggestion) completionResult {
 	replacement := suggestion.Replacement
 	if replacement == "" {
 		replacement = suggestion.Value
 	}
-	from := suggestion.ReplaceFrom
-	to := suggestion.ReplaceTo
-	if from < 0 {
-		from = 0
+	from, to := normalizedReplacementRange(base, suggestion)
+	line := base[:from] + replacement + base[to:]
+	return completionResult{
+		Line:   line,
+		Cursor: byteIndexToRuneIndex(line, from+len(replacement)),
 	}
-	if to < from {
-		to = from
-	}
-	if from > len(base) {
-		from = len(base)
-	}
-	if to > len(base) {
-		to = len(base)
-	}
-	return base[:from] + replacement + base[to:]
 }
 
-func commonSuggestionResult(base string, suggestions []Suggestion) string {
+func commonSuggestionResult(base string, suggestions []Suggestion) (completionResult, bool) {
 	if len(suggestions) < 2 {
-		return ""
+		return completionResult{}, false
 	}
 
-	prefix := applySuggestion(base, suggestions[0])
+	from, to := normalizedReplacementRange(base, suggestions[0])
+	common := suggestionReplacement(suggestions[0])
 	for _, suggestion := range suggestions[1:] {
-		value := applySuggestion(base, suggestion)
-		for !strings.HasPrefix(value, prefix) {
-			if prefix == "" {
-				return ""
-			}
-			prefix = prefix[:len(prefix)-1]
+		nextFrom, nextTo := normalizedReplacementRange(base, suggestion)
+		if nextFrom != from || nextTo != to {
+			return completionResult{}, false
+		}
+		common = commonPrefix(common, suggestionReplacement(suggestion))
+		if common == "" {
+			return completionResult{}, false
 		}
 	}
-	if len(prefix) <= len(base) {
-		return ""
+	result := applySuggestionWithCursor(base, Suggestion{
+		Replacement: common,
+		ReplaceFrom: from,
+		ReplaceTo:   to,
+	})
+	if result.Line == base {
+		return completionResult{}, false
 	}
-	return prefix
+	return result, true
 }
 
-func matchingSuggestionIndex(base string, suggestions []Suggestion, current string) int {
+func matchingSuggestionIndex(base string, suggestions []Suggestion, current completionResult) int {
 	for idx, suggestion := range suggestions {
-		if applySuggestion(base, suggestion) == current {
+		if applySuggestionWithCursor(base, suggestion) == current {
 			return idx
 		}
 	}
@@ -642,6 +660,76 @@ func (w rawModeWriter) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	return len(p), nil
+}
+
+func suggestionReplacement(suggestion Suggestion) string {
+	if suggestion.Replacement != "" {
+		return suggestion.Replacement
+	}
+	return suggestion.Value
+}
+
+func normalizedReplacementRange(base string, suggestion Suggestion) (int, int) {
+	from := suggestion.ReplaceFrom
+	to := suggestion.ReplaceTo
+	if from < 0 {
+		from = 0
+	}
+	if to < from {
+		to = from
+	}
+	if from > len(base) {
+		from = len(base)
+	}
+	if to > len(base) {
+		to = len(base)
+	}
+	return from, to
+}
+
+func runeIndexToByteIndex(value string, runeIndex int) int {
+	if runeIndex <= 0 {
+		return 0
+	}
+	runesSeen := 0
+	for byteIndex := range value {
+		if runesSeen == runeIndex {
+			return byteIndex
+		}
+		runesSeen++
+	}
+	return len(value)
+}
+
+func byteIndexToRuneIndex(value string, byteIndex int) int {
+	if byteIndex <= 0 {
+		return 0
+	}
+	if byteIndex >= len(value) {
+		return len([]rune(value))
+	}
+	runeIndex := 0
+	for idx := range value {
+		if idx >= byteIndex {
+			return runeIndex
+		}
+		runeIndex++
+	}
+	return runeIndex
+}
+
+func commonPrefix(left string, right string) string {
+	leftRunes := []rune(left)
+	rightRunes := []rune(right)
+	limit := len(leftRunes)
+	if len(rightRunes) < limit {
+		limit = len(rightRunes)
+	}
+	index := 0
+	for index < limit && leftRunes[index] == rightRunes[index] {
+		index++
+	}
+	return string(leftRunes[:index])
 }
 
 func (p *Prompt) readLine() (string, error) {

@@ -103,6 +103,23 @@ func TestLineEditorUTF8InsertMoveAndDelete(t *testing.T) {
 	}
 }
 
+func TestLineEditorDeleteFullWidthCharacter(t *testing.T) {
+	t.Parallel()
+
+	editor := newLineEditor(nil)
+	editor.SetLine("A，B")
+	editor.HandleKey(keyEvent{kind: keyLeft})
+	editor.HandleKey(keyEvent{kind: keyLeft})
+
+	editor.HandleKey(keyEvent{kind: keyDelete})
+	if got := editor.String(); got != "AB" {
+		t.Fatalf("buffer after delete = %q, want %q", got, "AB")
+	}
+	if got := editor.Cursor(); got != 1 {
+		t.Fatalf("cursor after delete = %d, want 1", got)
+	}
+}
+
 func TestLineEditorHistoryNavigation(t *testing.T) {
 	t.Parallel()
 
