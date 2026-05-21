@@ -79,7 +79,6 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"drop database",
 		"drop user",
 		"run template",
-		"run sql",
 		"doctor",
 		"audit log",
 		"help",
@@ -149,6 +148,7 @@ func TestRemovedCommandsReturnErrors(t *testing.T) {
 		"describe users",
 		"show template readonly_user",
 		"doctor connection prod",
+		`run sql "SELECT 1"`,
 	} {
 		if err := app.RunLine(context.Background(), line); err == nil {
 			t.Fatalf("expected removed command to fail: %q", line)
@@ -197,6 +197,9 @@ func TestHelpCompletionContainsFinalTopics(t *testing.T) {
 		if _, ok := have[want]; !ok {
 			t.Fatalf("missing help topic %q", want)
 		}
+	}
+	if _, ok := have["run sql"]; ok {
+		t.Fatalf("unexpected removed help topic %q", "run sql")
 	}
 }
 

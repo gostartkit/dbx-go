@@ -619,7 +619,7 @@ func TestCLIRootUnknownCommandStillSuggestsRootMatch(t *testing.T) {
 	}
 }
 
-func TestCLIUnknownRunTargetSuggestsClosestMatch(t *testing.T) {
+func TestCLIUnknownRunTargetUsesRunContext(t *testing.T) {
 	t.Parallel()
 
 	app, _, _ := newCLIApp(t, "", t.TempDir())
@@ -631,8 +631,27 @@ func TestCLIUnknownRunTargetSuggestsClosestMatch(t *testing.T) {
 	if !strings.Contains(message, `unknown run target "sq"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(message, `did you mean "sql"?`) {
-		t.Fatalf("missing contextual suggestion: %v", err)
+	if strings.Contains(message, `did you mean "sql"?`) {
+		t.Fatalf("unexpected removed command suggestion: %v", err)
+	}
+	if !strings.Contains(message, "available run targets:") || !strings.Contains(message, "\n  template") {
+		t.Fatalf("missing run target list: %v", err)
+	}
+	if strings.Contains(message, "\n  sql\n") {
+		t.Fatalf("unexpected removed run target: %v", err)
+	}
+}
+
+func TestCLIRunSQLIsRemoved(t *testing.T) {
+	t.Parallel()
+
+	app, _, _ := newCLIApp(t, "", t.TempDir())
+	err := app.Run(context.Background(), []string{"run", "sql", "SELECT 1"})
+	if err == nil {
+		t.Fatalf("expected removed command to fail")
+	}
+	if !strings.Contains(err.Error(), `unknown run target "sql"`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

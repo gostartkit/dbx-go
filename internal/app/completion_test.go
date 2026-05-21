@@ -89,6 +89,10 @@ func TestCalculateCompletionOmitsRemovedSubcommands(t *testing.T) {
 	assertSuggestionsMissingAll(t, showValues, []string{"user"})
 	assertSuggestionsMissingAll(t, showValues, []string{"template"})
 
+	runValues := suggestionValues(calculateCompletion("run ", CompletionContext{}))
+	assertSuggestionsContainAll(t, runValues, []string{"template"})
+	assertSuggestionsMissingAll(t, runValues, []string{"sql"})
+
 	doctorValues := suggestionValues(calculateCompletion("doctor ", CompletionContext{}))
 	assertSuggestionsMissingAll(t, doctorValues, []string{"connection"})
 }

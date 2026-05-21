@@ -247,7 +247,7 @@ func TestREPLUnknownShowTargetSuggestsClosestMatch(t *testing.T) {
 	}
 }
 
-func TestREPLUnknownRunTargetSuggestsClosestMatch(t *testing.T) {
+func TestREPLUnknownRunTargetUsesRunContext(t *testing.T) {
 	t.Parallel()
 
 	app, err := NewWithOptions(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, Options{ConfigDir: t.TempDir()})
@@ -263,8 +263,14 @@ func TestREPLUnknownRunTargetSuggestsClosestMatch(t *testing.T) {
 	if !strings.Contains(message, `unknown run target "sq"`) {
 		t.Fatalf("unexpected error: %v", runErr)
 	}
-	if !strings.Contains(message, `did you mean "sql"?`) {
-		t.Fatalf("missing contextual suggestion: %v", runErr)
+	if strings.Contains(message, `did you mean "sql"?`) {
+		t.Fatalf("unexpected removed command suggestion: %v", runErr)
+	}
+	if !strings.Contains(message, "available run targets:") || !strings.Contains(message, "\n  template") {
+		t.Fatalf("missing run target list: %v", runErr)
+	}
+	if strings.Contains(message, "\n  sql\n") {
+		t.Fatalf("unexpected removed run target: %v", runErr)
 	}
 }
 

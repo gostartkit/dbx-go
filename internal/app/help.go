@@ -37,8 +37,7 @@ Examples:
   create database appdb
 
   run
-  run template seed-users --validate
-  run sql @schema.sql`),
+  run template seed-users --validate`),
 		},
 		"connect": {
 			title: "connect",
@@ -240,14 +239,13 @@ Usage:
 		"run": {
 			title: "run",
 			body: strings.TrimSpace(`
-Run database workflows and SQL entrypoints.
+Run database workflows.
 
 Usage:
   dbx run <subcommand>
 
 Subcommands:
-  template <name>
-  sql <sql-or-file>`),
+  template <name>`),
 		},
 		"template run": {
 			title: "run template",
@@ -256,16 +254,6 @@ Run or validate a workflow template.
 
 Usage:
   run template <name> [--preview] [--verbose] [--validate]`),
-		},
-		"run sql": {
-			title: "run sql",
-			body: strings.TrimSpace(`
-Run raw SQL text or load SQL from a file.
-
-Usage:
-  run sql "SELECT 1"
-  run sql @schema.sql
-  run sql schema.sql`),
 		},
 		"use": {
 			title: "use database",
