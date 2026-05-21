@@ -114,11 +114,15 @@ func TestCalculateCompletionReplacementRanges(t *testing.T) {
 	if got.Value != "prod" {
 		t.Fatalf("value = %q, want prod", got.Value)
 	}
-	if got.ReplaceFrom != 8 || got.ReplaceTo != 10 {
-		t.Fatalf("replacement range = %d:%d", got.ReplaceFrom, got.ReplaceTo)
+	if len(got.Result.Edits) != 1 {
+		t.Fatalf("completion edits = %#v", got.Result.Edits)
 	}
-	if got.Replacement != "prod" {
-		t.Fatalf("replacement = %q", got.Replacement)
+	edit := got.Result.Edits[0]
+	if edit.StartRune != 8 || edit.EndRune != 10 {
+		t.Fatalf("replacement range = %d:%d", edit.StartRune, edit.EndRune)
+	}
+	if edit.Text != "prod" {
+		t.Fatalf("replacement = %q", edit.Text)
 	}
 
 	hint := calculateCompletion("con", CompletionContext{}).Hint

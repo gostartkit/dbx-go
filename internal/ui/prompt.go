@@ -2,68 +2,25 @@ package ui
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"golang.org/x/term"
+
+	"pkg.gostartkit.com/dbx/internal/ui/editor"
 )
 
-type Completion struct {
-	Prefix      string
-	Suggestions []Suggestion
-	Hint        string
-}
-
-type Suggestion struct {
-	Value       string
-	Description string
-	Category    string
-	Replacement string
-	ReplaceFrom int
-	ReplaceTo   int
-}
-
-type Completer func(line string) Completion
+var ErrPromptCanceled = editor.ErrInputCanceled
 
 type Prompt struct {
-	reader    *bufio.Reader
-	out       io.Writer
-	inFile    *os.File
-	completer Completer
-	history   *HistoryNavigator
-	isTerm    func() bool
-	rawActive bool
-	label     string
-	current   string
-	cursor    int
-	session   *CompletionSession
+	reader   *bufio.Reader
+	out      io.Writer
+	inFile   *os.File
+	terminal *editor.Terminal
 }
-
-type rawModeWriter struct {
-	writer io.Writer
-}
-
-type completionResult struct {
-	Line   string
-	Cursor int
-}
-
-type CompletionSession struct {
-	BaseInput    string
-	BaseCursor   int
-	Suggestions  []Suggestion
-	Index        int
-	CommonResult completionResult
-	HasCommon    bool
-	ListShown    bool
-}
-
-var ErrPromptCanceled = errors.New("prompt canceled")
 
 func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 	var inFile *os.File
@@ -71,22 +28,21 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 		inFile = file
 	}
 
+	reader := bufio.NewReader(in)
 	return &Prompt{
-		reader: bufio.NewReader(in),
-		out:    out,
-		inFile: inFile,
-		isTerm: func() bool {
-			return inFile != nil && term.IsTerminal(int(inFile.Fd()))
-		},
+		reader:   reader,
+		out:      out,
+		inFile:   inFile,
+		terminal: editor.NewTerminal(reader, out, inFile),
 	}
 }
 
 func (p *Prompt) SetCompleter(completer Completer) {
-	p.completer = completer
+	p.terminal.SetCompleter(completer)
 }
 
 func (p *Prompt) SetHistory(entries []string) {
-	p.history = NewHistoryNavigator(entries)
+	p.terminal.SetHistory(entries)
 }
 
 func (p *Prompt) Writer() io.Writer {
@@ -94,29 +50,19 @@ func (p *Prompt) Writer() io.Writer {
 }
 
 func (p *Prompt) AppendHistory(entry string) bool {
-	if p.history == nil {
-		p.history = NewHistoryNavigator(nil)
-	}
-	return p.history.Add(entry)
+	return p.terminal.AppendHistory(entry)
 }
 
 func (p *Prompt) Println(args ...any) {
-	p.ClearLine()
-	fmt.Fprintln(p.systemWriter(), args...)
+	p.terminal.Println(args...)
 }
 
 func (p *Prompt) Printf(format string, args ...any) {
-	p.ClearLine()
-	fmt.Fprintf(p.systemWriter(), format, args...)
+	p.terminal.Printf(format, args...)
 }
 
 func (p *Prompt) ReadPrompt(label string) (string, error) {
-	if p.inFile != nil && p.isTerm != nil && p.isTerm() && p.completer != nil {
-		return p.readPromptInteractive(label)
-	}
-
-	fmt.Fprint(p.out, label)
-	return p.readLine()
+	return p.terminal.ReadLine(label)
 }
 
 func (p *Prompt) Ask(label, defaultValue string) (string, error) {
@@ -138,7 +84,7 @@ func (p *Prompt) Ask(label, defaultValue string) (string, error) {
 
 func (p *Prompt) AskPassword(label string) (string, error) {
 	fmt.Fprintf(p.out, "%s: ", label)
-	if p.inFile != nil && p.isTerm != nil && p.isTerm() {
+	if p.inFile != nil && term.IsTerminal(int(p.inFile.Fd())) {
 		value, err := term.ReadPassword(int(p.inFile.Fd()))
 		fmt.Fprintln(p.out)
 		if err != nil {
@@ -210,526 +156,16 @@ func (p *Prompt) Confirm(label string, defaultYes bool) (bool, error) {
 	}
 }
 
-func (p *Prompt) readPromptInteractive(label string) (string, error) {
-	state, err := term.MakeRaw(int(p.inFile.Fd()))
-	if err != nil {
-		return "", err
-	}
-	defer term.Restore(int(p.inFile.Fd()), state)
-	p.rawActive = true
-	p.label = label
-	p.current = ""
-	p.cursor = 0
-	p.resetCompletionSession()
-	defer func() {
-		p.rawActive = false
-		p.label = ""
-		p.current = ""
-		p.cursor = 0
-		p.resetCompletionSession()
-	}()
-
-	fmt.Fprint(p.out, label)
-
-	editor := newLineEditor(p.history)
-	for {
-		event, err := p.readKeyEvent()
-		if err != nil {
-			return "", err
-		}
-
-		if event.kind == keyTab {
-			completed := p.applyCompletionAtCursor(editor.String(), editor.Cursor())
-			editor.SetLine(completed.Line)
-			editor.cursor = completed.Cursor
-			p.redrawCurrentLine(label, editor.String(), editor.Cursor())
-			continue
-		}
-
-		p.resetCompletionSession()
-
-		result := editor.HandleKey(event)
-		switch {
-		case result.submit:
-			current := editor.String()
-			p.redrawLineWithCursor(label, current, editor.Cursor(), "")
-			p.writeNewline()
-			if p.history != nil {
-				p.history.Reset()
-			}
-			return strings.TrimSpace(current), nil
-		case result.cancel:
-			p.redrawLineWithCursor(label, editor.String(), editor.Cursor(), "")
-			p.writeNewline()
-			if p.history != nil {
-				p.history.Reset()
-			}
-			return "", ErrPromptCanceled
-		case result.eof:
-			p.writeNewline()
-			if p.history != nil {
-				p.history.Reset()
-			}
-			return "", io.EOF
-		case result.changed:
-			p.redrawCurrentLine(label, editor.String(), editor.Cursor())
-		}
-	}
-}
-
-func (p *Prompt) readKeyEvent() (keyEvent, error) {
-	b, err := p.reader.ReadByte()
-	if err != nil {
-		return keyEvent{}, err
-	}
-
-	switch b {
-	case '\n', '\r':
-		return keyEvent{kind: keyEnter}, nil
-	case '\t':
-		return keyEvent{kind: keyTab}, nil
-	case 1:
-		return keyEvent{kind: keyCtrlA}, nil
-	case 3:
-		return keyEvent{kind: keyCtrlC}, nil
-	case 4:
-		return keyEvent{kind: keyCtrlD}, nil
-	case 5:
-		return keyEvent{kind: keyCtrlE}, nil
-	case 8, 127:
-		return keyEvent{kind: keyBackspace}, nil
-	case 27:
-		return p.readEscapeSequence()
-	default:
-		if b < utf8.RuneSelf {
-			return keyEvent{kind: keyRune, r: rune(b)}, nil
-		}
-		if err := p.reader.UnreadByte(); err != nil {
-			return keyEvent{}, err
-		}
-		r, _, err := p.reader.ReadRune()
-		if err != nil {
-			return keyEvent{}, err
-		}
-		return keyEvent{kind: keyRune, r: r}, nil
-	}
-}
-
-func (p *Prompt) readEscapeSequence() (keyEvent, error) {
-	first, err := p.reader.ReadByte()
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return keyEvent{kind: keyIgnored}, nil
-		}
-		return keyEvent{}, err
-	}
-
-	switch first {
-	case '[':
-		return p.readCSISequence()
-	case 'O':
-		return p.readSS3Sequence()
-	default:
-		return keyEvent{kind: keyIgnored}, nil
-	}
-}
-
-func (p *Prompt) readCSISequence() (keyEvent, error) {
-	sequence := make([]byte, 0, 4)
-	for len(sequence) < 8 {
-		b, err := p.reader.ReadByte()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return keyEvent{kind: keyIgnored}, nil
-			}
-			return keyEvent{}, err
-		}
-		sequence = append(sequence, b)
-		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '~' {
-			break
-		}
-	}
-
-	switch string(sequence) {
-	case "A":
-		return keyEvent{kind: keyUp}, nil
-	case "B":
-		return keyEvent{kind: keyDown}, nil
-	case "C":
-		return keyEvent{kind: keyRight}, nil
-	case "D":
-		return keyEvent{kind: keyLeft}, nil
-	case "H", "1~", "7~":
-		return keyEvent{kind: keyHome}, nil
-	case "F", "4~", "8~":
-		return keyEvent{kind: keyEnd}, nil
-	case "3~":
-		return keyEvent{kind: keyDelete}, nil
-	default:
-		return keyEvent{kind: keyIgnored}, nil
-	}
-}
-
-func (p *Prompt) readSS3Sequence() (keyEvent, error) {
-	b, err := p.reader.ReadByte()
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return keyEvent{kind: keyIgnored}, nil
-		}
-		return keyEvent{}, err
-	}
-
-	switch b {
-	case 'H':
-		return keyEvent{kind: keyHome}, nil
-	case 'F':
-		return keyEvent{kind: keyEnd}, nil
-	default:
-		return keyEvent{kind: keyIgnored}, nil
-	}
-}
-
-func (p *Prompt) applyCompletion(current string) string {
-	return p.applyCompletionAtCursor(current, len([]rune(current))).Line
-}
-
-func (p *Prompt) applyCompletionAtCursor(current string, cursor int) completionResult {
-	result := completionResult{Line: current, Cursor: cursor}
-	if p.completer == nil {
-		return result
-	}
-
-	if p.session != nil && (current != p.session.BaseInput || cursor != p.session.BaseCursor) && !containsSuggestionResult(p.session, result) {
-		p.resetCompletionSession()
-	}
-
-	if p.session != nil && len(p.session.Suggestions) > 0 {
-		if !p.session.ListShown {
-			p.PrintSystemOutput(func(w io.Writer) {
-				p.printSuggestionsTo(w, p.session.Suggestions)
-				fmt.Fprintln(w)
-			})
-			p.session.ListShown = true
-			return result
-		}
-		selected := p.session.current()
-		p.session.advance()
-		return applySuggestionWithCursor(p.session.BaseInput, selected)
-	}
-
-	prefix := current[:runeIndexToByteIndex(current, cursor)]
-	completion := p.completer(prefix)
-	candidates := completionValues(completion)
-	if len(candidates) == 0 {
-		p.resetCompletionSession()
-		return result
-	}
-
-	if len(candidates) == 1 {
-		p.resetCompletionSession()
-		return applySuggestionWithCursor(current, completion.Suggestions[0])
-	}
-
-	p.session = newCompletionSession(current, cursor, completion.Suggestions)
-	if common, ok := commonSuggestionResult(current, p.session.Suggestions); ok && (common.Line != current || common.Cursor != cursor) {
-		p.session.CommonResult = common
-		p.session.HasCommon = true
-		if matched := matchingSuggestionIndex(p.session.BaseInput, p.session.Suggestions, common); matched >= 0 {
-			p.session.Index = (matched + 1) % len(p.session.Suggestions)
-		}
-		return common
-	}
-	selected := p.session.current()
-	p.session.advance()
-	return applySuggestionWithCursor(p.session.BaseInput, selected)
-}
-
-func (p *Prompt) redrawLine(label string, current string, hint string) {
-	p.redrawLineWithCursor(label, current, len([]rune(current)), hint)
-}
-
-func (p *Prompt) redrawLineWithCursor(label string, current string, cursor int, hint string) {
-	_ = hint
-	fmt.Fprintf(p.out, "\r\033[2K%s%s", label, current)
-	runes := []rune(current)
-	if cursor < 0 {
-		cursor = 0
-	}
-	if cursor > len(runes) {
-		cursor = len(runes)
-	}
-	if moveLeft := displayWidthRunes(runes[cursor:]); moveLeft > 0 {
-		fmt.Fprintf(p.out, "\033[%dD", moveLeft)
-	}
-}
-
 func (p *Prompt) ClearLine() {
-	if p.isTerm == nil || !p.isTerm() {
-		return
-	}
-	fmt.Fprint(p.out, "\r\033[2K")
+	p.terminal.ClearLine()
 }
 
 func (p *Prompt) Redraw() {
-	if !p.rawActive {
-		return
-	}
-	p.redrawLineWithCursor(p.label, p.current, p.cursor, "")
+	p.terminal.Redraw()
 }
 
 func (p *Prompt) PrintSystemOutput(fn func(io.Writer)) {
-	if p.rawActive {
-		p.ClearLine()
-		p.writeNewline()
-		fn(p.systemWriter())
-		p.Redraw()
-		return
-	}
-	fn(p.systemWriter())
-}
-
-func (p *Prompt) systemWriter() io.Writer {
-	if p.rawActive {
-		return rawModeWriter{writer: p.out}
-	}
-	return p.out
-}
-
-func (p *Prompt) writeNewline() {
-	if p.rawActive {
-		fmt.Fprint(p.out, "\r\n")
-		return
-	}
-	fmt.Fprint(p.out, "\n")
-}
-
-func (p *Prompt) redrawCurrentLine(label string, current string, cursor int) {
-	p.label = label
-	p.current = current
-	p.cursor = cursor
-	p.redrawLineWithCursor(label, current, cursor, "")
-}
-
-func (p *Prompt) resetCompletionSession() {
-	p.session = nil
-}
-
-func completionValues(completion Completion) []string {
-	values := make([]string, 0, len(completion.Suggestions))
-	for _, suggestion := range completion.Suggestions {
-		values = append(values, suggestion.Value)
-	}
-	return values
-}
-
-func newCompletionSession(baseInput string, baseCursor int, suggestions []Suggestion) *CompletionSession {
-	if len(suggestions) == 0 {
-		return nil
-	}
-	cloned := make([]Suggestion, 0, len(suggestions))
-	seen := make(map[string]struct{}, len(suggestions))
-	for _, suggestion := range suggestions {
-		if _, ok := seen[suggestion.Value]; ok {
-			continue
-		}
-		seen[suggestion.Value] = struct{}{}
-		cloned = append(cloned, suggestion)
-	}
-	if len(cloned) == 0 {
-		return nil
-	}
-	return &CompletionSession{
-		BaseInput:   baseInput,
-		BaseCursor:  baseCursor,
-		Suggestions: cloned,
-	}
-}
-
-func (s *CompletionSession) current() Suggestion {
-	if s == nil || len(s.Suggestions) == 0 {
-		return Suggestion{}
-	}
-	if s.Index < 0 || s.Index >= len(s.Suggestions) {
-		s.Index = 0
-	}
-	return s.Suggestions[s.Index]
-}
-
-func (s *CompletionSession) advance() {
-	if s == nil || len(s.Suggestions) == 0 {
-		return
-	}
-	s.Index = (s.Index + 1) % len(s.Suggestions)
-}
-
-func containsSuggestionResult(session *CompletionSession, current completionResult) bool {
-	if session == nil {
-		return false
-	}
-	if session.HasCommon && current == session.CommonResult {
-		return true
-	}
-	for _, suggestion := range session.Suggestions {
-		if applySuggestionWithCursor(session.BaseInput, suggestion) == current {
-			return true
-		}
-	}
-	return false
-}
-
-func applySuggestion(base string, suggestion Suggestion) string {
-	return applySuggestionWithCursor(base, suggestion).Line
-}
-
-func applySuggestionWithCursor(base string, suggestion Suggestion) completionResult {
-	replacement := suggestion.Replacement
-	if replacement == "" {
-		replacement = suggestion.Value
-	}
-	from, to := normalizedReplacementRange(base, suggestion)
-	line := base[:from] + replacement + base[to:]
-	return completionResult{
-		Line:   line,
-		Cursor: byteIndexToRuneIndex(line, from+len(replacement)),
-	}
-}
-
-func commonSuggestionResult(base string, suggestions []Suggestion) (completionResult, bool) {
-	if len(suggestions) < 2 {
-		return completionResult{}, false
-	}
-
-	from, to := normalizedReplacementRange(base, suggestions[0])
-	common := suggestionReplacement(suggestions[0])
-	for _, suggestion := range suggestions[1:] {
-		nextFrom, nextTo := normalizedReplacementRange(base, suggestion)
-		if nextFrom != from || nextTo != to {
-			return completionResult{}, false
-		}
-		common = commonPrefix(common, suggestionReplacement(suggestion))
-		if common == "" {
-			return completionResult{}, false
-		}
-	}
-	result := applySuggestionWithCursor(base, Suggestion{
-		Replacement: common,
-		ReplaceFrom: from,
-		ReplaceTo:   to,
-	})
-	if result.Line == base {
-		return completionResult{}, false
-	}
-	return result, true
-}
-
-func matchingSuggestionIndex(base string, suggestions []Suggestion, current completionResult) int {
-	for idx, suggestion := range suggestions {
-		if applySuggestionWithCursor(base, suggestion) == current {
-			return idx
-		}
-	}
-	return -1
-}
-
-func (p *Prompt) printSuggestions(suggestions []Suggestion) {
-	p.printSuggestionsTo(p.out, suggestions)
-}
-
-func (p *Prompt) printSuggestionsTo(w io.Writer, suggestions []Suggestion) {
-	maxWidth := 0
-	for _, suggestion := range suggestions {
-		if len(suggestion.Value) > maxWidth {
-			maxWidth = len(suggestion.Value)
-		}
-	}
-	for _, suggestion := range suggestions {
-		if suggestion.Description == "" {
-			fmt.Fprintln(w, suggestion.Value)
-			continue
-		}
-		fmt.Fprintf(w, "%-*s  %s\n", maxWidth, suggestion.Value, suggestion.Description)
-	}
-}
-
-func (w rawModeWriter) Write(p []byte) (int, error) {
-	text := string(p)
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	text = strings.ReplaceAll(text, "\n", "\r\n")
-	_, err := io.WriteString(w.writer, text)
-	if err != nil {
-		return 0, err
-	}
-	return len(p), nil
-}
-
-func suggestionReplacement(suggestion Suggestion) string {
-	if suggestion.Replacement != "" {
-		return suggestion.Replacement
-	}
-	return suggestion.Value
-}
-
-func normalizedReplacementRange(base string, suggestion Suggestion) (int, int) {
-	from := suggestion.ReplaceFrom
-	to := suggestion.ReplaceTo
-	if from < 0 {
-		from = 0
-	}
-	if to < from {
-		to = from
-	}
-	if from > len(base) {
-		from = len(base)
-	}
-	if to > len(base) {
-		to = len(base)
-	}
-	return from, to
-}
-
-func runeIndexToByteIndex(value string, runeIndex int) int {
-	if runeIndex <= 0 {
-		return 0
-	}
-	runesSeen := 0
-	for byteIndex := range value {
-		if runesSeen == runeIndex {
-			return byteIndex
-		}
-		runesSeen++
-	}
-	return len(value)
-}
-
-func byteIndexToRuneIndex(value string, byteIndex int) int {
-	if byteIndex <= 0 {
-		return 0
-	}
-	if byteIndex >= len(value) {
-		return len([]rune(value))
-	}
-	runeIndex := 0
-	for idx := range value {
-		if idx >= byteIndex {
-			return runeIndex
-		}
-		runeIndex++
-	}
-	return runeIndex
-}
-
-func commonPrefix(left string, right string) string {
-	leftRunes := []rune(left)
-	rightRunes := []rune(right)
-	limit := len(leftRunes)
-	if len(rightRunes) < limit {
-		limit = len(rightRunes)
-	}
-	index := 0
-	for index < limit && leftRunes[index] == rightRunes[index] {
-		index++
-	}
-	return string(leftRunes[:index])
+	p.terminal.PrintSystemOutput(fn)
 }
 
 func (p *Prompt) readLine() (string, error) {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/ui"
@@ -144,24 +145,27 @@ func calculateCompletion(line string, ctx CompletionContext) ui.Completion {
 		globals:  &cliGlobals{Format: "text"},
 		resolver: staticCompletionResolver{ctx: ctx},
 	}).buildApp()
-	return completionFromApp(replApp, line, staticCompletionResolver{ctx: ctx})
+	return completionFromApp(replApp, ui.NewSingleLineCompletionRequest(line, len([]rune(line))), staticCompletionResolver{ctx: ctx})
 }
 
-func completionFromApp(app *cmd.App, line string, resolver completionResolver) ui.Completion {
+func completionFromApp(app *cmd.App, request ui.CompletionRequest, resolver completionResolver) ui.Completion {
 	if app == nil {
 		return ui.Completion{}
 	}
 
+	line := request.CurrentLinePrefix()
 	if strings.HasPrefix(strings.TrimSpace(line), "help") {
-		return helpTopicCompletion(line)
+		return helpTopicCompletion(request)
 	}
 
 	args, current, _ := cmd.SplitLineForCompletion(line)
 	replaceFrom := len(line) - len(current)
 	replaceTo := len(line)
+	startRune := utf8.RuneCountInString(line[:replaceFrom])
+	endRune := utf8.RuneCountInString(line[:replaceTo])
 
 	if len(args) == 1 && args[0] == "exec" && !strings.HasPrefix(current, "-") {
-		suggestions := templateNameCompletion(resolverTemplates(resolver), current, replaceFrom, replaceTo)
+		suggestions := templateNameCompletion(resolverTemplates(resolver), current, startRune, endRune)
 		return ui.Completion{
 			Prefix:      current,
 			Suggestions: suggestions,
@@ -184,9 +188,14 @@ func completionFromApp(app *cmd.App, line string, resolver completionResolver) u
 			Value:       result.Value,
 			Description: description,
 			Category:    result.Kind,
-			Replacement: result.Value,
-			ReplaceFrom: replaceFrom,
-			ReplaceTo:   replaceTo,
+			Result: ui.CompletionResult{
+				Edits: []ui.CompletionEdit{{
+					StartRune: startRune,
+					EndRune:   endRune,
+					Text:      result.Value,
+				}},
+				Cursor: startRune + len([]rune(result.Value)),
+			},
 		})
 	}
 
@@ -197,7 +206,7 @@ func completionFromApp(app *cmd.App, line string, resolver completionResolver) u
 	}
 }
 
-func templateNameCompletion(values []string, current string, replaceFrom int, replaceTo int) []ui.Suggestion {
+func templateNameCompletion(values []string, current string, startRune int, endRune int) []ui.Suggestion {
 	suggestions := make([]ui.Suggestion, 0, len(values))
 	for _, value := range values {
 		if current != "" && !strings.HasPrefix(value, current) {
@@ -207,18 +216,26 @@ func templateNameCompletion(values []string, current string, replaceFrom int, re
 			Value:       value,
 			Description: "operation",
 			Category:    "value",
-			Replacement: value,
-			ReplaceFrom: replaceFrom,
-			ReplaceTo:   replaceTo,
+			Result: ui.CompletionResult{
+				Edits: []ui.CompletionEdit{{
+					StartRune: startRune,
+					EndRune:   endRune,
+					Text:      value,
+				}},
+				Cursor: startRune + len([]rune(value)),
+			},
 		})
 	}
 	return suggestions
 }
 
-func helpTopicCompletion(line string) ui.Completion {
+func helpTopicCompletion(request ui.CompletionRequest) ui.Completion {
+	line := request.CurrentLinePrefix()
 	args, current, _ := cmd.SplitLineForCompletion(line)
 	replaceFrom := len(line) - len(current)
 	replaceTo := len(line)
+	startRune := utf8.RuneCountInString(line[:replaceFrom])
+	endRune := utf8.RuneCountInString(line[:replaceTo])
 	suggestions := make([]ui.Suggestion, 0)
 	for _, suggestion := range helpCompletionTopics() {
 		if current != "" && !strings.HasPrefix(suggestion.Value, current) {
@@ -228,9 +245,14 @@ func helpTopicCompletion(line string) ui.Completion {
 			Value:       suggestion.Value,
 			Description: suggestion.Description,
 			Category:    suggestion.Category,
-			Replacement: suggestion.Value,
-			ReplaceFrom: replaceFrom,
-			ReplaceTo:   replaceTo,
+			Result: ui.CompletionResult{
+				Edits: []ui.CompletionEdit{{
+					StartRune: startRune,
+					EndRune:   endRune,
+					Text:      suggestion.Value,
+				}},
+				Cursor: startRune + len([]rune(suggestion.Value)),
+			},
 		})
 	}
 	prefix := current
@@ -316,19 +338,21 @@ func completionHint(prefix string, suggestions []ui.Suggestion) string {
 }
 
 func commonPrefix(left string, right string) string {
-	limit := len(left)
-	if len(right) < limit {
-		limit = len(right)
+	leftRunes := []rune(left)
+	rightRunes := []rune(right)
+	limit := len(leftRunes)
+	if len(rightRunes) < limit {
+		limit = len(rightRunes)
 	}
 	index := 0
-	for index < limit && left[index] == right[index] {
+	for index < limit && leftRunes[index] == rightRunes[index] {
 		index++
 	}
-	return left[:index]
+	return string(leftRunes[:index])
 }
 
-func (a *Application) completeInput(line string) ui.Completion {
-	return completionFromApp(a.replCommandApp(), line, a)
+func (a *Application) completeInput(request ui.CompletionRequest) ui.Completion {
+	return completionFromApp(a.replCommandApp(), request, a)
 }
 
 func resolverConnections(resolver completionResolver) []CompletionConnection {

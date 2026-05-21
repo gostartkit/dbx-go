@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"pkg.gostartkit.com/dbx/internal/config"
+	"pkg.gostartkit.com/dbx/internal/ui"
 )
 
 func BenchmarkBuildApp(b *testing.B) {
@@ -36,7 +37,7 @@ func BenchmarkCompletionRoot(b *testing.B) {
 	app := benchmarkCompletionApp(b)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		completion := app.completeInput("")
+		completion := app.completeInput(ui.NewSingleLineCompletionRequest("", 0))
 		if len(completion.Suggestions) == 0 {
 			b.Fatal("expected root completion suggestions")
 		}
@@ -47,7 +48,7 @@ func BenchmarkCompletionShow(b *testing.B) {
 	app := benchmarkCompletionApp(b)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		completion := app.completeInput("show ")
+		completion := app.completeInput(ui.NewSingleLineCompletionRequest("show ", len([]rune("show "))))
 		if len(completion.Suggestions) == 0 {
 			b.Fatal("expected show completion suggestions")
 		}
