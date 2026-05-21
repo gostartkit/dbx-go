@@ -50,19 +50,24 @@ type ParseError struct {
 }
 
 type SyntaxContext struct {
-	Program       *Program
-	Command       *CommandNode
-	Node          Node
-	CursorRune    int
-	CommandPath   []string
-	ParentPath    []string
-	InCommandName bool
-	InSubcommand  bool
-	InArg         bool
-	InFlagName    bool
-	InFlagValue   bool
-	CurrentFlag   string
-	ArgIndex      int
+	Program            *Program
+	Command            *CommandNode
+	Node               Node
+	CursorRune         int
+	CommandPath        []string
+	ParentPath         []string
+	InCommandName      bool
+	InSubcommand       bool
+	InArg              bool
+	InFlagName         bool
+	InFlagValue        bool
+	CurrentFlag        string
+	ArgIndex           int
+	CommandSpec        *CommandSpec
+	ArgSpec            *ArgSpec
+	FlagSpec           *FlagSpec
+	ExpectedValueType  ValueType
+	CompletionProvider string
 }
 
 func (p *Program) Range() Range {
@@ -400,6 +405,16 @@ func BuildSyntaxContext(program *Program, cursorRune int, knownPaths [][]string)
 	return ctx
 }
 
+func BuildSyntaxContextWithRegistry(program *Program, cursorRune int, registry *Registry) SyntaxContext {
+	knownPaths := [][]string(nil)
+	if registry != nil {
+		knownPaths = registry.KnownPaths(true)
+	}
+	ctx := BuildSyntaxContext(program, cursorRune, knownPaths)
+	annotateSyntaxContextWithRegistry(&ctx, registry)
+	return ctx
+}
+
 func annotateCommandNode(command *CommandNode, knownPaths [][]string) {
 	if command == nil || len(command.Positionals) == 0 {
 		return
@@ -545,4 +560,39 @@ func newPipelineNode(commands []*CommandNode) *PipelineNode {
 		},
 	}
 	return node
+}
+
+func annotateSyntaxContextWithRegistry(ctx *SyntaxContext, registry *Registry) {
+	if ctx == nil || registry == nil {
+		return
+	}
+	commandSpec, _ := registry.LookupCommand(ctx.CommandPath)
+	if commandSpec == nil && len(ctx.ParentPath) > 0 {
+		commandSpec, _ = registry.LookupCommand(ctx.ParentPath)
+	}
+	ctx.CommandSpec = commandSpec
+
+	if ctx.InFlagName && commandSpec != nil {
+		ctx.FlagSpec = commandSpec.FindFlag(ctx.CurrentFlag)
+		if ctx.FlagSpec != nil {
+			ctx.ExpectedValueType = ctx.FlagSpec.ValueType
+			ctx.CompletionProvider = ctx.FlagSpec.CompletionProvider
+		}
+		return
+	}
+	if ctx.InFlagValue && commandSpec != nil {
+		ctx.FlagSpec = commandSpec.FindFlag(ctx.CurrentFlag)
+		if ctx.FlagSpec != nil {
+			ctx.ExpectedValueType = ctx.FlagSpec.ValueType
+			ctx.CompletionProvider = ctx.FlagSpec.CompletionProvider
+		}
+		return
+	}
+	if ctx.InArg && commandSpec != nil {
+		ctx.ArgSpec = commandSpec.ArgSpec(ctx.ArgIndex)
+		if ctx.ArgSpec != nil {
+			ctx.ExpectedValueType = ctx.ArgSpec.ValueType
+			ctx.CompletionProvider = ctx.ArgSpec.CompletionProvider
+		}
+	}
 }

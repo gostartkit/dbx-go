@@ -128,13 +128,7 @@ func TestParseProgramCommandsAndFlags(t *testing.T) {
 func TestBuildSyntaxContext(t *testing.T) {
 	t.Parallel()
 
-	knownPaths := [][]string{
-		{"exec"},
-		{"connection", "create"},
-		{"template", "render"},
-		{"help"},
-		{"show", "columns"},
-	}
+	registry := DefaultRegistry()
 
 	tests := []struct {
 		name            string
@@ -178,22 +172,22 @@ func TestBuildSyntaxContext(t *testing.T) {
 			wantFlag:      "--role",
 		},
 		{
-			name:         "connection create arg",
-			input:        "connection create ",
-			cursor:       len([]rune("connection create ")),
-			wantPath:     []string{"connection", "create"},
-			wantParent:   []string{"connection", "create"},
+			name:         "connection use arg",
+			input:        "connection use ",
+			cursor:       len([]rune("connection use ")),
+			wantPath:     []string{"connection", "use"},
+			wantParent:   []string{"connection", "use"},
 			wantArg:      true,
 			wantArgIndex: 0,
 		},
 		{
 			name:         "flag name partial",
-			input:        "connection create dev --dr",
-			cursor:       len([]rune("connection create dev --dr")),
-			wantPath:     []string{"connection", "create"},
+			input:        "exec create-user --dr",
+			cursor:       len([]rune("exec create-user --dr")),
+			wantPath:     []string{"exec"},
 			wantFlagName: true,
 			wantFlag:     "--dr",
-			wantParent:   []string{"connection", "create"},
+			wantParent:   []string{"exec"},
 			wantArgIndex: 0,
 		},
 		{
@@ -230,7 +224,7 @@ func TestBuildSyntaxContext(t *testing.T) {
 			t.Parallel()
 
 			program := ParseProgram(test.input)
-			ctx := BuildSyntaxContext(program, test.cursor, knownPaths)
+			ctx := BuildSyntaxContextWithRegistry(program, test.cursor, registry)
 			if !equalStrings(ctx.CommandPath, test.wantPath) {
 				t.Fatalf("command path = %#v, want %#v", ctx.CommandPath, test.wantPath)
 			}
@@ -247,6 +241,41 @@ func TestBuildSyntaxContext(t *testing.T) {
 				t.Fatalf("arg index = %d, want %d", ctx.ArgIndex, test.wantArgIndex)
 			}
 		})
+	}
+}
+
+func TestBuildSyntaxContextWithSchemaMetadata(t *testing.T) {
+	t.Parallel()
+
+	registry := DefaultRegistry()
+	tests := []struct {
+		input     string
+		cursor    int
+		wantType  ValueType
+		wantRoute string
+		wantFlag  string
+	}{
+		{input: "exec ", cursor: len([]rune("exec ")), wantType: ValueOperation, wantRoute: "operation"},
+		{input: "template render ", cursor: len([]rune("template render ")), wantType: ValueTemplate, wantRoute: "template"},
+		{input: "connection use ", cursor: len([]rune("connection use ")), wantType: ValueConnection, wantRoute: "connection"},
+		{input: "database use ", cursor: len([]rune("database use ")), wantType: ValueDatabase, wantRoute: "database"},
+		{input: "exec --dry-run", cursor: len([]rune("exec --dry-run")), wantType: ValueBool, wantFlag: "--dry-run"},
+	}
+
+	for _, test := range tests {
+		program := ParseProgram(test.input)
+		ctx := BuildSyntaxContextWithRegistry(program, test.cursor, registry)
+		if ctx.ExpectedValueType != test.wantType {
+			t.Fatalf("%q expected value type %q, got %q", test.input, test.wantType, ctx.ExpectedValueType)
+		}
+		if test.wantRoute != "" && ctx.CompletionProvider != test.wantRoute {
+			t.Fatalf("%q expected route %q, got %q", test.input, test.wantRoute, ctx.CompletionProvider)
+		}
+		if test.wantFlag != "" {
+			if ctx.FlagSpec == nil || ctx.FlagSpec.Name != test.wantFlag {
+				t.Fatalf("%q expected flag spec %q, got %#v", test.input, test.wantFlag, ctx.FlagSpec)
+			}
+		}
 	}
 }
 

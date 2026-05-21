@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"pkg.gostartkit.com/dbx/internal/commandlang"
 )
 
 type helpEntry struct {
@@ -306,6 +308,16 @@ func printHelpTopic(prompt printer, topic string) error {
 		}
 		if entry.body != "" {
 			prompt.Println(entry.body)
+		}
+		return nil
+	}
+
+	if doc, ok := commandlang.DefaultRegistry().Help(topic); ok {
+		if doc.Title != "" {
+			prompt.Println(doc.Title)
+		}
+		if doc.Body != "" {
+			prompt.Println(doc.Body)
 		}
 		return nil
 	}

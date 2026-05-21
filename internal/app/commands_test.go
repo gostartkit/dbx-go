@@ -131,6 +131,15 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 	if strings.Contains(joined, "user <name>") {
 		t.Fatalf("help output still contains removed user subcommand: %q", joined)
 	}
+
+	prompt.lines = nil
+	if err := printHelpTopic(&prompt, "template"); err != nil {
+		t.Fatalf("printHelpTopic returned error: %v", err)
+	}
+	joined = strings.Join(prompt.lines, "\n")
+	if !strings.Contains(joined, "Subcommands:") || !strings.Contains(joined, "render") {
+		t.Fatalf("schema help output missing template subcommands: %q", joined)
+	}
 }
 
 func TestREPLHelpCommandHasOutput(t *testing.T) {

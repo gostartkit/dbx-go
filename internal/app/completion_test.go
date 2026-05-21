@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"pkg.gostartkit.com/dbx/internal/commandlang"
 	"pkg.gostartkit.com/dbx/internal/ui"
 )
 
@@ -153,6 +154,11 @@ func TestCalculateCompletionASTSubcommandAndTemplateRender(t *testing.T) {
 		Templates: []string{"create-user", "create-database"},
 	})
 	assertSuggestionsContainAll(t, suggestionValues(renderCompletion), []string{"create-user", "create-database"})
+
+	connectionUse := calculateCompletion("connection use pr", CompletionContext{
+		Connections: []CompletionConnection{{Name: "prod", Driver: "mysql", Mode: "ssh"}},
+	})
+	assertSuggestionsContainAll(t, suggestionValues(connectionUse), []string{"prod"})
 }
 
 func TestBuildProviderContextFlagValueSyntax(t *testing.T) {
@@ -174,6 +180,37 @@ func TestBuildProviderContextFlagValueSyntax(t *testing.T) {
 		t.Fatalf("Complete returned error: %v", err)
 	}
 	assertSuggestionsContainAll(t, suggestionValues(ui.Completion{Suggestions: suggestions}), []string{"readonly"})
+}
+
+func TestFlagCompletionUsesSchemaFlags(t *testing.T) {
+	t.Parallel()
+
+	completion := calculateCompletion("exec --dr", CompletionContext{})
+	assertSuggestionsContainAll(t, suggestionValues(completion), []string{"--dry-run"})
+}
+
+func TestEnumFlagValueCompletionUsesSchemaEnumValues(t *testing.T) {
+	t.Parallel()
+
+	ctx := &providerContext{
+		syntaxContext: commandlang.SyntaxContext{
+			InFlagValue: true,
+			FlagSpec: &commandlang.FlagSpec{
+				Name:       "--mode",
+				ValueType:  commandlang.ValueEnum,
+				EnumValues: []string{"readonly", "admin"},
+			},
+		},
+		expectingFlag: "--mode",
+		replaceStart:  0,
+		replaceEnd:    0,
+	}
+
+	suggestions, err := flagValueProvider{}.Complete(ctx)
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+	assertSuggestionsContainAll(t, suggestionValues(ui.Completion{Suggestions: suggestions}), []string{"readonly", "admin"})
 }
 
 func assertSuggestionsMissingAll(t *testing.T, values []string, missing []string) {

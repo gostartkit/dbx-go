@@ -39,6 +39,7 @@ type providerContext struct {
 	resolver        completionResolver
 	app             *cmd.App
 	application     *Application
+	registry        *commandlang.Registry
 }
 
 type commandProvider struct{}
@@ -118,15 +119,15 @@ func completionFromApp(app *cmd.App, request ui.CompletionRequest, resolver comp
 func buildProviderContext(app *cmd.App, request ui.CompletionRequest, resolver completionResolver) *providerContext {
 	fullPrefix := logicalCompletionPrefix(request.Buffer, request.Cursor)
 	localPrefix := request.CurrentLinePrefix()
-	knownPaths := replKnownCommandPaths()
+	registry := commandlang.DefaultRegistry()
 	fullTokens := commandlang.Lex(fullPrefix)
 	localTokens := commandlang.Lex(localPrefix)
 	fullContext := commandlang.BuildCommandContext(fullTokens, len([]rune(fullPrefix)))
 	localContext := commandlang.BuildCommandContext(localTokens, len([]rune(localPrefix)))
 	fullProgram := commandlang.ParseTokens(fullTokens)
 	localProgram := commandlang.ParseTokens(localTokens)
-	fullSyntax := commandlang.BuildSyntaxContext(fullProgram, len([]rune(fullPrefix)), knownPaths)
-	localSyntax := commandlang.BuildSyntaxContext(localProgram, len([]rune(localPrefix)), knownPaths)
+	fullSyntax := commandlang.BuildSyntaxContextWithRegistry(fullProgram, len([]rune(fullPrefix)), registry)
+	localSyntax := commandlang.BuildSyntaxContextWithRegistry(localProgram, len([]rune(localPrefix)), registry)
 	replaceStart, replaceEnd, currentValue, currentFlag := completionEditRangeFromSyntax(localSyntax, len([]rune(localPrefix)))
 	if replaceStart == replaceEnd && currentValue == "" && currentFlag == "" {
 		replaceStart, replaceEnd, currentValue, currentFlag = completionEditRange(localContext, len([]rune(localPrefix)))
@@ -164,11 +165,12 @@ func buildProviderContext(app *cmd.App, request ui.CompletionRequest, resolver c
 		resolver:        resolver,
 		app:             app,
 		application:     applicationFromResolver(resolver),
+		registry:        registry,
 	}
 }
 
 func (p commandProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	if slices.Equal(ctx.commandPath, []string{"help"}) && ctx.syntaxContext.InArg {
+	if schemaCompletionRoute(ctx) == "topic" {
 		suggestions := make([]ui.Suggestion, 0)
 		for _, suggestion := range helpCompletionTopics() {
 			if ctx.currentValue != "" && !strings.HasPrefix(suggestion.Value, ctx.currentValue) {
@@ -179,6 +181,19 @@ func (p commandProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error)
 		return suggestions, nil
 	}
 	if !ctx.syntaxContext.InCommandName && !ctx.syntaxContext.InSubcommand {
+		if ctx.syntaxContext.CommandSpec == nil && len(ctx.commandPath) > 0 {
+			children := directChildCommands(ctx.commandPath)
+			if len(children) > 0 {
+				suggestions := make([]ui.Suggestion, 0, len(children))
+				for _, child := range children {
+					if ctx.currentValue != "" && !strings.HasPrefix(child.Value, ctx.currentValue) {
+						continue
+					}
+					suggestions = append(suggestions, newCompletionSuggestion(ctx.replaceStart, ctx.replaceEnd, child.Value, child.Value, child.Description, "command"))
+				}
+				return suggestions, nil
+			}
+		}
 		return nil, nil
 	}
 
@@ -186,7 +201,7 @@ func (p commandProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error)
 	if ctx.syntaxContext.InCommandName {
 		parent = nil
 	}
-	children := directChildCommands(parent)
+	children := mergeCommandSuggestions(schemaChildCommands(ctx.registry, parent), directChildCommands(parent))
 	if len(children) == 0 {
 		return nil, nil
 	}
@@ -201,7 +216,7 @@ func (p commandProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error)
 }
 
 func (p operationProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	if !slices.Equal(ctx.commandPath, []string{"exec"}) || !ctx.syntaxContext.InArg || ctx.positionalIndex != 0 {
+	if schemaCompletionRoute(ctx) != "operation" && (!slices.Equal(ctx.commandPath, []string{"exec"}) || !ctx.syntaxContext.InArg || ctx.positionalIndex != 0) {
 		return nil, nil
 	}
 	values := operationNames(ctx.resolver, ctx.application)
@@ -216,12 +231,14 @@ func (p operationProvider) Complete(ctx *providerContext) ([]ui.Suggestion, erro
 }
 
 func (p templateProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	switch {
-	case slices.Equal(ctx.commandPath, []string{"describe", "template"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"template", "validate"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"template", "render"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	default:
-		return nil, nil
+	if schemaCompletionRoute(ctx) != "template" {
+		switch {
+		case slices.Equal(ctx.commandPath, []string{"describe", "template"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		case slices.Equal(ctx.commandPath, []string{"template", "validate"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		case slices.Equal(ctx.commandPath, []string{"template", "render"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		default:
+			return nil, nil
+		}
 	}
 	values := resolverTemplates(ctx.resolver)
 	suggestions := make([]ui.Suggestion, 0, len(values))
@@ -235,12 +252,14 @@ func (p templateProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error
 }
 
 func (p connectionProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	switch {
-	case slices.Equal(ctx.commandPath, []string{"connect"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"show", "connection"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"drop", "connection"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	default:
-		return nil, nil
+	if schemaCompletionRoute(ctx) != "connection" {
+		switch {
+		case slices.Equal(ctx.commandPath, []string{"connect"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		case slices.Equal(ctx.commandPath, []string{"show", "connection"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		case slices.Equal(ctx.commandPath, []string{"drop", "connection"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		default:
+			return nil, nil
+		}
 	}
 	suggestions := make([]ui.Suggestion, 0)
 	for _, connection := range resolverConnections(ctx.resolver) {
@@ -253,10 +272,12 @@ func (p connectionProvider) Complete(ctx *providerContext) ([]ui.Suggestion, err
 }
 
 func (p databaseProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	switch {
-	case slices.Equal(ctx.commandPath, []string{"use", "database"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	default:
-		return nil, nil
+	if schemaCompletionRoute(ctx) != "database" {
+		switch {
+		case slices.Equal(ctx.commandPath, []string{"use", "database"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		default:
+			return nil, nil
+		}
 	}
 	values := ctx.resolver.Databases()
 	suggestions := make([]ui.Suggestion, 0, len(values))
@@ -270,12 +291,14 @@ func (p databaseProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error
 }
 
 func (p tableProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	switch {
-	case slices.Equal(ctx.commandPath, []string{"show", "table"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"show", "columns"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"show", "rows"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-	default:
-		return nil, nil
+	if schemaCompletionRoute(ctx) != "table" {
+		switch {
+		case slices.Equal(ctx.commandPath, []string{"show", "table"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		case slices.Equal(ctx.commandPath, []string{"show", "columns"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		case slices.Equal(ctx.commandPath, []string{"show", "rows"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		default:
+			return nil, nil
+		}
 	}
 	values := ctx.resolver.Tables()
 	suggestions := make([]ui.Suggestion, 0, len(values))
@@ -289,7 +312,7 @@ func (p tableProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 }
 
 func (p userProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	if !slices.Equal(ctx.commandPath, []string{"drop", "user"}) || !ctx.syntaxContext.InArg || ctx.positionalIndex != 0 {
+	if schemaCompletionRoute(ctx) != "user" && (!slices.Equal(ctx.commandPath, []string{"drop", "user"}) || !ctx.syntaxContext.InArg || ctx.positionalIndex != 0) {
 		return nil, nil
 	}
 	values := ctx.resolver.Users()
@@ -308,7 +331,10 @@ func (p schemaProvider) Complete(*providerContext) ([]ui.Suggestion, error) {
 }
 
 func (p flagProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	flags := flagsForCommandPath(ctx.commandPath)
+	flags := schemaFlagNames(ctx.syntaxContext.CommandSpec)
+	if len(flags) == 0 {
+		flags = flagsForCommandPath(ctx.commandPath)
+	}
 	if len(flags) == 0 {
 		return nil, nil
 	}
@@ -334,6 +360,16 @@ func (p flagProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 func (p flagValueProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	if ctx.expectingFlag == "" || !ctx.syntaxContext.InFlagValue {
 		return nil, nil
+	}
+	if ctx.syntaxContext.FlagSpec != nil && len(ctx.syntaxContext.FlagSpec.EnumValues) > 0 {
+		suggestions := make([]ui.Suggestion, 0, len(ctx.syntaxContext.FlagSpec.EnumValues))
+		for _, value := range ctx.syntaxContext.FlagSpec.EnumValues {
+			if ctx.currentValue != "" && !strings.HasPrefix(value, ctx.currentValue) {
+				continue
+			}
+			suggestions = append(suggestions, newCompletionSuggestion(ctx.replaceStart, ctx.replaceEnd, value, value, "enum", "enum"))
+		}
+		return suggestions, nil
 	}
 	switch ctx.expectingFlag {
 	case "--tag":
@@ -375,36 +411,70 @@ func directChildCommands(parent []string) []Suggestion {
 	return suggestions
 }
 
-func replKnownCommandPaths() [][]string {
-	specs := replCommandSpecs()
-	seen := make(map[string]struct{}, len(specs))
-	paths := make([][]string, 0, len(specs))
-	for _, spec := range specs {
-		if spec.Hidden || (spec.Category != "command" && spec.Category != "alias") {
-			continue
-		}
-		values := commandlangTokensForPath(spec.Path)
-		if len(values) == 0 {
-			continue
-		}
-		key := strings.Join(values, "\x00")
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		paths = append(paths, values)
+func schemaChildCommands(registry *commandlang.Registry, parent []string) []Suggestion {
+	if registry == nil {
+		return nil
 	}
-	for _, values := range [][]string{
-		{"template", "render"},
-	} {
-		key := strings.Join(values, "\x00")
-		if _, ok := seen[key]; ok {
+	children := registry.LookupVisibleSubcommands(parent)
+	suggestions := make([]Suggestion, 0, len(children))
+	for _, child := range children {
+		suggestions = append(suggestions, Suggestion{
+			Value:       child.Name,
+			Description: child.Description,
+			Category:    "command",
+		})
+	}
+	return suggestions
+}
+
+func mergeCommandSuggestions(left []Suggestion, right []Suggestion) []Suggestion {
+	merged := make([]Suggestion, 0, len(left)+len(right))
+	seen := make(map[string]struct{}, len(left)+len(right))
+	for _, candidate := range append(append([]Suggestion(nil), left...), right...) {
+		if _, ok := seen[candidate.Value]; ok {
 			continue
 		}
-		seen[key] = struct{}{}
-		paths = append(paths, values)
+		seen[candidate.Value] = struct{}{}
+		merged = append(merged, candidate)
 	}
-	return paths
+	return merged
+}
+
+func schemaFlagNames(spec *commandlang.CommandSpec) []string {
+	if spec == nil {
+		return nil
+	}
+	values := make([]string, 0, len(spec.Flags))
+	for _, flag := range spec.Flags {
+		values = append(values, flag.Name)
+	}
+	return values
+}
+
+func schemaCompletionRoute(ctx *providerContext) string {
+	if ctx == nil {
+		return ""
+	}
+	if ctx.syntaxContext.CompletionProvider != "" {
+		return ctx.syntaxContext.CompletionProvider
+	}
+	switch ctx.syntaxContext.ExpectedValueType {
+	case commandlang.ValueOperation:
+		return "operation"
+	case commandlang.ValueTemplate:
+		return "template"
+	case commandlang.ValueConnection:
+		return "connection"
+	case commandlang.ValueDatabase:
+		return "database"
+	case commandlang.ValueTable:
+		return "table"
+	case commandlang.ValueUser:
+		return "user"
+	case commandlang.ValueSchema:
+		return "schema"
+	}
+	return ""
 }
 
 func completionEditRange(ctx commandlang.CommandContext, cursor int) (int, int, string, string) {
