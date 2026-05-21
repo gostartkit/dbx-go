@@ -4,6 +4,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"sync"
 
 	"pkg.gostartkit.com/cmd"
 )
@@ -16,23 +17,29 @@ type CommandSpec struct {
 	Hidden      bool
 }
 
-func replCommandSpecs() []CommandSpec {
-	app := (&cliBuilder{
-		mode:    ModeREPL,
-		out:     io.Discard,
-		err:     io.Discard,
-		globals: &cliGlobals{Format: "text"},
-	}).buildApp()
+type indexedCommandSpec struct {
+	spec   CommandSpec
+	tokens []string
+}
 
-	specs := make([]CommandSpec, 0)
-	for _, command := range app.Spec().Commands {
-		flattenCommandSpec(&specs, "", command, false)
-	}
-	return specs
+type commandSpecCatalog struct {
+	specs           []CommandSpec
+	indexed         []indexedCommandSpec
+	byPath          map[string]CommandSpec
+	helpSuggestions []Suggestion
+}
+
+var (
+	replCommandSpecCatalogOnce sync.Once
+	replCommandSpecCatalogData commandSpecCatalog
+)
+
+func replCommandSpecs() []CommandSpec {
+	return replCommandSpecCatalog().specs
 }
 
 func flattenCommandSpec(dst *[]CommandSpec, prefix string, spec cmd.CommandSpec, aliased bool) {
-	path := strings.TrimSpace(strings.Join([]string{prefix, spec.Name}, " "))
+	path := joinCommandPath(prefix, spec.Name)
 	category := "command"
 	if aliased {
 		category = "alias"
@@ -47,7 +54,7 @@ func flattenCommandSpec(dst *[]CommandSpec, prefix string, spec cmd.CommandSpec,
 
 	for _, alias := range spec.Aliases {
 		*dst = append(*dst, CommandSpec{
-			Path:        strings.TrimSpace(strings.Join([]string{prefix, alias}, " ")),
+			Path:        joinCommandPath(prefix, alias),
 			UsageLine:   spec.UsageLine,
 			Description: spec.Short,
 			Category:    "alias",
@@ -60,13 +67,8 @@ func flattenCommandSpec(dst *[]CommandSpec, prefix string, spec cmd.CommandSpec,
 }
 
 func commandSpecByPath(path string) (CommandSpec, bool) {
-	normalized := normalizeHelpTopic(path)
-	for _, spec := range replCommandSpecs() {
-		if normalizeHelpTopic(spec.Path) == normalized {
-			return spec, true
-		}
-	}
-	return CommandSpec{}, false
+	spec, ok := replCommandSpecCatalog().byPath[normalizeHelpTopic(path)]
+	return spec, ok
 }
 
 func commandSpecForInput(line string) (CommandSpec, bool) {
@@ -77,17 +79,16 @@ func commandSpecForInput(line string) (CommandSpec, bool) {
 
 	best := CommandSpec{}
 	bestLen := 0
-	for _, spec := range replCommandSpecs() {
-		pathTokens := strings.Fields(spec.Path)
-		if len(pathTokens) == 0 || len(pathTokens) > len(tokens) {
+	for _, entry := range replCommandSpecCatalog().indexed {
+		if len(entry.tokens) == 0 || len(entry.tokens) > len(tokens) {
 			continue
 		}
-		if !slices.Equal(pathTokens, tokens[:len(pathTokens)]) {
+		if !slices.Equal(entry.tokens, tokens[:len(entry.tokens)]) {
 			continue
 		}
-		if len(pathTokens) > bestLen {
-			best = spec
-			bestLen = len(pathTokens)
+		if len(entry.tokens) > bestLen {
+			best = entry.spec
+			bestLen = len(entry.tokens)
 		}
 	}
 	if bestLen == 0 {
@@ -97,29 +98,68 @@ func commandSpecForInput(line string) (CommandSpec, bool) {
 }
 
 func helpCompletionTopics() []Suggestion {
-	suggestions := make([]Suggestion, 0)
-	seen := map[string]struct{}{}
-	add := func(value string, description string) {
-		value = normalizeHelpTopic(value)
-		if value == "" {
-			return
-		}
-		if _, ok := seen[value]; ok {
-			return
-		}
-		seen[value] = struct{}{}
-		suggestions = append(suggestions, Suggestion{
-			Value:       value,
-			Description: description,
-			Category:    "topic",
-		})
-	}
+	return replCommandSpecCatalog().helpSuggestions
+}
 
-	for _, spec := range replCommandSpecs() {
-		if spec.Hidden {
-			continue
+func replCommandSpecCatalog() *commandSpecCatalog {
+	replCommandSpecCatalogOnce.Do(func() {
+		app := (&cliBuilder{
+			mode:    ModeREPL,
+			out:     io.Discard,
+			err:     io.Discard,
+			globals: &cliGlobals{Format: "text"},
+		}).buildApp()
+
+		specs := make([]CommandSpec, 0, 64)
+		for _, command := range app.Spec().Commands {
+			flattenCommandSpec(&specs, "", command, false)
 		}
-		add(spec.Path, spec.Description)
+
+		indexed := make([]indexedCommandSpec, 0, len(specs))
+		byPath := make(map[string]CommandSpec, len(specs))
+		suggestions := make([]Suggestion, 0, len(specs))
+		seenSuggestions := make(map[string]struct{}, len(specs))
+		for _, spec := range specs {
+			indexed = append(indexed, indexedCommandSpec{
+				spec:   spec,
+				tokens: strings.Fields(spec.Path),
+			})
+
+			normalizedPath := normalizeHelpTopic(spec.Path)
+			if normalizedPath != "" {
+				byPath[normalizedPath] = spec
+			}
+			if spec.Hidden || normalizedPath == "" {
+				continue
+			}
+			if _, ok := seenSuggestions[normalizedPath]; ok {
+				continue
+			}
+			seenSuggestions[normalizedPath] = struct{}{}
+			suggestions = append(suggestions, Suggestion{
+				Value:       normalizedPath,
+				Description: spec.Description,
+				Category:    "topic",
+			})
+		}
+
+		replCommandSpecCatalogData = commandSpecCatalog{
+			specs:           specs,
+			indexed:         indexed,
+			byPath:          byPath,
+			helpSuggestions: suggestions,
+		}
+	})
+	return &replCommandSpecCatalogData
+}
+
+func joinCommandPath(prefix string, name string) string {
+	switch {
+	case prefix == "":
+		return strings.TrimSpace(name)
+	case name == "":
+		return strings.TrimSpace(prefix)
+	default:
+		return prefix + " " + strings.TrimSpace(name)
 	}
-	return suggestions
 }

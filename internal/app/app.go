@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -95,7 +96,18 @@ func (a *Application) Run(ctx context.Context) error {
 }
 
 func (a *Application) Close() error {
-	return a.session.Close()
+	if a == nil {
+		return nil
+	}
+
+	var errs []error
+	if a.session != nil {
+		errs = append(errs, a.session.Close())
+	}
+	if a.store != nil {
+		errs = append(errs, a.store.Close())
+	}
+	return errors.Join(errs...)
 }
 
 func (a *Application) loadReconnectCandidate() error {

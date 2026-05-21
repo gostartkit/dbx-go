@@ -25,7 +25,9 @@ type AuditRecord struct {
 }
 
 type Store struct {
-	RootDir string
+	RootDir       string
+	historyAppend *os.File
+	auditAppend   *os.File
 }
 
 func DefaultRootDir() (string, error) {
@@ -38,6 +40,19 @@ func DefaultRootDir() (string, error) {
 
 func NewStore(rootDir string) *Store {
 	return &Store{RootDir: rootDir}
+}
+
+func (s *Store) Close() error {
+	var errs []error
+	if s.historyAppend != nil {
+		errs = append(errs, s.historyAppend.Close())
+		s.historyAppend = nil
+	}
+	if s.auditAppend != nil {
+		errs = append(errs, s.auditAppend.Close())
+		s.auditAppend = nil
+	}
+	return errors.Join(errs...)
 }
 
 func (s *Store) EnsureLayout() error {
@@ -220,12 +235,10 @@ func (s *Store) AppendHistory(command string) error {
 		return err
 	}
 
-	file, err := os.OpenFile(s.HistoryPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	file, err := s.appendFile(s.HistoryPath(), &s.historyAppend)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-
 	_, err = file.WriteString(command + "\n")
 	return err
 }
@@ -244,12 +257,10 @@ func (s *Store) AppendAudit(record *AuditRecord) error {
 	}
 	data = append(data, '\n')
 
-	file, err := os.OpenFile(s.AuditLogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	file, err := s.appendFile(s.AuditLogPath(), &s.auditAppend)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-
 	_, err = file.Write(data)
 	return err
 }
@@ -284,6 +295,21 @@ func (s *Store) LoadAudit(limit int) ([]AuditRecord, error) {
 		records = append([]AuditRecord(nil), records[len(records)-limit:]...)
 	}
 	return records, nil
+}
+
+func (s *Store) appendFile(path string, current **os.File) (*os.File, error) {
+	if current != nil && *current != nil {
+		return *current, nil
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if current != nil {
+		*current = file
+	}
+	return file, nil
 }
 
 func (s *Store) writeJSON(path string, value any) error {

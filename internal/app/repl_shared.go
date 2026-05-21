@@ -144,10 +144,10 @@ func calculateCompletion(line string, ctx CompletionContext) ui.Completion {
 		globals:  &cliGlobals{Format: "text"},
 		resolver: staticCompletionResolver{ctx: ctx},
 	}).buildApp()
-	return completionFromApp(replApp, line, ctx)
+	return completionFromApp(replApp, line, staticCompletionResolver{ctx: ctx})
 }
 
-func completionFromApp(app *cmd.App, line string, ctx CompletionContext) ui.Completion {
+func completionFromApp(app *cmd.App, line string, resolver completionResolver) ui.Completion {
 	if app == nil {
 		return ui.Completion{}
 	}
@@ -168,7 +168,7 @@ func completionFromApp(app *cmd.App, line string, ctx CompletionContext) ui.Comp
 		}
 		description := result.Description
 		if description == "" {
-			description = dynamicCompletionDescription(args, result.Value, ctx)
+			description = dynamicCompletionDescription(args, result.Value, resolver)
 		}
 		suggestions = append(suggestions, ui.Suggestion{
 			Value:       result.Value,
@@ -223,29 +223,41 @@ func includeCompletionResult(result cmd.CompletionResult) bool {
 	return result.Value == "help"
 }
 
-func dynamicCompletionDescription(args []string, value string, ctx CompletionContext) string {
+func dynamicCompletionDescription(args []string, value string, resolver completionResolver) string {
 	if len(args) == 0 {
 		return ""
 	}
 
-	switch strings.Join(args, " ") {
-	case "connect", "show connection", "drop connection":
-		for _, connection := range ctx.Connections {
+	switch {
+	case len(args) == 1 && args[0] == "connect":
+		for _, connection := range resolverConnections(resolver) {
 			if connection.Name == value {
 				return strings.TrimSpace(connection.Driver + " " + connection.Mode)
 			}
 		}
-	case "use database":
+	case len(args) == 2 && args[0] == "show" && args[1] == "connection":
+		for _, connection := range resolverConnections(resolver) {
+			if connection.Name == value {
+				return strings.TrimSpace(connection.Driver + " " + connection.Mode)
+			}
+		}
+	case len(args) == 2 && args[0] == "drop" && args[1] == "connection":
+		for _, connection := range resolverConnections(resolver) {
+			if connection.Name == value {
+				return strings.TrimSpace(connection.Driver + " " + connection.Mode)
+			}
+		}
+	case len(args) == 2 && args[0] == "use" && args[1] == "database":
 		if value != "" {
 			return "database"
 		}
-	case "show context":
+	case len(args) == 2 && args[0] == "show" && args[1] == "context":
 		return "context"
-	case "run template":
+	case len(args) == 2 && args[0] == "run" && args[1] == "template":
 		if value != "" {
 			return "template"
 		}
-	case "show columns", "show rows", "show table":
+	case len(args) == 2 && args[0] == "show" && (args[1] == "columns" || args[1] == "rows" || args[1] == "table"):
 		if value != "" {
 			return "table"
 		}
@@ -288,12 +300,12 @@ func commonPrefix(left string, right string) string {
 }
 
 func (a *Application) completeInput(line string) ui.Completion {
-	return completionFromApp(a.replCommandApp(), line, CompletionContext{
-		Connections:  a.Connections(),
-		Databases:    a.Databases(),
-		Tables:       a.Tables(),
-		Templates:    a.Templates(),
-		TemplateTags: a.TemplateTags(),
-		Users:        a.Users(),
-	})
+	return completionFromApp(a.replCommandApp(), line, a)
+}
+
+func resolverConnections(resolver completionResolver) []CompletionConnection {
+	if resolver == nil {
+		return nil
+	}
+	return resolver.Connections()
 }

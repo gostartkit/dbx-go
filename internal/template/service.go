@@ -13,7 +13,8 @@ import (
 )
 
 type Service struct {
-	store *config.Store
+	store     *config.Store
+	dirCaches map[string]dirTemplateCache
 }
 
 type LayerMatch struct {
@@ -48,7 +49,10 @@ func (e *AmbiguousResolveError) Error() string {
 }
 
 func NewService(store *config.Store) *Service {
-	return &Service{store: store}
+	return &Service{
+		store:     store,
+		dirCaches: make(map[string]dirTemplateCache),
+	}
 }
 
 func (s *Service) Resolve(command string, cfg *config.ConnectionConfig) (*Template, error) {
@@ -257,6 +261,17 @@ type templateLayer struct {
 	builtins  []Template
 }
 
+type templateFileSignature struct {
+	name        string
+	size        int64
+	modUnixNano int64
+}
+
+type dirTemplateCache struct {
+	files     []templateFileSignature
+	templates []Template
+}
+
 func (s *Service) layers(cfg *config.ConnectionConfig) []templateLayer {
 	return []templateLayer{
 		{
@@ -282,7 +297,7 @@ func (s *Service) loadLayer(layer templateLayer) ([]Template, error) {
 		}
 		return templates, nil
 	}
-	return append([]Template(nil), layer.builtins...), nil
+	return layer.builtins, nil
 }
 
 func driverName(cfg *config.ConnectionConfig) string {
@@ -301,13 +316,30 @@ func (s *Service) loadDir(dir string, layer string) ([]Template, error) {
 		return nil, err
 	}
 
-	templates := make([]Template, 0)
+	signatures := make([]templateFileSignature, 0, len(entries))
+	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		signatures = append(signatures, templateFileSignature{
+			name:        entry.Name(),
+			size:        info.Size(),
+			modUnixNano: info.ModTime().UnixNano(),
+		})
+		paths = append(paths, filepath.Join(dir, entry.Name()))
+	}
 
-		path := filepath.Join(dir, entry.Name())
+	if cached, ok := s.dirCaches[dir]; ok && sameTemplateSignatures(cached.files, signatures) {
+		return cached.templates, nil
+	}
+
+	templates := make([]Template, 0, len(paths))
+	for _, path := range paths {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
@@ -329,7 +361,23 @@ func (s *Service) loadDir(dir string, layer string) ([]Template, error) {
 	slices.SortFunc(templates, func(a, b Template) int {
 		return strings.Compare(a.Name, b.Name)
 	})
+	s.dirCaches[dir] = dirTemplateCache{
+		files:     signatures,
+		templates: templates,
+	}
 	return templates, nil
+}
+
+func sameTemplateSignatures(left []templateFileSignature, right []templateFileSignature) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for idx := range left {
+		if left[idx] != right[idx] {
+			return false
+		}
+	}
+	return true
 }
 
 func matches(tpl Template, command string, driver string) bool {
