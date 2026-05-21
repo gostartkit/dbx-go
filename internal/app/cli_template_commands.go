@@ -19,13 +19,13 @@ type showTemplatesFlags struct {
 	tag string
 }
 
-func (b *cliBuilder) runGroupCommand() *cmd.Command {
+func (b *cliBuilder) execGroupCommand() *cmd.Command {
 	flags := &templateRunFlags{inputs: inputValues{}}
 	return &cmd.Command{
-		Name:      "run",
-		UsageLine: "dbx run <name> [flags]",
-		Short:     "Run a workflow template",
-		Long:      helpEntries["run"].body,
+		Name:      "exec",
+		UsageLine: "dbx exec <operation> [flags]",
+		Short:     "Execute an operation",
+		Long:      helpEntries["exec"].body,
 		SetFlags: func(f *cmd.FlagSet) {
 			bindInputFlag(f, flags.inputs)
 			f.BoolVar(&flags.preview, "preview", false, "render the workflow plan without executing", "")
@@ -34,27 +34,27 @@ func (b *cliBuilder) runGroupCommand() *cmd.Command {
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if len(args) == 0 {
-				usage := "dbx run <name> [flags]"
+				usage := "dbx exec <operation> [flags]"
 				if b.mode == ModeREPL {
-					usage = "run <name> [flags]"
+					usage = "exec <operation> [flags]"
 				}
-				return util.WrapLayer("validation", "run", fmt.Errorf("usage: %s", usage))
+				return util.WrapLayer("validation", "exec", fmt.Errorf("usage: %s", usage))
 			}
 			if len(args) > 1 && args[0] == "template" {
-				return util.WrapLayer("validation", "run", fmt.Errorf(`unknown command "template"`))
+				return util.WrapLayer("validation", "exec", fmt.Errorf(`unknown command "template"`))
 			}
 			if len(args) != 1 {
-				usage := "dbx run <name> [flags]"
+				usage := "dbx exec <operation> [flags]"
 				if b.mode == ModeREPL {
-					usage = "run <name> [flags]"
+					usage = "exec <operation> [flags]"
 				}
-				return util.WrapLayer("validation", "run", fmt.Errorf("usage: %s", usage))
+				return util.WrapLayer("validation", "exec", fmt.Errorf("usage: %s", usage))
 			}
 			if flags.validate {
 				if b.mode == ModeREPL {
-					return b.application.handleTemplateValidate(ctx, args[0])
+					return b.application.handleExecValidate(ctx, args[0])
 				}
-				return b.withAuditedApplication(ctx, auditMetadata{Command: "run"}, func(application *Application, meta *auditMetadata) error {
+				return b.withAuditedApplication(ctx, auditMetadata{Command: "exec"}, func(application *Application, meta *auditMetadata) error {
 					cfg, err := application.templateScopeConfig(b.globals.Connection)
 					if err != nil {
 						return err
@@ -74,10 +74,10 @@ func (b *cliBuilder) runGroupCommand() *cmd.Command {
 				})
 			}
 			if b.mode == ModeREPL {
-				return b.application.handleTemplateRun(ctx, args[0], flags.preview, flags.verbose, b.globals.DryRun)
+				return b.application.handleExec(ctx, args[0], flags.preview, flags.verbose, b.globals.DryRun)
 			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "run", DryRun: b.globals.DryRun || flags.preview}, func(application *Application, meta *auditMetadata) error {
-				return b.runNamedTemplate(ctx, application, args[0], flags, meta)
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "exec", DryRun: b.globals.DryRun || flags.preview}, func(application *Application, meta *auditMetadata) error {
+				return b.execOperation(ctx, application, args[0], flags, meta)
 			})
 		},
 	}
@@ -135,7 +135,7 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) runNamedTemplate(ctx context.Context, application *Application, name string, flags *templateRunFlags, meta *auditMetadata) error {
+func (b *cliBuilder) execOperation(ctx context.Context, application *Application, name string, flags *templateRunFlags, meta *auditMetadata) error {
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
 		return err
@@ -145,12 +145,12 @@ func (b *cliBuilder) runNamedTemplate(ctx context.Context, application *Applicat
 		meta.Mode = cfg.Mode
 	}
 	if !flags.preview {
-		if err := b.requireCLIConfirmation("run"); err != nil {
+		if err := b.requireCLIConfirmation("exec"); err != nil {
 			return err
 		}
 	}
 
-	result, err := application.templateRunResult(ctx, cfg, name, flags.inputs, flags.preview, b.globals.DryRun, flags.verbose, b.globals.Database)
+	result, err := application.execResult(ctx, cfg, name, flags.inputs, flags.preview, b.globals.DryRun, flags.verbose, b.globals.Database)
 	if err != nil && result == nil {
 		return err
 	}

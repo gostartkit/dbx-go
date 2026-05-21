@@ -202,7 +202,7 @@ func TestCLICreateUserAmbiguousTemplateFailsBeforePasswordOrConfirmation(t *test
 	if !strings.Contains(err.Error(), "readonly_a") || !strings.Contains(err.Error(), "readonly_b") {
 		t.Fatalf("candidate list missing from error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "run <name>") || !strings.Contains(err.Error(), "--template <name>") {
+	if !strings.Contains(err.Error(), "exec <name>") || !strings.Contains(err.Error(), "--template <name>") {
 		t.Fatalf("missing explicit selection hint: %v", err)
 	}
 	if strings.Contains(stderr.String(), "Password:") || strings.Contains(stderr.String(), "confirmation required") {

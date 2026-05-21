@@ -118,7 +118,7 @@ func (b *cliBuilder) buildApp() *cmd.App {
 		b.showGroupCommand(),
 		b.createGroupCommand(),
 		b.dropGroupCommand(),
-		b.runGroupCommand(),
+		b.execGroupCommand(),
 		b.doctorGroupCommand(),
 		b.auditGroupCommand(),
 		b.helpCommand(),

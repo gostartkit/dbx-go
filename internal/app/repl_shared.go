@@ -160,7 +160,7 @@ func completionFromApp(app *cmd.App, line string, resolver completionResolver) u
 	replaceFrom := len(line) - len(current)
 	replaceTo := len(line)
 
-	if len(args) == 1 && args[0] == "run" && !strings.HasPrefix(current, "-") {
+	if len(args) == 1 && args[0] == "exec" && !strings.HasPrefix(current, "-") {
 		suggestions := templateNameCompletion(resolverTemplates(resolver), current, replaceFrom, replaceTo)
 		return ui.Completion{
 			Prefix:      current,
@@ -205,7 +205,7 @@ func templateNameCompletion(values []string, current string, replaceFrom int, re
 		}
 		suggestions = append(suggestions, ui.Suggestion{
 			Value:       value,
-			Description: "template",
+			Description: "operation",
 			Category:    "value",
 			Replacement: value,
 			ReplaceFrom: replaceFrom,
@@ -281,9 +281,9 @@ func dynamicCompletionDescription(args []string, value string, resolver completi
 		}
 	case len(args) == 2 && args[0] == "show" && args[1] == "context":
 		return "context"
-	case len(args) == 1 && args[0] == "run":
+	case len(args) == 1 && args[0] == "exec":
 		if value != "" {
-			return "template"
+			return "operation"
 		}
 	case len(args) == 2 && args[0] == "show" && (args[1] == "columns" || args[1] == "rows" || args[1] == "table"):
 		if value != "" {

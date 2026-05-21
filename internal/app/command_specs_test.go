@@ -20,7 +20,7 @@ func TestRootCommandSetMatchesShellSurface(t *testing.T) {
 		have[normalizeHelpTopic(command.Name)] = struct{}{}
 	}
 
-	want := []string{"connect", "use", "show", "create", "drop", "run", "doctor", "audit", "help", "exit"}
+	want := []string{"connect", "use", "show", "create", "drop", "exec", "doctor", "audit", "help", "exit"}
 	if len(have) != len(want) {
 		t.Fatalf("root command count = %d, want %d (%v)", len(have), len(want), have)
 	}
@@ -44,7 +44,7 @@ func TestRemovedRootCommandsAreAbsent(t *testing.T) {
 		have[normalizeHelpTopic(command.Name)] = struct{}{}
 	}
 
-	for _, removed := range []string{"count", "peek", "sample", "truncate", "rename", "validate", "edit", "test", "context", "clear", "user", "users"} {
+	for _, removed := range []string{"count", "peek", "sample", "truncate", "rename", "validate", "edit", "test", "context", "clear", "user", "users", "run"} {
 		if _, ok := have[removed]; ok {
 			t.Fatalf("unexpected removed root command %q", removed)
 		}
@@ -78,7 +78,7 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"drop connection",
 		"drop database",
 		"drop user",
-		"run",
+		"exec",
 		"doctor",
 		"audit log",
 		"help",
@@ -148,8 +148,9 @@ func TestRemovedCommandsReturnErrors(t *testing.T) {
 		"describe users",
 		"show template readonly_user",
 		"doctor connection prod",
-		`run sql "SELECT 1"`,
-		"run template readonly_user",
+		`run deploy`,
+		`exec sql "SELECT 1"`,
+		"exec template readonly_user",
 	} {
 		if err := app.RunLine(context.Background(), line); err == nil {
 			t.Fatalf("expected removed command to fail: %q", line)
@@ -194,10 +195,13 @@ func TestHelpCompletionContainsFinalTopics(t *testing.T) {
 		have[suggestion.Value] = struct{}{}
 	}
 
-	for _, want := range []string{"doctor", "show templates", "run", "show rows", "show users"} {
+	for _, want := range []string{"doctor", "show templates", "exec", "show rows", "show users"} {
 		if _, ok := have[want]; !ok {
 			t.Fatalf("missing help topic %q", want)
 		}
+	}
+	if _, ok := have["run"]; ok {
+		t.Fatalf("unexpected removed help topic %q", "run")
 	}
 	if _, ok := have["run template"]; ok {
 		t.Fatalf("unexpected removed help topic %q", "run template")

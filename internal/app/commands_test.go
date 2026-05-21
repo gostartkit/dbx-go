@@ -106,18 +106,18 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 	}
 
 	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "run"); err != nil {
+	if err := printHelpTopic(&prompt, "exec"); err != nil {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 	joined = strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "Run a named workflow template") {
-		t.Fatalf("help output missing template run text: %q", joined)
+	if !strings.Contains(joined, "Execute a named operation") {
+		t.Fatalf("help output missing exec command text: %q", joined)
 	}
 	if !strings.Contains(joined, "--validate") {
 		t.Fatalf("help output missing validate flag text: %q", joined)
 	}
 	if strings.Contains(joined, "template <name>") {
-		t.Fatalf("help output still contains removed run subcommand: %q", joined)
+		t.Fatalf("help output still contains removed template subcommand: %q", joined)
 	}
 
 	prompt.lines = nil
@@ -148,7 +148,7 @@ func TestREPLHelpCommandHasOutput(t *testing.T) {
 	if !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "Available Commands:") {
 		t.Fatalf("help output missing expected sections: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "connect\n  connect prod") || !strings.Contains(out.String(), "run\n  run seed-users --validate") {
+	if !strings.Contains(out.String(), "connect\n  connect prod") || !strings.Contains(out.String(), "exec\n  exec seed-users --validate") {
 		t.Fatalf("help output missing grouped examples: %q", out.String())
 	}
 }
@@ -162,7 +162,7 @@ func TestREPLHelpTopicsHaveOutput(t *testing.T) {
 	}{
 		{line: "help show", want: "Usage: dbx show <subcommand>"},
 		{line: "help connect", want: "Usage: dbx connect <name>"},
-		{line: "help run", want: "Usage: dbx run <name> [flags]"},
+		{line: "help exec", want: "Usage: dbx exec <operation> [flags]"},
 	}
 
 	for _, tc := range cases {
@@ -250,7 +250,7 @@ func TestREPLUnknownShowTargetSuggestsClosestMatch(t *testing.T) {
 	}
 }
 
-func TestREPLOldRunTemplateSyntaxIsRemoved(t *testing.T) {
+func TestREPLOldRunCommandIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	app, err := NewWithOptions(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, Options{ConfigDir: t.TempDir()})
@@ -258,11 +258,11 @@ func TestREPLOldRunTemplateSyntaxIsRemoved(t *testing.T) {
 		t.Fatalf("NewWithOptions returned error: %v", err)
 	}
 
-	_, runErr := app.handleLine(context.Background(), "run template deploy")
+	_, runErr := app.handleLine(context.Background(), "run deploy")
 	if runErr == nil {
 		t.Fatalf("expected error")
 	}
-	if !strings.Contains(runErr.Error(), `unknown command "template"`) {
+	if !strings.Contains(runErr.Error(), `unknown command "run"`) {
 		t.Fatalf("unexpected error: %v", runErr)
 	}
 }

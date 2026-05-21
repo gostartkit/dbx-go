@@ -36,8 +36,8 @@ Examples:
   create connection prod --host 10.0.1.20 --user root
   create database appdb
 
-  run
-  run seed-users --validate`),
+  exec
+  exec seed-users --validate`),
 		},
 		"connect": {
 			title: "connect",
@@ -236,13 +236,13 @@ Show resolved workflow templates.
 Usage:
   show templates [query] [--tag value]`),
 		},
-		"run": {
-			title: "run",
+		"exec": {
+			title: "exec",
 			body: strings.TrimSpace(`
-Run a named workflow template.
+Execute a named operation.
 
 Usage:
-  dbx run <name> [--preview] [--verbose] [--validate]`),
+  dbx exec <operation> [--preview] [--verbose] [--validate]`),
 		},
 		"use": {
 			title: "use database",

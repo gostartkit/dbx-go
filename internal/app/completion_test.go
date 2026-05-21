@@ -15,8 +15,8 @@ func TestCalculateCompletionRootCommands(t *testing.T) {
 		"create",
 		"doctor",
 		"drop",
+		"exec",
 		"help",
-		"run",
 		"show",
 		"use",
 		"audit",
@@ -53,7 +53,7 @@ func TestCalculateCompletionDynamicValues(t *testing.T) {
 	})
 	assertSuggestionsContainAll(t, suggestionValues(rowCompletion), []string{"orders", "users"})
 
-	templateCompletion := calculateCompletion("run ", CompletionContext{
+	templateCompletion := calculateCompletion("exec ", CompletionContext{
 		Templates: []string{"readonly_user", "create_database_with_user"},
 	})
 	assertSuggestionsContainAll(t, suggestionValues(templateCompletion), []string{"create_database_with_user", "readonly_user"})
@@ -69,7 +69,8 @@ func TestCalculateCompletionHelpTopics(t *testing.T) {
 	t.Parallel()
 
 	values := suggestionValues(calculateCompletion("help ", CompletionContext{}))
-	assertSuggestionsContainAll(t, values, []string{"doctor", "show templates", "run", "show rows", "show users"})
+	assertSuggestionsContainAll(t, values, []string{"doctor", "show templates", "exec", "show rows", "show users"})
+	assertSuggestionsMissingAll(t, values, []string{"run"})
 	assertSuggestionsMissingAll(t, values, []string{"run template"})
 	assertSuggestionsMissingAll(t, values, []string{"show user"})
 	assertSuggestionsMissingAll(t, values, []string{"describe", "show template", "doctor connection"})
@@ -90,7 +91,7 @@ func TestCalculateCompletionOmitsRemovedSubcommands(t *testing.T) {
 	assertSuggestionsMissingAll(t, showValues, []string{"user"})
 	assertSuggestionsMissingAll(t, showValues, []string{"template"})
 
-	runValues := suggestionValues(calculateCompletion("run ", CompletionContext{
+	runValues := suggestionValues(calculateCompletion("exec ", CompletionContext{
 		Templates: []string{"readonly_user", "create_database_with_user"},
 	}))
 	assertSuggestionsContainAll(t, runValues, []string{"readonly_user", "create_database_with_user"})

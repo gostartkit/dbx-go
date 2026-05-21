@@ -558,7 +558,7 @@ func TestCLIAmbiguousTemplateFails(t *testing.T) {
 	if !strings.Contains(err.Error(), "aaa") || !strings.Contains(err.Error(), "bbb") {
 		t.Fatalf("missing candidate list in error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "run <name>") {
+	if !strings.Contains(err.Error(), "exec <name>") {
 		t.Fatalf("missing explicit template hint in error: %v", err)
 	}
 }
@@ -619,28 +619,28 @@ func TestCLIRootUnknownCommandStillSuggestsRootMatch(t *testing.T) {
 	}
 }
 
-func TestCLIOldRunTemplateSyntaxIsRemoved(t *testing.T) {
+func TestCLIOldRunCommandIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	app, _, _ := newCLIApp(t, "", t.TempDir())
-	err := app.Run(context.Background(), []string{"run", "template", "deploy"})
+	err := app.Run(context.Background(), []string{"run", "deploy"})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	if !strings.Contains(err.Error(), `unknown command "template"`) {
+	if !strings.Contains(err.Error(), `unknown command "run"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestCLIRunSQLIsRemoved(t *testing.T) {
+func TestCLIExecSQLIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	app, _, _ := newCLIApp(t, "", t.TempDir())
-	err := app.Run(context.Background(), []string{"run", "sql", "SELECT 1"})
+	err := app.Run(context.Background(), []string{"exec", "sql", "SELECT 1"})
 	if err == nil {
 		t.Fatalf("expected removed command to fail")
 	}
-	if !strings.Contains(err.Error(), "too many arguments") && !strings.Contains(err.Error(), `unknown command "template"`) && !strings.Contains(err.Error(), "usage: dbx run <name> [flags]") {
+	if !strings.Contains(err.Error(), "too many arguments") && !strings.Contains(err.Error(), `unknown command "template"`) && !strings.Contains(err.Error(), "usage: dbx exec <operation> [flags]") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

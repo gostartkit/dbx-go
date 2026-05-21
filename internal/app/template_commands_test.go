@@ -219,7 +219,7 @@ func TestTemplateRunPreviewParsesInputsAndRedactsSecrets(t *testing.T) {
 		"--config-dir", root,
 		"--connection", "prod",
 		"--format", "json",
-		"run", "create_database_with_user",
+		"exec", "create_database_with_user",
 		"--input", "database=app_prod",
 		"--input", "password-env=APP_PASSWORD",
 		"--preview",
@@ -272,7 +272,7 @@ func TestTemplateRunPreviewAndDryRunDoNotExecute(t *testing.T) {
 	err := previewApp.Run(context.Background(), []string{
 		"--config-dir", root,
 		"--connection", "prod",
-		"run", "readonly_user",
+		"exec", "readonly_user",
 		"--input", "username=analytics-ro",
 		"--preview",
 	})
@@ -291,7 +291,7 @@ func TestTemplateRunPreviewAndDryRunDoNotExecute(t *testing.T) {
 		"--config-dir", root,
 		"--connection", "prod",
 		"--dry-run",
-		"run", "readonly_user",
+		"exec", "readonly_user",
 		"--input", "username=analytics-ro",
 	})
 	if err != nil {
@@ -333,8 +333,8 @@ func TestTemplateRunRequiresConfirmationInREPLAndCLI(t *testing.T) {
 	}
 	replApp.session.Connection = sampleConnection("prod")
 	replApp.session.DB = &sql.DB{}
-	if err := replApp.handleTemplateRun(context.Background(), "create_database_with_user", false, false, false); err != nil {
-		t.Fatalf("handleTemplateRun returned error: %v", err)
+	if err := replApp.handleExec(context.Background(), "create_database_with_user", false, false, false); err != nil {
+		t.Fatalf("handleExec returned error: %v", err)
 	}
 	if !strings.Contains(replOut.String(), "Confirm execution?") || !strings.Contains(replOut.String(), "Cancelled.") {
 		t.Fatalf("unexpected REPL output: %q", replOut.String())
@@ -344,7 +344,7 @@ func TestTemplateRunRequiresConfirmationInREPLAndCLI(t *testing.T) {
 	err = cliApp.Run(context.Background(), []string{
 		"--config-dir", root,
 		"--connection", "prod",
-		"run", "create_database_with_user",
+		"exec", "create_database_with_user",
 		"--input", "database=app_demo",
 		"--input", "password=secret123",
 	})
@@ -407,7 +407,7 @@ func TestTemplateRunRejectsMissingRequiredInputAndExtraArgs(t *testing.T) {
 		"--config-dir", root,
 		"--connection", "prod",
 		"--format", "json",
-		"run", "readonly_user",
+		"exec", "readonly_user",
 		"--preview",
 	})
 	if err == nil || !strings.Contains(err.Error(), "missing required template input") {
@@ -418,9 +418,9 @@ func TestTemplateRunRejectsMissingRequiredInputAndExtraArgs(t *testing.T) {
 	err = aliasApp.Run(context.Background(), []string{
 		"--config-dir", root,
 		"--connection", "prod",
-		"run", "template", "readonly_user",
+		"run", "readonly_user",
 	})
-	if err == nil || !strings.Contains(err.Error(), `unknown command "template"`) {
+	if err == nil || !strings.Contains(err.Error(), `unknown command "run"`) {
 		t.Fatalf("expected usage error, got %v\nstderr=%s", err, aliasErr.String())
 	}
 }
@@ -576,7 +576,7 @@ func TestTemplateRunPreviewShowsRedactedInputSummaryAndCategory(t *testing.T) {
 	err := app.Run(context.Background(), []string{
 		"--config-dir", root,
 		"--connection", "prod",
-		"run", "create_database_with_user",
+		"exec", "create_database_with_user",
 		"--input", "database=greenhn_prod",
 		"--input", "password=super-secret",
 		"--preview",
@@ -617,7 +617,7 @@ func TestTemplateValidateSuccessAndJSONOutput(t *testing.T) {
 }`)
 
 	app, stdout, stderr := newCLIApp(t, "", root)
-	err := app.Run(context.Background(), []string{"run", "create_database_with_user", "--validate", "--format", "json", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"exec", "create_database_with_user", "--validate", "--format", "json", "--config-dir", root})
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -646,7 +646,7 @@ func TestTemplateValidateFailures(t *testing.T) {
 }`)
 
 	app, _, stderr := newCLIAppWithOptions(t, "", Options{ConfigDir: root})
-	err := app.Run(context.Background(), []string{"run", "bad", "--validate", "--config-dir", root})
+	err := app.Run(context.Background(), []string{"exec", "bad", "--validate", "--config-dir", root})
 	if err == nil || (!strings.Contains(err.Error(), "unsupported match command") && !strings.Contains(err.Error(), "select input")) {
 		t.Fatalf("expected validation failure, got %v\nstderr=%s", err, stderr.String())
 	}
