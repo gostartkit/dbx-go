@@ -167,13 +167,13 @@ show context
 
 create connection <name>
 create database
-create user
+create user [name]
 
 drop connection <name>
 drop database
-drop user
+drop user [name]
 
-run <name>
+exec <name> [--preview] [--verbose] [--validate]
 
 doctor
 audit log
@@ -248,7 +248,7 @@ dbx drop connection <name> [flags]
 dbx drop database <name> [flags]
 dbx drop user <name> [flags]
 
-dbx run <name> [flags]
+dbx exec <name> [--preview] [--verbose] [--validate] [--input key=value] [flags]
 
 dbx doctor
 dbx help
@@ -312,6 +312,7 @@ Current config fields may include:
   "host": "10.0.1.20",
   "port": 3306,
   "user": "root",
+  "password_prompt": true,
   "password_env": "MYSQL_PROD_PASSWORD",
   "proxy": {
     "url": "socks5://proxy_user:proxy_password@127.0.0.1:1080"
@@ -320,7 +321,8 @@ Current config fields may include:
     "host": "bastion.example.com",
     "port": 22,
     "user": "ubuntu",
-    "private_key": "~/.ssh/id_rsa"
+    "private_key": "~/.ssh/id_rsa",
+    "password_env": "BASTION_PASSWORD"
   },
   "timeout": {
     "connect_seconds": 10,
@@ -536,10 +538,16 @@ proxy-SSH MySQL
 doctor
 create/list/drop database
 create/list/drop user
+show databases
 show tables
 show table
 show columns
 show rows
+show users
+show templates
+show context
+use database
+exec named templates
 template system
 global templates
 connection templates

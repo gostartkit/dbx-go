@@ -60,8 +60,8 @@ func (t sqlTransaction) Rollback() error {
 func (a *Application) executePlan(ctx context.Context, plan *tpl.ExecutionPlan, runner transactionStarter) (*PlanExecutionResult, error) {
 	result := &PlanExecutionResult{
 		OK:          true,
-		Template:    plan.TemplateName,
-		Layer:       plan.Layer,
+		Operation:   plan.OperationName,
+		Scope:       plan.Layer,
 		Source:      plan.Source,
 		Transaction: plan.Transaction,
 		Actions:     make([]ActionResult, 0, len(plan.Actions)),
@@ -130,8 +130,8 @@ func (a *Application) executePlan(ctx context.Context, plan *tpl.ExecutionPlan, 
 func (a *Application) runPlan(ctx context.Context, plan *tpl.ExecutionPlan, runner transactionStarter, dryRun bool) (*PlanExecutionResult, error) {
 	result := &PlanExecutionResult{
 		OK:          true,
-		Template:    plan.TemplateName,
-		Layer:       plan.Layer,
+		Operation:   plan.OperationName,
+		Scope:       plan.Layer,
 		Source:      plan.Source,
 		Transaction: plan.Transaction,
 		DryRun:      dryRun,

@@ -1000,7 +1000,7 @@ func TestCLIHelpForMultiWordCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Create a database from the resolved template.") {
+	if !strings.Contains(stdout.String(), "Create a database from the resolved operation spec.") {
 		t.Fatalf("help output missing expected text: %q", stdout.String())
 	}
 }

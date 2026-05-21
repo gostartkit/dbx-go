@@ -148,7 +148,7 @@ func TestREPLHelpCommandHasOutput(t *testing.T) {
 	if !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "Available Commands:") {
 		t.Fatalf("help output missing expected sections: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "connect\n  connect prod") || !strings.Contains(out.String(), "exec\n  exec seed-users --validate") {
+	if !strings.Contains(out.String(), "connect\n  connect prod") || !strings.Contains(out.String(), "show tables\n  show table users") || !strings.Contains(out.String(), "exec\n  exec create_database_with_user --validate") {
 		t.Fatalf("help output missing grouped examples: %q", out.String())
 	}
 }

@@ -12,7 +12,7 @@
 ## Scope Guardrails
 
 - Keep guided operations as the primary UX. Direct SQL should remain an explicit escape hatch, not the default experience.
-- Do not expand raw-SQL workflows beyond the current `run sql` entrypoint without discussion.
+- Do not add unrestricted SQL entrypoints or reintroduce `run sql`-style workflows without discussion.
 - Do not add large CLI or prompt frameworks.
 - Do not add ORM, migrations, proxy chains, autocomplete, or AI SQL features.
 
@@ -28,5 +28,5 @@
 - Preserve the configuration layout under `~/.config/dbx/`.
 - Avoid logging or printing secrets.
 - Keep SSH access native through Go SSH libraries.
-- Keep documentation and command examples in sync when command behavior changes.
-- Update both `README.md` and `README.zh-CN.md` when user-facing commands, workflows, or examples change.
+- Keep embedded help text, command examples, and Markdown docs in sync when command behavior changes.
+- Update `README.md`, `README.zh-CN.md`, `CONTRIBUTING.md`, `CONTRIBUTING.zh-CN.md`, and `AGENTS.md` together when user-facing command surfaces or workflows change.

@@ -25,12 +25,12 @@ func BuildPlan(tpl *Template, cfg *config.ConnectionConfig, values map[string]st
 	sqlData := renderData(cfg, values, true)
 
 	plan := &ExecutionPlan{
-		TemplateName: tpl.Name,
-		Layer:        tpl.Layer,
-		Category:     tpl.EffectiveCategory(),
-		Source:       tpl.Source,
-		Transaction:  tpl.Transaction,
-		Actions:      make([]RenderedAction, 0, len(tpl.Actions)),
+		OperationName: tpl.Name,
+		Layer:         tpl.Layer,
+		Category:      tpl.EffectiveCategory(),
+		Source:        tpl.Source,
+		Transaction:   tpl.Transaction,
+		Actions:       make([]RenderedAction, 0, len(tpl.Actions)),
 	}
 
 	for _, action := range tpl.Actions {

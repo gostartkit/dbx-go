@@ -2,21 +2,23 @@
 
 [中文文档](README.zh-CN.md)
 
-`dbx` is a REPL-first MySQL operator CLI. It keeps common database work guided and template-driven, supports direct, SSH, SOCKS5 proxy, and SOCKS5 -> SSH transport paths, and also exposes explicit one-shot entrypoints such as `run template` and `run sql` for automation.
+`dbx` is a REPL-first MySQL operator CLI written in Go. It keeps day-to-day database work guided and template-driven, shares one command tree between the REPL and one-shot CLI mode, and supports direct, SSH, SOCKS5, and SOCKS5 -> SSH transport paths without shelling out to external SSH tools.
+
+`dbx` does not expose unrestricted user SQL entrypoints. Instead, commands collect typed inputs, validate identifiers, resolve an executable operation spec, preview the plan, and execute safely.
 
 ## Highlights
 
 - REPL-first workflow with a session-aware `dbx>` prompt
-- Canonical verb-first command families: `show`, `create`, `drop`, `run`, and `use`
-- Shared command tree between the interactive REPL and non-interactive CLI
+- Shared command tree between interactive and non-interactive usage
+- Canonical verb-first commands: `show`, `create`, `drop`, `use`, `exec`
 - Native MySQL, SSH, SOCKS5, and SOCKS5 -> SSH connectivity
 - Template precedence: connection > global > builtin
-- Dry-run previews, confirmation prompts, redacted output, and local audit logging
+- Dry-run previews, confirmation gates, redacted output, and local audit logs
 - Small dependency set and classic Go project layout
 
-## Command Model
+## Command Surface
 
-`dbx` now documents the verb-first command surface as the canonical interface. Use these forms in new docs, scripts, and examples:
+The current user-facing command surface is:
 
 ```text
 connect [name]
@@ -28,6 +30,7 @@ show tables
 show table <name>
 show columns <table>
 show rows <table> [--limit n]
+show users
 show templates [query] [--tag value]
 show context
 
@@ -41,8 +44,7 @@ drop user <name>
 
 use database <name>
 
-run template <name> [--preview] [--verbose] [--validate]
-run sql <sql-or-file>
+exec <operation> [--preview] [--verbose] [--validate]
 
 doctor
 audit log
@@ -50,12 +52,18 @@ help
 exit
 ```
 
-The REPL and the one-shot CLI share the same command tree. In scripts, prepend `dbx`:
+Notes:
+
+- `show table <name>` prints the `SHOW CREATE TABLE` DDL for that table.
+- `show rows <table>` previews rows with a default limit of `10` and a maximum of `100`.
+- `exec <operation>` runs a named operation. Today the only operation provider is `template`, but the command surface stays provider-neutral.
+
+In non-interactive mode, prepend `dbx`:
 
 ```bash
 dbx show connections
 dbx --connection prod show tables
-dbx --connection prod run template create_database_with_user --preview
+dbx --connection prod exec create_database_with_user --preview
 ```
 
 ## Quick Start
@@ -72,7 +80,7 @@ Start the REPL:
 go run ./cmd/dbx
 ```
 
-Typical interactive flow:
+A typical guided flow:
 
 ```text
 dbx> create connection prod
@@ -80,13 +88,13 @@ dbx> connect prod
 dbx(prod)> show databases
 dbx(prod)> use database app_prod
 dbx(prod/app_prod)> show tables
-dbx(prod/app_prod)> run template create_database_with_user --preview
-dbx(prod/app_prod)> run sql @schema.sql
+dbx(prod/app_prod)> show table users
+dbx(prod/app_prod)> show rows users --limit 20
+dbx(prod/app_prod)> create user analytics_ro
+dbx(prod/app_prod)> audit log
 ```
 
-Guided operations remain the primary UX. `run sql` is an explicit escape hatch for direct SQL execution when you need it.
-
-## Non-Interactive Examples
+## Non-Interactive CLI
 
 Create a saved direct connection:
 
@@ -96,10 +104,11 @@ dbx create connection dev \
   --host 127.0.0.1 \
   --port 3306 \
   --user root \
-  --password-env MYSQL_DEV_PASSWORD
+  --password-env MYSQL_DEV_PASSWORD \
+  --yes
 ```
 
-Create a saved proxy -> SSH connection:
+Create a saved proxy -> SSH connection and test it:
 
 ```bash
 dbx create connection prod-proxy \
@@ -112,43 +121,52 @@ dbx create connection prod-proxy \
   --ssh-host bastion.example.com \
   --ssh-port 22 \
   --ssh-user ubuntu \
-  --ssh-private-key ~/.ssh/id_rsa
+  --ssh-private-key ~/.ssh/id_rsa \
+  --test \
+  --yes
 ```
 
-Inspect saved state and current context:
+Inspect saved state and operational context:
 
 ```bash
 dbx show connections
-dbx --connection prod show connection prod
+dbx show connection prod
 dbx --connection prod show databases
 dbx --connection prod --database app_prod show tables
 dbx --connection prod --database app_prod show table users
 dbx --connection prod --database app_prod show columns users
 dbx --connection prod --database app_prod show rows users --limit 20
-dbx --connection prod --database app_prod show context --format json
+dbx --connection prod show context --format json
 ```
 
-Run guided workflows:
+Run guided operations:
 
 ```bash
 dbx --connection prod create database app_demo --yes
 dbx --connection prod drop database app_demo --dry-run
-dbx --connection prod --database app_prod create user analytics_ro --yes
-dbx --connection prod show templates
-dbx --connection prod show templates --tag tenant
-dbx --connection prod run template create_database_with_user \
-  --input database=greenhn_prod \
-  --input user_host=% \
-  --input password-env=GREENHN_PASSWORD \
-  --preview
+dbx --connection prod --database app_prod create user analytics_ro \
+  --grant readonly \
+  --password-env ANALYTICS_RO_PASSWORD \
+  --yes
+dbx --connection prod --database app_prod drop user analytics_ro --yes
 ```
 
-Run direct SQL:
+Use named operations explicitly:
 
 ```bash
-dbx --connection prod run sql "SELECT 1"
-dbx --connection prod run sql @schema.sql
-dbx --connection prod --database app_prod run sql migrations/bootstrap.sql
+dbx --connection prod show templates
+dbx --connection prod show templates database --tag tenant
+dbx --connection prod exec create_database_with_user --validate
+dbx --connection prod exec create_database_with_user \
+  --input database=greenhn_prod \
+  --input user_host=% \
+  --input password=super-secret \
+  --preview
+dbx --connection prod create database greenhn_prod \
+  --template create_database_with_user \
+  --input user_host=% \
+  --input password=super-secret \
+  --yes
 ```
 
 Inspect diagnostics and audit history:
@@ -170,7 +188,7 @@ proxy     -> proxy -> db
 proxy-ssh -> proxy -> ssh -> db
 ```
 
-Only SOCKS5 proxying is supported. Validation stays mode-specific:
+Only SOCKS5 proxying is supported. Validation is mode-specific:
 
 - `direct` rejects proxy and SSH settings
 - `ssh` requires SSH settings and rejects proxy settings
@@ -205,6 +223,13 @@ Example connection config:
 }
 ```
 
+Password sources may be stored inline, loaded from environment variables, or prompted at runtime:
+
+- database password: `password`, `password_env`, `password_prompt`
+- SSH auth: `ssh.private_key`, `ssh.password_env`, `ssh.password`
+
+`doctor` warns on insecure inline secrets and missing password environment variables, but it does not rewrite config for you.
+
 ## Templates
 
 Templates are safe operational workflows, not a general scripting runtime.
@@ -224,26 +249,50 @@ Template directories:
 ~/.config/dbx/{connection}/templates/
 ```
 
-Current template inputs include typed values such as `string`, `secret`, `select`, `confirm`, `identifier`, and `int`. Secret inputs are redacted from previews, logs, and JSON output.
+Current template input types:
 
-Example template file: [examples/templates/create_database_with_user.json](examples/templates/create_database_with_user.json)
+- `string`
+- `secret`
+- `select`
+- `confirm`
+- `identifier`
+- `int`
 
-That example creates a database, creates a same-name MySQL user, and grants privileges using these inputs:
+Template facts:
 
-- `database`
-- `charset`
-- `collation`
-- `user_host`
-- `password`
+- Input keys passed with `--input key=value` must match template input names exactly.
+- Secret inputs are redacted from previews, logs, audit records, and JSON output.
+- If multiple templates match the same command at the same layer, the REPL asks you to choose and the CLI requires `--template <name>` or `exec <name>`.
 
-Useful template commands:
+Built-in variables include:
+
+```text
+{{database}}
+{{connection.name}}
+{{connection.host}}
+{{connection.user}}
+```
+
+The repository includes an example template at [examples/templates/create_database_with_user.json](examples/templates/create_database_with_user.json). It matches the `create database` command and adds extra inputs for `user_host` and `password`.
+
+For a detailed end-to-end template walkthrough, including layering, input types, secret handling, and command-to-template matching notes, see [TEMPLATE_STARTKIT.md](TEMPLATE_STARTKIT.md). A Chinese version is available at [TEMPLATE_STARTKIT.zh-CN.md](TEMPLATE_STARTKIT.zh-CN.md).
+
+To try it locally, copy it into your config directory:
 
 ```bash
-dbx --connection prod show templates
-dbx --connection prod show templates --tag grant
-dbx --connection prod run template create_database_with_user --validate
-dbx --connection prod run template create_database_with_user --preview
-dbx --connection prod run template create_database_with_user --verbose --yes
+mkdir -p ~/.config/dbx/templates
+cp examples/templates/create_database_with_user.json ~/.config/dbx/templates/
+```
+
+Then validate or preview it:
+
+```bash
+dbx --connection prod exec create_database_with_user --validate
+dbx --connection prod create database app_demo \
+  --template create_database_with_user \
+  --input user_host=% \
+  --input password=super-secret \
+  --preview
 ```
 
 ## Configuration Layout
@@ -267,14 +316,24 @@ All user state lives under `~/.config/dbx/`:
     templates/
 ```
 
-Connection configs are stored at `~/.config/dbx/{connection}/config.json`.
+Key paths:
+
+- connection config: `~/.config/dbx/{connection}/config.json`
+- connection templates: `~/.config/dbx/{connection}/templates/`
+- global templates: `~/.config/dbx/templates/`
+- session file: `~/.config/dbx/session.json`
+- history file: `~/.config/dbx/history`
+- audit log: `~/.config/dbx/logs/audit.jsonl`
+
+The session file persists the selected connection and selected database. Command history is persisted locally and trimmed to the most recent `1000` entries.
 
 ## Diagnostics And Safety
 
-- `doctor` is static. It checks config shape, password sources, proxy URL shape, SSH auth settings, and `known_hosts` presence without dialing the network path.
-- `create connection ... --test` performs a live connectivity check before returning. If the live test fails, the config is still saved and a warning is reported so you can fix it later.
-- Mutating commands require confirmation in the REPL and `--yes` in non-interactive mode unless `--dry-run` or `--preview` is in effect.
+- `doctor` is static. It checks config shape, password sources, proxy URL shape, SSH auth settings, key file permissions, and `known_hosts` presence without dialing the network path.
+- `create connection ... --test` saves the config, then performs a live connectivity check and reports any warning without deleting the saved config.
+- Mutating commands require confirmation in the REPL and `--yes` in non-interactive mode unless `--dry-run` or `--preview` is in effect for that command.
 - Passwords, proxy passwords, and secret template inputs are redacted from user-facing output and audit logs.
+- `audit log` reads the local JSONL audit file and shows the most recent entries instead of failing the original command when audit append fails.
 
 ## Architecture
 
@@ -283,12 +342,12 @@ Connection configs are stored at `~/.config/dbx/{connection}/config.json`.
 - [cmd/dbx/main.go](cmd/dbx/main.go): process startup, signal-aware shutdown, CLI root
 - [internal/app/](internal/app): shared command tree, REPL handlers, one-shot CLI flow, reporting
 - [internal/repl/](internal/repl): minimal REPL loop
-- [internal/config/](internal/config): config loading, session file, history file, timeout defaults
-- [internal/connect/](internal/connect): driver-facing timeout application
-- [internal/driver/](internal/driver): MySQL and SSH transport implementation
+- [internal/config/](internal/config): config loading, session file, history file, audit log, timeout defaults
+- [internal/connect/](internal/connect): timeout-aware connection helpers
+- [internal/driver/](internal/driver): MySQL, SSH, and SOCKS5 transport implementation
 - [internal/template/](internal/template): template resolution and rendering
-- [internal/ui/](internal/ui): lightweight prompt helpers
-- [internal/util/](internal/util): validation, paths, layered errors, output helpers
+- [internal/ui/](internal/ui): lightweight prompt helpers, history, completion
+- [internal/util/](internal/util): validation, paths, layered errors, redaction helpers
 
 ## Project Layout
 
@@ -320,7 +379,7 @@ dbx/
 
 Requirements:
 
-- Go 1.25+
+- Go `1.25+`
 - MySQL reachable through one of the supported transport modes
 
 Common developer commands:
@@ -332,7 +391,7 @@ make build
 make check
 ```
 
-Release packaging lives in [scripts/release.sh](scripts/release.sh). Install helpers live in [scripts/install.sh](scripts/install.sh).
+Release packaging lives in [scripts/release.sh](scripts/release.sh). The installer helper in [scripts/install.sh](scripts/install.sh) follows the release artifact naming convention and still expects the final GitHub release repo path to be wired through its `REPO` value before publishing.
 
 ## Contributing
 

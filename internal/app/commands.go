@@ -509,7 +509,7 @@ func (a *Application) previewAndConfirm(ctx context.Context, command string, pla
 }
 
 func (a *Application) printPlanPreview(plan *tpl.ExecutionPlan, dryRun bool) {
-	a.prompt.Printf("Template: %s (%s)\n", plan.TemplateName, plan.Layer)
+	a.prompt.Printf("Operation: %s (%s)\n", plan.OperationName, plan.Layer)
 	a.prompt.Printf("Source: %s\n", plan.Source)
 	a.prompt.Println("Execution Plan")
 	for index, action := range plan.Actions {

@@ -49,11 +49,11 @@ func (a *Application) handleExecValidate(ctx context.Context, name string) error
 			meta.Mode = cfg.Mode
 		}
 
-		result, err := a.templateValidateResult(cfg, name)
+		result, err := a.operationValidateResult(cfg, name)
 		if err != nil {
 			return err
 		}
-		a.printTemplateValidation(result)
+		a.printOperationValidation(result)
 		return nil
 	})
 }
@@ -81,29 +81,29 @@ func (a *Application) handleDescribeTemplate(ctx context.Context, name string, v
 func (a *Application) handleExec(ctx context.Context, name string, preview bool, verbose bool, dryRunFlag bool) error {
 	effectiveDryRun := a.dryRun || dryRunFlag
 	return a.auditCommand(ctx, auditMetadata{Command: "exec", DryRun: effectiveDryRun || preview}, func(meta *auditMetadata) error {
-		cfg, err := a.requireTemplateRunConnection(ctx)
+		cfg, err := a.requireOperationConnection(ctx)
 		if err != nil {
 			return err
 		}
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 
-		selectedTemplate, err := a.templates.ResolveNamedAny(cfg, name)
+		spec, err := a.resolveExecutableSpec(cfg, name)
 		if err != nil {
-			return util.WrapLayer("template", "resolve template "+name, err)
+			return util.WrapLayer("template", "resolve operation "+name, err)
 		}
 
-		values, inputSummary, err := a.collectTemplateRunInputs(ctx, selectedTemplate, nil, true, a.currentDatabaseName())
+		values, inputSummary, err := a.collectOperationInputs(ctx, spec, nil, true, a.currentDatabaseName())
 		if err != nil {
-			return util.WrapLayer("template", "collect template inputs", err)
+			return util.WrapLayer("template", "collect operation inputs", err)
 		}
 
-		plan, previewPlan, err := buildPlans(selectedTemplate, cfg, values)
+		plan, previewPlan, err := spec.BuildPlans(cfg, values)
 		if err != nil {
 			return err
 		}
 
-		a.printTemplateRunPreview(previewPlan, inputSummary, verbose, preview, effectiveDryRun)
+		a.printOperationRunPreview(spec, previewPlan, inputSummary, verbose, preview, effectiveDryRun)
 
 		if preview {
 			return nil
@@ -210,22 +210,23 @@ func (a *Application) describeTemplateResult(cfg *config.ConnectionConfig, name 
 	return result, nil
 }
 
-func (a *Application) templateValidateResult(cfg *config.ConnectionConfig, name string) (*TemplateValidationResult, error) {
-	selectedTemplate, err := a.templates.ResolveNamedAny(cfg, name)
+func (a *Application) operationValidateResult(cfg *config.ConnectionConfig, name string) (*OperationValidationResult, error) {
+	spec, err := a.resolveExecutableSpec(cfg, name)
 	if err != nil {
-		return nil, util.WrapLayer("template", "resolve template "+name, err)
+		return nil, util.WrapLayer("template", "resolve operation "+name, err)
 	}
-	if err := validateResolvedTemplate(selectedTemplate); err != nil {
-		return nil, util.WrapLayer("validation", "validate template "+name, err)
+	if err := spec.Validate(); err != nil {
+		return nil, util.WrapLayer("validation", "validate operation "+name, err)
 	}
 
-	result := &TemplateValidationResult{
-		OK:       true,
-		Name:     selectedTemplate.Name,
-		Scope:    selectedTemplate.Layer,
-		Category: selectedTemplate.EffectiveCategory(),
-		Command:  selectedTemplate.Match.Command,
-		Valid:    true,
+	result := &OperationValidationResult{
+		OK:        true,
+		Operation: spec.Operation(),
+		Provider:  spec.Provider(),
+		Scope:     spec.Scope(),
+		Category:  spec.Category(),
+		Command:   spec.Template().Match.Command,
+		Valid:     true,
 	}
 	if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
 		result.Connection = cfg.Name
@@ -233,34 +234,35 @@ func (a *Application) templateValidateResult(cfg *config.ConnectionConfig, name 
 	return result, nil
 }
 
-func (a *Application) execResult(ctx context.Context, cfg *config.ConnectionConfig, name string, rawInputs map[string]string, preview bool, dryRun bool, verbose bool, database string) (*TemplateRunResult, error) {
-	selectedTemplate, err := a.templates.ResolveNamedAny(cfg, name)
+func (a *Application) execOperationResult(ctx context.Context, cfg *config.ConnectionConfig, name string, rawInputs map[string]string, preview bool, dryRun bool, verbose bool, database string) (*OperationRunResult, error) {
+	spec, err := a.resolveExecutableSpec(cfg, name)
 	if err != nil {
-		return nil, util.WrapLayer("template", "resolve template "+name, err)
+		return nil, util.WrapLayer("template", "resolve operation "+name, err)
 	}
 
-	values, inputSummary, err := a.collectTemplateRunInputs(nil, selectedTemplate, rawInputs, true, database)
+	values, inputSummary, err := a.collectOperationInputs(nil, spec, rawInputs, true, database)
 	if err != nil {
-		return nil, util.WrapLayer("template", "collect template inputs", err)
+		return nil, util.WrapLayer("template", "collect operation inputs", err)
 	}
 
-	plan, previewPlan, err := buildPlans(selectedTemplate, cfg, values)
+	plan, previewPlan, err := spec.BuildPlans(cfg, values)
 	if err != nil {
 		return nil, err
 	}
 
-	redactedInputs := redactTemplateValues(selectedTemplate, values)
-	result := &TemplateRunResult{
+	redactedInputs := redactTemplateValues(spec.Template(), values)
+	result := &OperationRunResult{
 		OK:           true,
 		Connection:   cfg.Name,
 		Command:      "exec",
-		Template:     selectedTemplate.Name,
-		Layer:        selectedTemplate.Layer,
-		Category:     selectedTemplate.EffectiveCategory(),
-		Source:       selectedTemplate.Source,
+		Operation:    spec.Operation(),
+		Provider:     spec.Provider(),
+		Scope:        spec.Scope(),
+		Category:     spec.Category(),
+		Source:       spec.Source(),
 		Preview:      preview,
 		DryRun:       dryRun,
-		Transaction:  selectedTemplate.Transaction,
+		Transaction:  spec.Transaction(),
 		Inputs:       redactedInputs,
 		InputSummary: inputSummary,
 		Actions:      make([]ActionResult, 0, len(previewPlan.Actions)),
@@ -316,7 +318,8 @@ func (a *Application) execResult(ctx context.Context, cfg *config.ConnectionConf
 	}
 }
 
-func (a *Application) collectTemplateRunInputs(ctx context.Context, template *tpl.Template, rawInputs map[string]string, requireAll bool, database string) (map[string]string, []TemplateInputValueResult, error) {
+func (a *Application) collectOperationInputs(ctx context.Context, spec *executableSpec, rawInputs map[string]string, requireAll bool, database string) (map[string]string, []OperationInputValueResult, error) {
+	template := spec.Template()
 	values := make(map[string]string)
 	provided := make(map[string]bool)
 	if strings.TrimSpace(database) != "" {
@@ -327,9 +330,9 @@ func (a *Application) collectTemplateRunInputs(ctx context.Context, template *tp
 		if strings.HasSuffix(key, "-env") {
 			name := strings.TrimSpace(strings.TrimSuffix(key, "-env"))
 			if name == "" {
-				return nil, nil, util.WrapLayer("validation", "collect template inputs", fmt.Errorf("input key is required"))
+				return nil, nil, util.WrapLayer("validation", "collect operation inputs", fmt.Errorf("input key is required"))
 			}
-			resolved, err := resolveTemplateInputFromEnv(value)
+			resolved, err := resolveOperationInputFromEnv(value)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -367,7 +370,7 @@ func (a *Application) collectTemplateRunInputs(ctx context.Context, template *tp
 	if err != nil {
 		return nil, nil, err
 	}
-	return finalValues, buildTemplateInputSummary(template, finalValues, provided), nil
+	return finalValues, buildOperationInputSummary(template, finalValues, provided), nil
 }
 
 func (a *Application) printTemplatesCatalog(result *TemplatesCatalogResult) {
@@ -443,10 +446,10 @@ func (a *Application) printTemplateDescription(result *TemplateDescriptionResult
 	}
 }
 
-func (a *Application) printTemplateRunPreview(plan *tpl.ExecutionPlan, inputSummary []TemplateInputValueResult, verbose bool, preview bool, dryRun bool) {
-	a.printTemplatePlanHeading(plan.TemplateName, plan.Layer, plan.Category)
+func (a *Application) printOperationRunPreview(spec *executableSpec, plan *tpl.ExecutionPlan, inputSummary []OperationInputValueResult, verbose bool, preview bool, dryRun bool) {
+	a.printOperationPlanHeading(spec.Operation(), spec.Provider(), spec.Scope(), spec.Category())
 	a.prompt.Println("")
-	a.printTemplateInputSummary(inputSummary)
+	a.printOperationInputSummary(inputSummary)
 	a.prompt.Println("")
 	a.prompt.Println("Execution Plan:")
 	for index, action := range plan.Actions {
@@ -470,13 +473,13 @@ func (a *Application) printTemplateRunPreview(plan *tpl.ExecutionPlan, inputSumm
 	}
 }
 
-func (a *Application) printTemplateRunResult(result *TemplateRunResult) {
+func (a *Application) printOperationRunResult(result *OperationRunResult) {
 	if result == nil {
 		return
 	}
-	a.printTemplatePlanHeading(result.Template, result.Layer, result.Category)
+	a.printOperationPlanHeading(result.Operation, result.Provider, result.Scope, result.Category)
 	a.prompt.Println("")
-	a.printTemplateInputSummary(result.InputSummary)
+	a.printOperationInputSummary(result.InputSummary)
 	a.prompt.Println("")
 	if result.Preview {
 		a.prompt.Println("Execution Plan:")
@@ -512,11 +515,14 @@ func (a *Application) printTemplateRunResult(result *TemplateRunResult) {
 	}
 }
 
-func (a *Application) printTemplateValidation(result *TemplateValidationResult) {
+func (a *Application) printOperationValidation(result *OperationValidationResult) {
 	if result == nil {
 		return
 	}
-	a.prompt.Printf("Template: %s\n", result.Name)
+	a.prompt.Printf("Operation: %s\n", result.Operation)
+	if strings.TrimSpace(result.Provider) != "" {
+		a.prompt.Printf("Provider: %s\n", result.Provider)
+	}
 	a.prompt.Printf("Scope: %s\n", result.Scope)
 	a.prompt.Printf("Category: %s\n", result.Category)
 	a.prompt.Printf("Command: %s\n", result.Command)
@@ -548,7 +554,7 @@ func (a *Application) templateScopeConfig(connectionName string) (*config.Connec
 	return cfg, nil
 }
 
-func (a *Application) requireTemplateRunConnection(ctx context.Context) (*config.ConnectionConfig, error) {
+func (a *Application) requireOperationConnection(ctx context.Context) (*config.ConnectionConfig, error) {
 	cfg, db, err := a.requireConnection(ctx)
 	if err != nil {
 		return nil, util.WrapLayer("validation", "exec", fmt.Errorf("no active database connection; run connect first"))
@@ -587,11 +593,11 @@ func normalizeTemplateCatalogTag(tag string) string {
 	return strings.ToLower(strings.TrimSpace(tag))
 }
 
-func buildTemplateInputSummary(template *tpl.Template, values map[string]string, provided map[string]bool) []TemplateInputValueResult {
+func buildOperationInputSummary(template *tpl.Template, values map[string]string, provided map[string]bool) []OperationInputValueResult {
 	if template == nil || len(template.Inputs) == 0 {
 		return nil
 	}
-	summary := make([]TemplateInputValueResult, 0, len(template.Inputs))
+	summary := make([]OperationInputValueResult, 0, len(template.Inputs))
 	for _, input := range template.Inputs {
 		value, exists := values[input.Name]
 		if !exists {
@@ -600,7 +606,7 @@ func buildTemplateInputSummary(template *tpl.Template, values map[string]string,
 		if input.EffectiveType() == "secret" {
 			value = "***"
 		}
-		summary = append(summary, TemplateInputValueResult{
+		summary = append(summary, OperationInputValueResult{
 			Name:      input.Name,
 			Value:     value,
 			Type:      input.EffectiveType(),
@@ -610,8 +616,11 @@ func buildTemplateInputSummary(template *tpl.Template, values map[string]string,
 	return summary
 }
 
-func (a *Application) printTemplatePlanHeading(name string, scope string, category string) {
-	a.prompt.Printf("Template: %s\n", name)
+func (a *Application) printOperationPlanHeading(name string, provider string, scope string, category string) {
+	a.prompt.Printf("Operation: %s\n", name)
+	if strings.TrimSpace(provider) != "" {
+		a.prompt.Printf("Provider: %s\n", provider)
+	}
 	if strings.TrimSpace(scope) != "" {
 		a.prompt.Printf("Scope: %s\n", scope)
 	}
@@ -620,7 +629,7 @@ func (a *Application) printTemplatePlanHeading(name string, scope string, catego
 	}
 }
 
-func (a *Application) printTemplateInputSummary(inputs []TemplateInputValueResult) {
+func (a *Application) printOperationInputSummary(inputs []OperationInputValueResult) {
 	a.prompt.Println("Inputs:")
 	if len(inputs) == 0 {
 		a.prompt.Println("  <none>")
@@ -633,17 +642,6 @@ func (a *Application) printTemplateInputSummary(inputs []TemplateInputValueResul
 		}
 		a.prompt.Printf("  %s: %s\n", input.Name, value)
 	}
-}
-
-func validateResolvedTemplate(selectedTemplate *tpl.Template) error {
-	if err := selectedTemplate.Validate(); err != nil {
-		return err
-	}
-	spec, ok := commandSpecByPath(selectedTemplate.Match.Command)
-	if !ok || spec.Category != "command" {
-		return fmt.Errorf("unsupported match command %q", selectedTemplate.Match.Command)
-	}
-	return nil
 }
 
 func parseDescribeTemplateArgs(args []string) (string, bool, error) {
@@ -709,14 +707,14 @@ func parseTemplateValidateArgs(args []string) (string, error) {
 	return strings.TrimSpace(args[0]), nil
 }
 
-func resolveTemplateInputFromEnv(name string) (string, error) {
+func resolveOperationInputFromEnv(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "", util.WrapLayer("validation", "collect template inputs", fmt.Errorf("environment variable name is required"))
+		return "", util.WrapLayer("validation", "collect operation inputs", fmt.Errorf("environment variable name is required"))
 	}
 	value, ok := os.LookupEnv(name)
 	if !ok || strings.TrimSpace(value) == "" {
-		return "", util.WrapLayer("validation", "collect template inputs", fmt.Errorf("environment variable %s is not set", name))
+		return "", util.WrapLayer("validation", "collect operation inputs", fmt.Errorf("environment variable %s is not set", name))
 	}
 	return value, nil
 }

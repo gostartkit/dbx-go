@@ -232,11 +232,11 @@ func TestTemplateRunPreviewParsesInputsAndRedactsSecrets(t *testing.T) {
 		t.Fatalf("stdout leaked secret: %q", stdout.String())
 	}
 
-	var result TemplateRunResult
+	var result OperationRunResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
 	}
-	if !result.Preview || result.Template != "create_database_with_user" {
+	if !result.Preview || result.Operation != "create_database_with_user" || result.Provider != "template" {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 	if result.Inputs["password"] != "***" {
@@ -621,11 +621,11 @@ func TestTemplateValidateSuccessAndJSONOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
-	var result TemplateValidationResult
+	var result OperationValidationResult
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
 	}
-	if !result.Valid || result.Category != "database" || result.Command != "create database" {
+	if !result.Valid || result.Operation != "create_database_with_user" || result.Provider != "template" || result.Category != "database" || result.Command != "create database" {
 		t.Fatalf("unexpected validation result: %+v", result)
 	}
 }

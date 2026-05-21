@@ -227,12 +227,12 @@ type Action struct {
 }
 
 type ExecutionPlan struct {
-	TemplateName string
-	Layer        string
-	Category     string
-	Source       string
-	Transaction  bool
-	Actions      []RenderedAction
+	OperationName string
+	Layer         string
+	Category      string
+	Source        string
+	Transaction   bool
+	Actions       []RenderedAction
 }
 
 type RenderedAction struct {

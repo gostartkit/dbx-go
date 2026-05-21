@@ -30,6 +30,7 @@ Examples:
   show
   show connections
   show tables
+  show table users
   show templates --tag readonly
 
   create
@@ -37,7 +38,7 @@ Examples:
   create database appdb
 
   exec
-  exec seed-users --validate`),
+  exec create_database_with_user --validate`),
 		},
 		"connect": {
 			title: "connect",
@@ -138,7 +139,7 @@ Usage:
 		"create database": {
 			title: "create database",
 			body: strings.TrimSpace(`
-Create a database from the resolved template.
+Create a database from the resolved operation spec.
 
 Usage:
   create database <name> [flags]`),
@@ -146,7 +147,7 @@ Usage:
 		"drop database": {
 			title: "drop database",
 			body: strings.TrimSpace(`
-Drop a database from the resolved template.
+Drop a database from the resolved operation spec.
 
 Usage:
   drop database <name> [flags]`),
@@ -154,7 +155,7 @@ Usage:
 		"create user": {
 			title: "create user",
 			body: strings.TrimSpace(`
-Create a MySQL user from the resolved template.
+Create a MySQL user from the resolved operation spec.
 
 Usage:
   create user <name> [flags]`),
@@ -183,7 +184,7 @@ Subcommands:
 		"drop user": {
 			title: "drop user",
 			body: strings.TrimSpace(`
-Drop a MySQL user from the resolved template.
+Drop a MySQL user from the resolved operation spec.
 
 Usage:
   drop user <name> [flags]`),
@@ -215,7 +216,7 @@ Usage:
 		"show table": {
 			title: "show table",
 			body: strings.TrimSpace(`
-Show detailed table output for one table.
+Show CREATE TABLE output for one table.
 
 Usage:
   show table <name>`),

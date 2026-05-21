@@ -8,7 +8,7 @@ import (
 	"pkg.gostartkit.com/dbx/internal/util"
 )
 
-type templateRunFlags struct {
+type execOperationFlags struct {
 	inputs   inputValues
 	preview  bool
 	verbose  bool
@@ -20,7 +20,7 @@ type showTemplatesFlags struct {
 }
 
 func (b *cliBuilder) execGroupCommand() *cmd.Command {
-	flags := &templateRunFlags{inputs: inputValues{}}
+	flags := &execOperationFlags{inputs: inputValues{}}
 	return &cmd.Command{
 		Name:      "exec",
 		UsageLine: "dbx exec <operation> [flags]",
@@ -30,7 +30,7 @@ func (b *cliBuilder) execGroupCommand() *cmd.Command {
 			bindInputFlag(f, flags.inputs)
 			f.BoolVar(&flags.preview, "preview", false, "render the workflow plan without executing", "")
 			f.BoolVar(&flags.verbose, "verbose", false, "include redacted SQL preview", "")
-			f.BoolVar(&flags.validate, "validate", false, "validate the template without running it", "")
+			f.BoolVar(&flags.validate, "validate", false, "validate the operation without running it", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if len(args) == 0 {
@@ -63,12 +63,12 @@ func (b *cliBuilder) execGroupCommand() *cmd.Command {
 						meta.Connection = cfg.Name
 						meta.Mode = cfg.Mode
 					}
-					result, err := application.templateValidateResult(cfg, args[0])
+					result, err := application.operationValidateResult(cfg, args[0])
 					if err != nil {
 						return err
 					}
 					return b.writeOutput(result, func() error {
-						application.printTemplateValidation(result)
+						application.printOperationValidation(result)
 						return nil
 					})
 				})
@@ -135,7 +135,7 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 	}
 }
 
-func (b *cliBuilder) execOperation(ctx context.Context, application *Application, name string, flags *templateRunFlags, meta *auditMetadata) error {
+func (b *cliBuilder) execOperation(ctx context.Context, application *Application, name string, flags *execOperationFlags, meta *auditMetadata) error {
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
 		return err
@@ -150,12 +150,12 @@ func (b *cliBuilder) execOperation(ctx context.Context, application *Application
 		}
 	}
 
-	result, err := application.execResult(ctx, cfg, name, flags.inputs, flags.preview, b.globals.DryRun, flags.verbose, b.globals.Database)
+	result, err := application.execOperationResult(ctx, cfg, name, flags.inputs, flags.preview, b.globals.DryRun, flags.verbose, b.globals.Database)
 	if err != nil && result == nil {
 		return err
 	}
 	if writeErr := b.writeOutput(result, func() error {
-		application.printTemplateRunResult(result)
+		application.printOperationRunResult(result)
 		return err
 	}); writeErr != nil {
 		return writeErr
