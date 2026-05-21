@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
@@ -109,22 +108,17 @@ func (a *Application) selectTemplateForCLI(command string, cfg *config.Connectio
 		return selected, nil
 	}
 
-	templates, err := a.templates.List(command, cfg)
+	match, err := a.templates.ResolveByLayer(command, cfg)
 	if err != nil {
-		return nil, util.WrapLayer("template", "list templates for "+command, err)
+		return nil, util.WrapLayer("template", "resolve template for "+command, err)
 	}
-	if len(templates) == 0 {
-		return nil, util.WrapLayer("template", "resolve template for "+command, fmt.Errorf("no template found"))
+	if len(match.Templates) == 0 {
+		return nil, util.WrapLayer("template", "resolve template for "+command, fmt.Errorf("no template found for command %q and driver %q", command, templateDriver(cfg)))
 	}
-	if len(templates) > 1 {
-		names := make([]string, 0, len(templates))
-		for _, candidate := range templates {
-			names = append(names, candidate.Name)
-		}
-		sort.Strings(names)
-		return nil, util.WrapLayer("template", "resolve template for "+command, fmt.Errorf("multiple templates match; specify --template (%s)", strings.Join(names, ", ")))
+	if len(match.Templates) > 1 {
+		return nil, util.WrapLayer("template", "resolve template for "+command, buildCLITemplateAmbiguityError(command, match))
 	}
 
-	selected := templates[0]
+	selected := match.Templates[0]
 	return &selected, nil
 }

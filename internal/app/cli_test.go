@@ -552,8 +552,14 @@ func TestCLIAmbiguousTemplateFails(t *testing.T) {
 	if app.ExitStatus() == 0 {
 		t.Fatalf("expected non-zero exit status")
 	}
-	if !strings.Contains(err.Error(), "multiple templates match") {
+	if !strings.Contains(err.Error(), "multiple templates matched command \"create database\" at global scope") {
 		t.Fatalf("unexpected error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(err.Error(), "aaa") || !strings.Contains(err.Error(), "bbb") {
+		t.Fatalf("missing candidate list in error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "run template <name>") {
+		t.Fatalf("missing explicit template hint in error: %v", err)
 	}
 }
 

@@ -20,7 +20,7 @@ func (a *Application) handleShowColumns(ctx context.Context, table string) error
 			return err
 		}
 
-		template, err := a.templates.Resolve("show columns", cfg)
+		template, err := a.resolveTemplateForAction(ctx, "show columns", cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve show columns template", err)
 		}

@@ -1,5 +1,7 @@
 # Contributing
 
+[中文版本](CONTRIBUTING.zh-CN.md)
+
 ## Development
 
 - Use `make check` before submitting changes. It verifies formatting, `go vet`, tests, and a full build.

@@ -128,7 +128,7 @@ func (a *Application) resolveCreateUserPlan(ctx context.Context, cfg *config.Con
 	if cli {
 		selectedTemplate, err = a.selectTemplateForCLI("create user", cfg, templateName)
 	} else {
-		selectedTemplate, err = a.templates.Resolve("create user", cfg)
+		selectedTemplate, err = a.resolveTemplateForAction(ctx, "create user", cfg)
 	}
 	if err != nil {
 		return nil, nil, nil, util.WrapLayer("template", "resolve create user template", err)

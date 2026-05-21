@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
@@ -15,20 +16,90 @@ type Service struct {
 	store *config.Store
 }
 
+type LayerMatch struct {
+	Command   string
+	Driver    string
+	Layer     string
+	Templates []Template
+}
+
+type AmbiguousResolveError struct {
+	Command    string
+	Driver     string
+	Layer      string
+	Candidates []Template
+}
+
+func (e *AmbiguousResolveError) Error() string {
+	if e == nil {
+		return "ambiguous template match"
+	}
+	names := make([]string, 0, len(e.Candidates))
+	for _, candidate := range e.Candidates {
+		names = append(names, candidate.Name)
+	}
+	sort.Strings(names)
+	return fmt.Sprintf(
+		"multiple templates matched command %q at %s scope: %s",
+		e.Command,
+		e.Layer,
+		strings.Join(names, ", "),
+	)
+}
+
 func NewService(store *config.Store) *Service {
 	return &Service{store: store}
 }
 
 func (s *Service) Resolve(command string, cfg *config.ConnectionConfig) (*Template, error) {
-	templates, err := s.List(command, cfg)
+	match, err := s.ResolveByLayer(command, cfg)
 	if err != nil {
 		return nil, err
 	}
-	if len(templates) == 0 {
-		return nil, fmt.Errorf("no template found for command %q and driver %q", command, cfg.Driver)
+	if len(match.Templates) == 0 {
+		return nil, fmt.Errorf("no template found for command %q and driver %q", command, driverName(cfg))
 	}
-	chosen := templates[0]
+	if len(match.Templates) > 1 {
+		return nil, &AmbiguousResolveError{
+			Command:    command,
+			Driver:     match.Driver,
+			Layer:      match.Layer,
+			Candidates: append([]Template(nil), match.Templates...),
+		}
+	}
+	chosen := match.Templates[0]
 	return &chosen, nil
+}
+
+func (s *Service) ResolveByLayer(command string, cfg *config.ConnectionConfig) (*LayerMatch, error) {
+	for _, layer := range s.layers(cfg) {
+		templates, err := s.loadLayer(layer)
+		if err != nil {
+			return nil, err
+		}
+
+		matchesFound := make([]Template, 0)
+		for _, candidate := range templates {
+			if matches(candidate, command, driverName(cfg)) {
+				matchesFound = append(matchesFound, candidate)
+			}
+		}
+		if len(matchesFound) == 0 {
+			continue
+		}
+
+		return &LayerMatch{
+			Command:   command,
+			Driver:    driverName(cfg),
+			Layer:     layer.layer,
+			Templates: matchesFound,
+		}, nil
+	}
+
+	return &LayerMatch{
+		Command: command,
+		Driver:  driverName(cfg),
+	}, nil
 }
 
 func (s *Service) ListResolved(cfg *config.ConnectionConfig) ([]Template, error) {
@@ -65,7 +136,7 @@ func (s *Service) List(command string, cfg *config.ConnectionConfig) ([]Template
 
 	matchesFound := make([]Template, 0)
 	for _, tpl := range templates {
-		if matches(tpl, command, cfg.Driver) {
+		if matches(tpl, command, driverName(cfg)) {
 			matchesFound = append(matchesFound, tpl)
 		}
 	}
@@ -78,14 +149,37 @@ func (s *Service) ResolveNamed(command string, cfg *config.ConnectionConfig, nam
 		return nil, err
 	}
 
+	target := strings.ToLower(strings.TrimSpace(name))
+	if target == "" {
+		return nil, fmt.Errorf("template name is required")
+	}
+
+	matchesFound := make([]Template, 0)
+	bestRank := 99
 	for _, tpl := range templates {
-		if strings.EqualFold(strings.TrimSpace(tpl.Name), strings.TrimSpace(name)) {
-			chosen := tpl
-			return &chosen, nil
+		if strings.ToLower(strings.TrimSpace(tpl.Name)) != target {
+			continue
+		}
+		rank := templateLayerRank(tpl.Layer)
+		if rank < bestRank {
+			bestRank = rank
+			matchesFound = []Template{tpl}
+			continue
+		}
+		if rank == bestRank {
+			matchesFound = append(matchesFound, tpl)
 		}
 	}
 
-	return nil, fmt.Errorf("template %q not found for command %q and driver %q", name, command, cfg.Driver)
+	if len(matchesFound) == 0 {
+		return nil, fmt.Errorf("template %q not found for command %q and driver %q", name, command, driverName(cfg))
+	}
+	if len(matchesFound) > 1 {
+		return nil, fmt.Errorf("multiple templates named %q found for command %q at %s scope", name, command, matchesFound[0].Layer)
+	}
+
+	chosen := matchesFound[0]
+	return &chosen, nil
 }
 
 func (s *Service) ResolveNamedAny(cfg *config.ConnectionConfig, name string) (*Template, error) {
@@ -128,36 +222,11 @@ func (s *Service) ResolveNamedAny(cfg *config.ConnectionConfig, name string) (*T
 }
 
 func (s *Service) listAll(cfg *config.ConnectionConfig) ([]Template, error) {
-	layers := []struct {
-		layer     string
-		sourceDir string
-		builtins  []Template
-	}{
-		{
-			layer:     "connection",
-			sourceDir: s.connectionTemplatesDir(cfg),
-		},
-		{
-			layer:     "global",
-			sourceDir: s.store.GlobalTemplatesDir(),
-		},
-		{
-			layer:    "builtin",
-			builtins: Builtins(),
-		},
-	}
-
 	all := make([]Template, 0)
-	for _, layer := range layers {
-		var templates []Template
-		var err error
-		if layer.sourceDir != "" {
-			templates, err = s.loadDir(layer.sourceDir, layer.layer)
-			if err != nil {
-				return nil, fmt.Errorf("load %s templates: %w", layer.layer, err)
-			}
-		} else {
-			templates = layer.builtins
+	for _, layer := range s.layers(cfg) {
+		templates, err := s.loadLayer(layer)
+		if err != nil {
+			return nil, err
 		}
 		all = append(all, templates...)
 	}
@@ -180,6 +249,47 @@ func templateLayerRank(layer string) int {
 	default:
 		return 2
 	}
+}
+
+type templateLayer struct {
+	layer     string
+	sourceDir string
+	builtins  []Template
+}
+
+func (s *Service) layers(cfg *config.ConnectionConfig) []templateLayer {
+	return []templateLayer{
+		{
+			layer:     "connection",
+			sourceDir: s.connectionTemplatesDir(cfg),
+		},
+		{
+			layer:     "global",
+			sourceDir: s.store.GlobalTemplatesDir(),
+		},
+		{
+			layer:    "builtin",
+			builtins: Builtins(),
+		},
+	}
+}
+
+func (s *Service) loadLayer(layer templateLayer) ([]Template, error) {
+	if layer.sourceDir != "" {
+		templates, err := s.loadDir(layer.sourceDir, layer.layer)
+		if err != nil {
+			return nil, fmt.Errorf("load %s templates: %w", layer.layer, err)
+		}
+		return templates, nil
+	}
+	return append([]Template(nil), layer.builtins...), nil
+}
+
+func driverName(cfg *config.ConnectionConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Driver)
 }
 
 func (s *Service) loadDir(dir string, layer string) ([]Template, error) {

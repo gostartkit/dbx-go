@@ -114,7 +114,7 @@ func (a *Application) handleDropUser(ctx context.Context, username string) error
 			return util.WrapLayer("validation", "validate MySQL user host", err)
 		}
 
-		template, err := a.templates.Resolve("drop user", cfg)
+		template, err := a.resolveTemplateForAction(ctx, "drop user", cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve drop user template", err)
 		}
@@ -209,7 +209,7 @@ func (a *Application) promptCreateUserPassword(ctx context.Context) (string, boo
 }
 
 func (a *Application) buildCreateUserPlans(ctx context.Context, cfg *config.ConnectionConfig, options userCreateOptions) (*tpl.ExecutionPlan, *tpl.ExecutionPlan, error) {
-	template, err := a.templates.Resolve("create user", cfg)
+	template, err := a.resolveTemplateForAction(ctx, "create user", cfg)
 	if err != nil {
 		return nil, nil, util.WrapLayer("template", "resolve create user template", err)
 	}

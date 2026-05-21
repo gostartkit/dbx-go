@@ -245,7 +245,7 @@ func (a *Application) handleCreateDatabase(ctx context.Context) error {
 			return err
 		}
 
-		template, err := a.templates.Resolve("create database", cfg)
+		template, err := a.resolveTemplateForAction(ctx, "create database", cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve create database template", err)
 		}
@@ -300,7 +300,7 @@ func (a *Application) handleShowDatabases(ctx context.Context) error {
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 
-		template, err := a.templates.Resolve("show databases", cfg)
+		template, err := a.resolveTemplateForAction(ctx, "show databases", cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve show databases template", err)
 		}
@@ -369,7 +369,7 @@ func (a *Application) handleDropDatabase(ctx context.Context) error {
 			return err
 		}
 
-		template, err := a.templates.Resolve("drop database", cfg)
+		template, err := a.resolveTemplateForAction(ctx, "drop database", cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve drop database template", err)
 		}

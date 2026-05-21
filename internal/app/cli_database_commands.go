@@ -364,9 +364,6 @@ func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Applicati
 	if err := util.ValidateDatabaseName(name); err != nil {
 		return util.WrapLayer("validation", "validate database name", err)
 	}
-	if err := b.requireCLIConfirmation("drop database"); err != nil {
-		return err
-	}
 
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
@@ -397,6 +394,10 @@ func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Applicati
 
 	if !strings.EqualFold(b.globals.Format, "json") {
 		application.printPlanPreview(previewPlan, b.globals.DryRun)
+	}
+
+	if err := b.requireCLIConfirmation("drop database"); err != nil {
+		return err
 	}
 
 	var result *PlanExecutionResult

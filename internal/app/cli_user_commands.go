@@ -114,9 +114,6 @@ func (b *cliBuilder) runCreateUser(ctx context.Context, application *Application
 	if err := validateUserHost(host); err != nil {
 		return util.WrapLayer("validation", "validate MySQL user host", err)
 	}
-	if err := b.requireCLIConfirmation("create user"); err != nil {
-		return err
-	}
 
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
@@ -135,12 +132,17 @@ func (b *cliBuilder) runCreateUser(ctx context.Context, application *Application
 		return util.WrapLayer("validation", "create user", fmt.Errorf("grant requires --database or an active database context"))
 	}
 
+	selectedTemplate, err := application.selectTemplateForCLI("create user", cfg, flags.template)
+	if err != nil {
+		return err
+	}
+
 	password, generated, err := resolveCLIPassword(ctx, application, flags)
 	if err != nil {
 		return err
 	}
 
-	plan, previewPlan, err := application.buildCreateUserCLIPlans(cfg, flags.template, userCreateOptions{
+	plan, previewPlan, err := application.buildCreateUserCLIPlansWithTemplate(cfg, selectedTemplate, userCreateOptions{
 		Username:          username,
 		Host:              host,
 		Password:          password,
@@ -154,6 +156,10 @@ func (b *cliBuilder) runCreateUser(ctx context.Context, application *Application
 
 	if !strings.EqualFold(b.globals.Format, "json") {
 		application.printPlanPreview(previewPlan, b.globals.DryRun)
+	}
+
+	if err := b.requireCLIConfirmation("create user"); err != nil {
+		return err
 	}
 
 	var result *PlanExecutionResult
@@ -224,9 +230,6 @@ func (b *cliBuilder) runDropUser(ctx context.Context, application *Application, 
 	if err := validateUserHost(host); err != nil {
 		return util.WrapLayer("validation", "validate MySQL user host", err)
 	}
-	if err := b.requireCLIConfirmation("drop user"); err != nil {
-		return err
-	}
 
 	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
 	if err != nil {
@@ -259,6 +262,10 @@ func (b *cliBuilder) runDropUser(ctx context.Context, application *Application, 
 
 	if !strings.EqualFold(b.globals.Format, "json") {
 		application.printPlanPreview(previewPlan, b.globals.DryRun)
+	}
+
+	if err := b.requireCLIConfirmation("drop user"); err != nil {
+		return err
 	}
 
 	var result *PlanExecutionResult
@@ -360,7 +367,10 @@ func (a *Application) buildCreateUserCLIPlans(cfg *config.ConnectionConfig, temp
 	if err != nil {
 		return nil, nil, err
 	}
+	return a.buildCreateUserCLIPlansWithTemplate(cfg, selectedTemplate, options, extraInputs)
+}
 
+func (a *Application) buildCreateUserCLIPlansWithTemplate(cfg *config.ConnectionConfig, selectedTemplate *tpl.Template, options userCreateOptions, extraInputs map[string]string) (*tpl.ExecutionPlan, *tpl.ExecutionPlan, error) {
 	values := buildCreateUserValues(options)
 	for key, value := range extraInputs {
 		values[key] = value

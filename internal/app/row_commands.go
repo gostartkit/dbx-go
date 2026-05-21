@@ -36,7 +36,7 @@ func (a *Application) handleRowPreviewWithTemplate(ctx context.Context, command 
 			return err
 		}
 
-		template, err := a.templates.Resolve(templateCommand, cfg)
+		template, err := a.resolveTemplateForAction(ctx, templateCommand, cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve "+templateCommand+" template", err)
 		}

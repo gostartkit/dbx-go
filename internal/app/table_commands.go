@@ -21,7 +21,7 @@ func (a *Application) handleShowCreateTable(ctx context.Context, table string) e
 			return err
 		}
 
-		template, err := a.templates.Resolve("show create table", cfg)
+		template, err := a.resolveTemplateForAction(ctx, "show create table", cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve show create table template", err)
 		}
@@ -71,7 +71,7 @@ func (a *Application) handleShowTableStatus(ctx context.Context, table string) e
 			return err
 		}
 
-		template, err := a.templates.Resolve("show table status", cfg)
+		template, err := a.resolveTemplateForAction(ctx, "show table status", cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve show table status template", err)
 		}

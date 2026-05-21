@@ -38,7 +38,7 @@ func (a *Application) handleShowTables(ctx context.Context) error {
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 
-		template, err := a.templates.Resolve("show tables", cfg)
+		template, err := a.resolveTemplateForAction(ctx, "show tables", cfg)
 		if err != nil {
 			return util.WrapLayer("template", "resolve show tables template", err)
 		}
