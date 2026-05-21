@@ -125,13 +125,6 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 			wantOut: "Users:",
 		},
 		{
-			name: "show user",
-			run: func(app *Application) error {
-				return app.handleShowUser(context.Background(), "analytics_ro")
-			},
-			wantOut: "User analytics_ro:",
-		},
-		{
 			name: "show columns",
 			run: func(app *Application) error {
 				app.session.Database = "app_prod"

@@ -70,7 +70,6 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"show connections",
 		"show connection",
 		"show users",
-		"show user",
 		"show templates",
 		"show context",
 		"create connection",
@@ -194,7 +193,7 @@ func TestHelpCompletionContainsFinalTopics(t *testing.T) {
 		have[suggestion.Value] = struct{}{}
 	}
 
-	for _, want := range []string{"doctor", "show templates", "run template", "show rows", "show users", "show user"} {
+	for _, want := range []string{"doctor", "show templates", "run template", "show rows", "show users"} {
 		if _, ok := have[want]; !ok {
 			t.Fatalf("missing help topic %q", want)
 		}

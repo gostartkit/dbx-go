@@ -122,8 +122,11 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 		t.Fatalf("printHelpTopic returned error: %v", err)
 	}
 	joined = strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "users") || !strings.Contains(joined, "user <name>") {
-		t.Fatalf("help output missing user subcommands: %q", joined)
+	if !strings.Contains(joined, "users") {
+		t.Fatalf("help output missing users subcommand: %q", joined)
+	}
+	if strings.Contains(joined, "user <name>") {
+		t.Fatalf("help output still contains removed user subcommand: %q", joined)
 	}
 }
 
@@ -210,10 +213,13 @@ func TestREPLUnknownShowTargetUsesShowContext(t *testing.T) {
 	if !strings.Contains(message, "available show targets:") {
 		t.Fatalf("missing show targets list: %v", runErr)
 	}
-	for _, name := range []string{"databases", "tables", "table", "columns", "rows", "connections", "connection", "users", "user", "templates", "context"} {
+	for _, name := range []string{"databases", "tables", "table", "columns", "rows", "connections", "connection", "users", "templates", "context"} {
 		if !strings.Contains(message, "\n  "+name) {
 			t.Fatalf("missing show target %q in error: %v", name, runErr)
 		}
+	}
+	if strings.Contains(message, "\n  user\n") {
+		t.Fatalf("unexpected removed show target in error: %v", runErr)
 	}
 	if strings.Contains(message, "\n  connect\n") || strings.Contains(message, "\n  create\n") {
 		t.Fatalf("unexpected root command in error: %v", runErr)

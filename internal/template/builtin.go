@@ -101,23 +101,6 @@ func Builtins() []Template {
 		},
 		{
 			Version: 1,
-			Name:    "builtin_show_user",
-			Match: Match{
-				Command: "show user",
-				Driver:  "mysql",
-			},
-			Actions: []Action{
-				{
-					Type:        "sql",
-					Description: "List MySQL user accounts for '{{username}}' on connection {{connection.name}}",
-					SQL:         "SELECT CONCAT(User, '@', Host) FROM mysql.user WHERE User = '{{username}}' ORDER BY Host",
-				},
-			},
-			Layer:  "builtin",
-			Source: "builtin:show user",
-		},
-		{
-			Version: 1,
 			Name:    "builtin_show_tables",
 			Match: Match{
 				Command: "show tables",

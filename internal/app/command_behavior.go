@@ -28,7 +28,6 @@ var commandBehaviors = map[string]CommandBehavior{
 	"show rows":         {ReadOnly: true},
 	"show table":        {ReadOnly: true},
 	"show tables":       {ReadOnly: true},
-	"show user":         {ReadOnly: true},
 	"show users":        {ReadOnly: true},
 	"show templates":    {ReadOnly: true},
 	"use database":      {ReadOnly: true},

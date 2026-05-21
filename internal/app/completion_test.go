@@ -69,7 +69,8 @@ func TestCalculateCompletionHelpTopics(t *testing.T) {
 	t.Parallel()
 
 	values := suggestionValues(calculateCompletion("help ", CompletionContext{}))
-	assertSuggestionsContainAll(t, values, []string{"doctor", "show templates", "run template", "show rows", "show users", "show user"})
+	assertSuggestionsContainAll(t, values, []string{"doctor", "show templates", "run template", "show rows", "show users"})
+	assertSuggestionsMissingAll(t, values, []string{"show user"})
 	assertSuggestionsMissingAll(t, values, []string{"describe", "show template", "doctor connection"})
 }
 
@@ -84,7 +85,8 @@ func TestCalculateCompletionOmitsRemovedSubcommands(t *testing.T) {
 	t.Parallel()
 
 	showValues := suggestionValues(calculateCompletion("show ", CompletionContext{}))
-	assertSuggestionsContainAll(t, showValues, []string{"user", "users"})
+	assertSuggestionsContainAll(t, showValues, []string{"users"})
+	assertSuggestionsMissingAll(t, showValues, []string{"user"})
 	assertSuggestionsMissingAll(t, showValues, []string{"template"})
 
 	doctorValues := suggestionValues(calculateCompletion("doctor ", CompletionContext{}))

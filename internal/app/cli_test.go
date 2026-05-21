@@ -581,8 +581,11 @@ func TestCLIUnknownShowTargetUsesShowContext(t *testing.T) {
 	if !strings.Contains(message, "available show targets:") {
 		t.Fatalf("missing show targets list: %v", err)
 	}
-	if !strings.Contains(message, "\n  users") || !strings.Contains(message, "\n  user") {
-		t.Fatalf("missing show user targets: %v", err)
+	if !strings.Contains(message, "\n  users") {
+		t.Fatalf("missing show users target: %v", err)
+	}
+	if strings.Contains(message, "\n  user\n") {
+		t.Fatalf("unexpected removed show target: %v", err)
 	}
 	if strings.Contains(message, "\n  connect\n") || strings.Contains(message, "\n  create\n") {
 		t.Fatalf("unexpected root commands in error: %v", err)
