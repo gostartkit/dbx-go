@@ -44,7 +44,7 @@ func TestCalculateCompletionDynamicValues(t *testing.T) {
 		t.Fatalf("expected connection description, got %#v", connectCompletion.Suggestions[1])
 	}
 
-	useCompletion := calculateCompletion("use database ", CompletionContext{
+	useCompletion := calculateCompletion("use ", CompletionContext{
 		Databases: []string{"app_demo", "app_prod"},
 	})
 	assertSuggestionsContainAll(t, suggestionValues(useCompletion), []string{"app_demo", "app_prod"})

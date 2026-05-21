@@ -42,7 +42,7 @@ drop connection <name>
 drop database <name>
 drop user <name>
 
-use database <name>
+use <name>
 
 exec <operation> [--preview] [--verbose] [--validate]
 
@@ -86,7 +86,7 @@ A typical guided flow:
 dbx> create connection prod
 dbx> connect prod
 dbx(prod)> show databases
-dbx(prod)> use database app_prod
+dbx(prod)> use app_prod
 dbx(prod/app_prod)> show tables
 dbx(prod/app_prod)> show table users
 dbx(prod/app_prod)> show rows users --limit 20

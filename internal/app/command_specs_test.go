@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"pkg.gostartkit.com/cmd"
@@ -61,7 +62,7 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 
 	for _, want := range []string{
 		"connect",
-		"use database",
+		"use",
 		"show databases",
 		"show tables",
 		"show table",
@@ -225,6 +226,46 @@ func TestSharedCommandPathsAndAliasesAreUnique(t *testing.T) {
 	}
 }
 
+func TestREPLSpecUsesInteractivePositionals(t *testing.T) {
+	t.Parallel()
+
+	spec := (&cliBuilder{
+		mode:    ModeREPL,
+		globals: &cliGlobals{Format: "text"},
+	}).buildApp().SpecFor(cmd.SurfaceREPL)
+
+	createConnection := findCommandSpec(t, spec.Commands, []string{"create", "connection"})
+	if len(createConnection.Positionals) != 0 {
+		t.Fatalf("expected no REPL positionals for create connection, got %+v", createConnection.Positionals)
+	}
+
+	createDatabase := findCommandSpec(t, spec.Commands, []string{"create", "database"})
+	if len(createDatabase.Positionals) != 0 {
+		t.Fatalf("expected no REPL positionals for create database, got %+v", createDatabase.Positionals)
+	}
+
+	createUser := findCommandSpec(t, spec.Commands, []string{"create", "user"})
+	if len(createUser.Positionals) != 1 || createUser.Positionals[0].Required {
+		t.Fatalf("expected optional REPL positional for create user, got %+v", createUser.Positionals)
+	}
+}
+
+func TestCLISpecUsesRequiredOneShotPositionals(t *testing.T) {
+	t.Parallel()
+
+	spec := newCLIBuilder(nil, nil, nil, Options{}).buildApp().SpecFor(cmd.SurfaceCLI)
+
+	createConnection := findCommandSpec(t, spec.Commands, []string{"create", "connection"})
+	if len(createConnection.Positionals) != 1 || !createConnection.Positionals[0].Required {
+		t.Fatalf("expected required CLI positional for create connection, got %+v", createConnection.Positionals)
+	}
+
+	execCommand := findCommandSpec(t, spec.Commands, []string{"exec"})
+	if len(execCommand.Positionals) != 1 || !execCommand.Positionals[0].Required {
+		t.Fatalf("expected required CLI positional for exec, got %+v", execCommand.Positionals)
+	}
+}
+
 func collectSpecPaths(dst map[string]struct{}, prefix string, spec cmd.CommandSpec) {
 	path := normalizeHelpTopic(prefix + " " + spec.Name)
 	dst[path] = struct{}{}
@@ -256,4 +297,32 @@ func assertUniquePaths(t *testing.T, seen map[string]string, prefix string, spec
 	for _, subCommand := range spec.SubCommands {
 		assertUniquePaths(t, seen, path, subCommand)
 	}
+}
+
+func findCommandSpec(t *testing.T, commands []cmd.CommandSpec, want []string) cmd.CommandSpec {
+	t.Helper()
+
+	for _, command := range commands {
+		if slices.Equal(command.Path, want) {
+			return command
+		}
+		if found := findCommandSpecRecursive(command.SubCommands, want); found != nil {
+			return *found
+		}
+	}
+	t.Fatalf("missing command spec for path %v", want)
+	return cmd.CommandSpec{}
+}
+
+func findCommandSpecRecursive(commands []cmd.CommandSpec, want []string) *cmd.CommandSpec {
+	for _, command := range commands {
+		if slices.Equal(command.Path, want) {
+			copyCommand := command
+			return &copyCommand
+		}
+		if found := findCommandSpecRecursive(command.SubCommands, want); found != nil {
+			return found
+		}
+	}
+	return nil
 }

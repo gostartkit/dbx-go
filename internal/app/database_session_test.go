@@ -151,7 +151,7 @@ func TestHandleLineUseParsesDatabase(t *testing.T) {
 	app.session.Connection = sampleConnection("prod")
 	app.session.DB = &sql.DB{}
 
-	exit, err := app.handleLine(context.Background(), "use database app_prod")
+	exit, err := app.handleLine(context.Background(), "use app_prod")
 	if err != nil {
 		t.Fatalf("handleLine returned error: %v", err)
 	}

@@ -614,7 +614,7 @@ func TestCLIRootUnknownCommandStillSuggestsRootMatch(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	if !strings.Contains(err.Error(), `unknown command "sho"`) || !strings.Contains(err.Error(), "Did you mean show?") {
+	if !strings.Contains(err.Error(), `unknown command "sho"`) || !strings.Contains(err.Error(), "Did you mean show") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

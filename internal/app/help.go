@@ -20,7 +20,7 @@ var helpEntries = func() map[string]helpEntry {
 			body: strings.TrimSpace(`
 Core commands:
   connect <name>       Connect to a saved connection
-  use database <name>  Select the current database
+  use <name>           Select the current database
   doctor               Inspect the selected connection
   audit log            Show audit history
   exit                 Exit the shell
@@ -248,12 +248,12 @@ Usage:
   dbx exec <operation> [--preview] [--verbose] [--validate]`),
 		},
 		"use": {
-			title: "use database",
+			title: "use",
 			body: strings.TrimSpace(`
 Select the current database.
 
 Usage:
-  use database <name>`),
+  use <name>`),
 		},
 		"context": {
 			title: "show context",
@@ -293,7 +293,6 @@ Aliases:
 	entries["create connection"] = entries["connection create"]
 	entries["drop connection"] = entries["connection delete"]
 	entries["show connection"] = entries["connection show"]
-	entries["use database"] = entries["use"]
 	entries["show context"] = entries["context"]
 
 	return entries

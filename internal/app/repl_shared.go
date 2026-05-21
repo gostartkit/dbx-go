@@ -125,6 +125,15 @@ func (b *cliBuilder) completeTemplates(cmd.CompletionContext) []string {
 	return b.resolver.Templates()
 }
 
+func (b *cliBuilder) completeOperations(cmd.CompletionContext) []string {
+	values := operationNames(b.resolver, b.application)
+	results := make([]string, 0, len(values))
+	for _, value := range values {
+		results = append(results, value.Name)
+	}
+	return results
+}
+
 func (b *cliBuilder) completeTemplateTags(cmd.CompletionContext) []string {
 	if b.resolver == nil {
 		return nil

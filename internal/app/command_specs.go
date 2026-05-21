@@ -38,31 +38,35 @@ func replCommandSpecs() []CommandSpec {
 	return replCommandSpecCatalog().specs
 }
 
-func flattenCommandSpec(dst *[]CommandSpec, prefix string, spec cmd.CommandSpec, aliased bool) {
-	path := joinCommandPath(prefix, spec.Name)
-	category := "command"
-	if aliased {
-		category = "alias"
-	}
+func appendCommandSpecs(dst *[]CommandSpec, spec cmd.CommandSpec) {
+	path := normalizeHelpTopic(strings.Join(spec.Path, " "))
 	*dst = append(*dst, CommandSpec{
 		Path:        path,
 		UsageLine:   spec.UsageLine,
 		Description: spec.Short,
-		Category:    category,
+		Category:    "command",
 		Hidden:      spec.Hidden,
 	})
 
+	parentPath := normalizeHelpTopic(strings.Join(spec.Path[:max(0, len(spec.Path)-1)], " "))
 	for _, alias := range spec.Aliases {
+		aliasPath := normalizeHelpTopic(alias)
+		if parentPath != "" && aliasPath != "" {
+			aliasPath = parentPath + " " + aliasPath
+		} else if aliasPath == "" {
+			aliasPath = parentPath
+		}
 		*dst = append(*dst, CommandSpec{
-			Path:        joinCommandPath(prefix, alias),
+			Path:        aliasPath,
 			UsageLine:   spec.UsageLine,
 			Description: spec.Short,
 			Category:    "alias",
 			Hidden:      spec.Hidden,
 		})
 	}
+
 	for _, subCommand := range spec.SubCommands {
-		flattenCommandSpec(dst, path, subCommand, aliased)
+		appendCommandSpecs(dst, subCommand)
 	}
 }
 
@@ -111,8 +115,8 @@ func replCommandSpecCatalog() *commandSpecCatalog {
 		}).buildApp()
 
 		specs := make([]CommandSpec, 0, 64)
-		for _, command := range app.Spec().Commands {
-			flattenCommandSpec(&specs, "", command, false)
+		for _, command := range app.SpecFor(cmd.SurfaceREPL).Commands {
+			appendCommandSpecs(&specs, command)
 		}
 
 		indexed := make([]indexedCommandSpec, 0, len(specs))
@@ -151,15 +155,4 @@ func replCommandSpecCatalog() *commandSpecCatalog {
 		}
 	})
 	return &replCommandSpecCatalogData
-}
-
-func joinCommandPath(prefix string, name string) string {
-	switch {
-	case prefix == "":
-		return strings.TrimSpace(name)
-	case name == "":
-		return strings.TrimSpace(prefix)
-	default:
-		return prefix + " " + strings.TrimSpace(name)
-	}
 }

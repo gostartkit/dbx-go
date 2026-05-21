@@ -29,7 +29,7 @@ var commandBehaviors = map[string]CommandBehavior{
 	"show tables":       {ReadOnly: true},
 	"show users":        {ReadOnly: true},
 	"show templates":    {ReadOnly: true},
-	"use database":      {ReadOnly: true},
+	"use":               {ReadOnly: true},
 }
 
 func behaviorForCommand(command string) CommandBehavior {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"pkg.gostartkit.com/cmd"
@@ -106,13 +105,13 @@ func (b *cliBuilder) buildApp() *cmd.App {
 	if b.mode == ModeCLI {
 		cli.SetFlags = b.setGlobalFlags
 	}
-	cli.Root = &cmd.Command{
+	cli.SetRootCommand(&cmd.Command{
 		UsageLine: "dbx [flags] [command]",
 		Short:     cli.Short,
 		Long:      helpEntries[""].body,
 		Run:       b.runRoot,
-	}
-	cli.Commands = []*cmd.Command{
+	})
+	cli.AddCommands(
 		b.connectCommand(),
 		b.useGroupCommand(),
 		b.showGroupCommand(),
@@ -123,7 +122,7 @@ func (b *cliBuilder) buildApp() *cmd.App {
 		b.auditGroupCommand(),
 		b.helpCommand(),
 		b.exitCommand(),
-	}
+	)
 	return cli
 }
 
@@ -146,13 +145,7 @@ func (b *cliBuilder) setGlobalFlags(f *cmd.FlagSet) {
 
 func (b *cliBuilder) runRoot(ctx context.Context, root *cmd.Command, args []string) error {
 	if b.mode == ModeREPL {
-		if len(args) > 0 {
-			return util.WrapLayer("validation", "command", unknownCommandError(args[0], root.SubCommands))
-		}
 		return nil
-	}
-	if len(args) > 0 {
-		return util.WrapLayer("validation", "command", unknownCommandError(args[0], root.SubCommands))
 	}
 	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
 	if err != nil {
@@ -164,145 +157,11 @@ func (b *cliBuilder) runRoot(ctx context.Context, root *cmd.Command, args []stri
 	return application.Run(ctx)
 }
 
-func unknownCommandError(name string, commands []*cmd.Command) error {
-	suggestions := suggestCommands(name, commands)
-	if len(suggestions) == 0 {
-		return fmt.Errorf("unknown command %q", name)
+func (b *cliBuilder) positionalsForMode(cli []cmd.PositionalArg, repl []cmd.PositionalArg) []cmd.PositionalArg {
+	if b.mode == ModeREPL {
+		return repl
 	}
-	if len(suggestions) == 1 {
-		return fmt.Errorf("unknown command %q. Did you mean %s?", name, suggestions[0])
-	}
-	return fmt.Errorf("unknown command %q. Did you mean %s?", name, strings.Join(suggestions, " or "))
-}
-
-func unknownTargetError(command string, target string, subcommands []*cmd.Command) error {
-	lines := []string{
-		fmt.Sprintf("unknown %s target %q", command, target),
-	}
-
-	suggestions := suggestCommands(target, subcommands)
-	if len(suggestions) > 0 {
-		lines = append(lines, fmt.Sprintf(`did you mean %q?`, suggestions[0]))
-	}
-
-	available := availableCommandNames(subcommands)
-	if len(available) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("available %s targets:", command))
-		for _, candidate := range available {
-			lines = append(lines, "  "+candidate)
-		}
-	}
-
-	return fmt.Errorf("%s", strings.Join(lines, "\n"))
-}
-
-func availableCommandNames(commands []*cmd.Command) []string {
-	names := make([]string, 0, len(commands))
-	for _, command := range commands {
-		if command == nil || command.Hidden {
-			continue
-		}
-		name := strings.TrimSpace(command.Name)
-		if name == "" {
-			continue
-		}
-		names = append(names, name)
-	}
-	return names
-}
-
-func suggestCommands(name string, commands []*cmd.Command) []string {
-	type candidate struct {
-		name     string
-		distance int
-	}
-
-	seen := map[string]struct{}{}
-	candidates := make([]candidate, 0, len(commands))
-	for _, command := range commands {
-		if command == nil || command.Hidden {
-			continue
-		}
-		candidateName := strings.TrimSpace(command.Name)
-		if candidateName == "" {
-			continue
-		}
-		if _, ok := seen[candidateName]; ok {
-			continue
-		}
-		seen[candidateName] = struct{}{}
-
-		distance := editDistance(strings.ToLower(name), strings.ToLower(candidateName))
-		if strings.HasPrefix(strings.ToLower(candidateName), strings.ToLower(name)) || strings.HasPrefix(strings.ToLower(name), strings.ToLower(candidateName)) {
-			distance = 0
-		}
-		if distance > 2 {
-			continue
-		}
-		candidates = append(candidates, candidate{name: candidateName, distance: distance})
-	}
-
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].distance != candidates[j].distance {
-			return candidates[i].distance < candidates[j].distance
-		}
-		return candidates[i].name < candidates[j].name
-	})
-
-	limit := 3
-	if len(candidates) < limit {
-		limit = len(candidates)
-	}
-	results := make([]string, 0, limit)
-	for _, candidate := range candidates[:limit] {
-		results = append(results, candidate.name)
-	}
-	return results
-}
-
-func editDistance(a string, b string) int {
-	if a == b {
-		return 0
-	}
-	if a == "" {
-		return len(b)
-	}
-	if b == "" {
-		return len(a)
-	}
-
-	prev := make([]int, len(b)+1)
-	curr := make([]int, len(b)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(a); i++ {
-		curr[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 0
-			if a[i-1] != b[j-1] {
-				cost = 1
-			}
-			curr[j] = minInt(
-				prev[j]+1,
-				curr[j-1]+1,
-				prev[j-1]+cost,
-			)
-		}
-		prev, curr = curr, prev
-	}
-	return prev[len(b)]
-}
-
-func minInt(values ...int) int {
-	best := values[0]
-	for _, value := range values[1:] {
-		if value < best {
-			best = value
-		}
-	}
-	return best
+	return cli
 }
 
 func (b *cliBuilder) withApplication(ctx context.Context, fn func(application *Application) error) error {

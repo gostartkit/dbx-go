@@ -247,22 +247,15 @@ func DefaultRegistry() *Registry {
 				},
 				{
 					Name:        "use",
-					Description: "Select a scoped resource.",
+					Description: "Select the current database.",
 					HandlerName: "use",
-					Subcommands: []*CommandSpec{
-						{
-							Name:        "database",
-							Description: "Select the current database.",
-							HandlerName: "use.database",
-							Args: []*ArgSpec{{
-								Name:               "database",
-								Description:        "Database name.",
-								Required:           true,
-								ValueType:          ValueDatabase,
-								CompletionProvider: "database",
-							}},
-						},
-					},
+					Args: []*ArgSpec{{
+						Name:               "database",
+						Description:        "Database name.",
+						Required:           true,
+						ValueType:          ValueDatabase,
+						CompletionProvider: "database",
+					}},
 				},
 				{
 					Name:        "show",

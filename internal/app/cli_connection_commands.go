@@ -59,9 +59,6 @@ func (b *cliBuilder) connectCommand() *cmd.Command {
 				})
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "connect"}, func(application *Application, meta *auditMetadata) error {
-				if len(args) != 1 {
-					return util.WrapLayer("validation", "connect", fmt.Errorf("usage: dbx connect <name>"))
-				}
 				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
 					meta.Connection = cfg.Name
 					meta.Mode = cfg.Mode
@@ -168,8 +165,8 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 		Short:     "Inspect the selected connection statically",
 		Long:      helpEntries["doctor"].body,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if len(args) != 0 {
-				return util.WrapLayer("validation", "doctor", fmt.Errorf("usage: dbx doctor"))
+			if err := b.requireNoArgs(args); err != nil {
+				return util.WrapLayer("validation", "doctor", err)
 			}
 			if b.mode == ModeREPL {
 				return b.application.handleConnectionDoctor(ctx, "")
@@ -216,11 +213,14 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 	flags := &connectionCreateFlags{driver: "mysql", mode: "direct", port: 3306, sshPort: 22, connectTimeout: 10, queryTimeout: 30}
 	return &cmd.Command{
-		Name:        "create",
-		UsageLine:   "dbx connection create <name> [flags]",
-		Short:       "Create a saved connection",
-		Long:        helpEntries["connection create"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
+		Name:      "create",
+		UsageLine: "dbx connection create <name> [flags]",
+		Short:     "Create a saved connection",
+		Long:      helpEntries["connection create"].body,
+		Positionals: b.positionalsForMode(
+			[]cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
+			nil,
+		),
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.driver, "driver", "mysql", "database driver", "")
 			f.SetEnum("driver", "mysql")
@@ -246,15 +246,8 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
-				if len(args) != 0 {
-					return util.WrapLayer("validation", "connection create", fmt.Errorf("usage: connection create"))
-				}
 				return b.application.handleConnectionCreate(ctx)
 			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "connection create", fmt.Errorf("usage: dbx connection create <name> [flags]"))
-			}
-
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "create connection"}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := buildCreateConnectionConfig(args[0], flags)
 				if err != nil {
@@ -326,13 +319,7 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
-				if len(args) != 1 {
-					return util.WrapLayer("validation", "connection delete", fmt.Errorf("usage: connection delete <name>"))
-				}
 				return b.application.handleConnectionDelete(ctx, args[0])
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "connection delete", fmt.Errorf("usage: dbx connection delete <name>"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "drop connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				if cfg, err := application.store.LoadConnection(args[0]); err == nil {
@@ -362,15 +349,8 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
-				if len(args) != 1 {
-					return util.WrapLayer("validation", "connection show", fmt.Errorf("usage: connection show <name>"))
-				}
 				return b.application.handleConnectionShow(ctx, args[0])
 			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "connection show", fmt.Errorf("usage: dbx connection show <name>"))
-			}
-
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "show connection", Connection: args[0]}, func(application *Application, meta *auditMetadata) error {
 				result, err := application.showConnection(args[0])
 				if err != nil {

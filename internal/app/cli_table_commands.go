@@ -16,9 +16,6 @@ func (b *cliBuilder) showTableCommand() *cmd.Command {
 		Long:        helpEntries["show table"].body,
 		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "show table", fmt.Errorf("usage: dbx show table <table>"))
-			}
 			if b.mode == ModeREPL {
 				return b.application.handleShowCreateTable(ctx, args[0])
 			}

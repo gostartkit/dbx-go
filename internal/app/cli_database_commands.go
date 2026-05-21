@@ -66,7 +66,7 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 				}
 				return util.WrapLayer("validation", "show", fmt.Errorf("usage: %s", usage))
 			}
-			return util.WrapLayer("validation", "show", unknownTargetError("show", args[0], subcommands))
+			return util.WrapLayer("validation", "show", cmd.UnknownSubcommandError("show", args[0], subcommands))
 		},
 	}
 }
@@ -120,11 +120,14 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 		inputs:    inputValues{},
 	}
 	return &cmd.Command{
-		Name:        "database",
-		UsageLine:   "dbx create database <name> [flags]",
-		Short:       "Create a database from a template",
-		Long:        helpEntries["create database"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true}},
+		Name:      "database",
+		UsageLine: "dbx create database <name> [flags]",
+		Short:     "Create a database from a template",
+		Long:      helpEntries["create database"].body,
+		Positionals: b.positionalsForMode(
+			[]cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true}},
+			nil,
+		),
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.template, "template", "", "template name", "")
 			f.StringVar(&flags.charset, "charset", "utf8mb4", "database charset", "")
@@ -134,13 +137,7 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
-				if len(args) != 0 {
-					return util.WrapLayer("validation", "create database", fmt.Errorf("usage: create database"))
-				}
 				return b.application.handleCreateDatabase(ctx)
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "create database", fmt.Errorf("usage: dbx create database <name> [flags]"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "create database", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
 				return b.runCreateDatabase(ctx, application, args[0], flags, meta)
@@ -152,24 +149,21 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 	flags := &planOnlyFlags{inputs: inputValues{}}
 	return &cmd.Command{
-		Name:        "database",
-		UsageLine:   "dbx drop database <name> [flags]",
-		Short:       "Drop a database from a template",
-		Long:        helpEntries["drop database"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true}},
+		Name:      "database",
+		UsageLine: "dbx drop database <name> [flags]",
+		Short:     "Drop a database from a template",
+		Long:      helpEntries["drop database"].body,
+		Positionals: b.positionalsForMode(
+			[]cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true}},
+			nil,
+		),
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.template, "template", "", "template name", "")
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
-				if len(args) != 0 {
-					return util.WrapLayer("validation", "drop database", fmt.Errorf("usage: drop database"))
-				}
 				return b.application.handleDropDatabase(ctx)
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "drop database", fmt.Errorf("usage: dbx drop database <name> [flags]"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "drop database", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
 				return b.runDropDatabase(ctx, application, args[0], flags, meta)
@@ -180,31 +174,16 @@ func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 
 func (b *cliBuilder) useGroupCommand() *cmd.Command {
 	return &cmd.Command{
-		Name:      "use",
-		UsageLine: "dbx use <subcommand>",
-		Short:     "Select session-scoped resources",
-		Long:      helpEntries["use"].body,
-		SubCommands: []*cmd.Command{
-			b.useDatabaseCommand(),
-		},
-	}
-}
-
-func (b *cliBuilder) useDatabaseCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:        "database",
-		UsageLine:   "dbx use database <name>",
+		Name:        "use",
+		UsageLine:   "dbx use <name>",
 		Short:       "Select the current database",
 		Long:        helpEntries["use"].body,
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true, Completion: b.completeDatabases}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "use database", fmt.Errorf("usage: dbx use database <name>"))
-			}
 			if b.mode == ModeREPL {
 				return b.application.handleUseDatabase(ctx, args[0])
 			}
-			return b.withAuditedApplication(ctx, auditMetadata{Command: "use database"}, func(application *Application, meta *auditMetadata) error {
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "use"}, func(application *Application, meta *auditMetadata) error {
 				result, err := application.useDatabaseForCLI(ctx, b.globals.Connection, args[0])
 				if err != nil {
 					return err

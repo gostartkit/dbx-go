@@ -274,7 +274,7 @@ func (p connectionProvider) Complete(ctx *providerContext) ([]ui.Suggestion, err
 func (p databaseProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	if schemaCompletionRoute(ctx) != "database" {
 		switch {
-		case slices.Equal(ctx.commandPath, []string{"use", "database"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+		case slices.Equal(ctx.commandPath, []string{"use"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
 		default:
 			return nil, nil
 		}

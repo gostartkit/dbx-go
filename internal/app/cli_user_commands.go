@@ -53,11 +53,14 @@ func (b *cliBuilder) createUserCommand() *cmd.Command {
 		inputs: inputValues{},
 	}
 	return &cmd.Command{
-		Name:        "user",
-		UsageLine:   "dbx create user <name> [flags]",
-		Short:       "Create a MySQL user",
-		Long:        helpEntries["create user"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
+		Name:      "user",
+		UsageLine: "dbx create user <name> [flags]",
+		Short:     "Create a MySQL user",
+		Long:      helpEntries["create user"].body,
+		Positionals: b.positionalsForMode(
+			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
+			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Completion: b.completeUsers}},
+		),
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.template, "template", "", "template name", "")
 			f.StringVar(&flags.host, "host", "%", "MySQL user host", "")
@@ -71,16 +74,10 @@ func (b *cliBuilder) createUserCommand() *cmd.Command {
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				name := ""
-				if len(args) > 1 {
-					return util.WrapLayer("validation", "create user", fmt.Errorf("usage: create user [name]"))
-				}
 				if len(args) == 1 {
 					name = args[0]
 				}
 				return b.application.handleCreateUser(ctx, name)
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "create user", fmt.Errorf("usage: dbx create user <name> [flags]"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "create user", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
 				return b.runCreateUser(ctx, application, args[0], flags, meta)
@@ -95,11 +92,14 @@ func (b *cliBuilder) dropUserCommand() *cmd.Command {
 		inputs: inputValues{},
 	}
 	return &cmd.Command{
-		Name:        "user",
-		UsageLine:   "dbx drop user <name> [flags]",
-		Short:       "Drop a MySQL user",
-		Long:        helpEntries["drop user"].body,
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
+		Name:      "user",
+		UsageLine: "dbx drop user <name> [flags]",
+		Short:     "Drop a MySQL user",
+		Long:      helpEntries["drop user"].body,
+		Positionals: b.positionalsForMode(
+			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
+			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Completion: b.completeUsers}},
+		),
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.template, "template", "", "template name", "")
 			f.StringVar(&flags.host, "host", "%", "MySQL user host", "")
@@ -108,16 +108,10 @@ func (b *cliBuilder) dropUserCommand() *cmd.Command {
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				name := ""
-				if len(args) > 1 {
-					return util.WrapLayer("validation", "drop user", fmt.Errorf("usage: drop user [name]"))
-				}
 				if len(args) == 1 {
 					name = args[0]
 				}
 				return b.application.handleDropUser(ctx, name)
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "drop user", fmt.Errorf("usage: dbx drop user <name> [flags]"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "drop user", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
 				return b.runDropUser(ctx, application, args[0], flags, meta)

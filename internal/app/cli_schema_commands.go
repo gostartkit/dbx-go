@@ -17,13 +17,7 @@ func (b *cliBuilder) showColumnsCommand() *cmd.Command {
 		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
-				if len(args) != 1 {
-					return util.WrapLayer("validation", "show columns", fmt.Errorf("usage: show columns <table>"))
-				}
 				return b.application.handleShowColumns(ctx, args[0])
-			}
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "show columns", fmt.Errorf("usage: dbx show columns <table>"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "show columns", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
 				return b.runShowColumns(ctx, application, args[0], meta)

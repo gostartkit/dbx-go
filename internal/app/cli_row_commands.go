@@ -26,9 +26,6 @@ func (b *cliBuilder) showRowsCommand() *cmd.Command {
 			f.IntVar(&flags.limit, "limit", defaultRowInspectionLimit, "row limit", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if len(args) != 1 {
-				return util.WrapLayer("validation", "show rows", fmt.Errorf("usage: dbx show rows <table> [--limit n]"))
-			}
 			if b.mode == ModeREPL {
 				return b.application.handleShowRows(ctx, args[0], strconv.Itoa(flags.limit))
 			}

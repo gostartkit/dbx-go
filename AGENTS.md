@@ -152,7 +152,7 @@ Current REPL commands:
 help
 help <command>
 connect <name>
-use database <name>
+use <name>
 
 show databases
 show tables
@@ -227,7 +227,7 @@ Current non-interactive command families include:
 
 ```text
 dbx connect <name>
-dbx use database <name>
+dbx use <name>
 dbx audit log
 
 dbx show databases [flags]
@@ -546,7 +546,7 @@ show rows
 show users
 show templates
 show context
-use database
+use
 exec named templates
 template system
 global templates

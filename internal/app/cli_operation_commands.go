@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 
 	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/util"
@@ -26,6 +25,12 @@ func (b *cliBuilder) execGroupCommand() *cmd.Command {
 		UsageLine: "dbx exec <operation> [flags]",
 		Short:     "Execute an operation",
 		Long:      helpEntries["exec"].body,
+		Positionals: []cmd.PositionalArg{{
+			Name:       "operation",
+			Usage:      "operation name",
+			Required:   true,
+			Completion: b.completeOperations,
+		}},
 		SetFlags: func(f *cmd.FlagSet) {
 			bindInputFlag(f, flags.inputs)
 			f.BoolVar(&flags.preview, "preview", false, "render the workflow plan without executing", "")
@@ -33,23 +38,6 @@ func (b *cliBuilder) execGroupCommand() *cmd.Command {
 			f.BoolVar(&flags.validate, "validate", false, "validate the operation without running it", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
-			if len(args) == 0 {
-				usage := "dbx exec <operation> [flags]"
-				if b.mode == ModeREPL {
-					usage = "exec <operation> [flags]"
-				}
-				return util.WrapLayer("validation", "exec", fmt.Errorf("usage: %s", usage))
-			}
-			if len(args) > 1 && args[0] == "template" {
-				return util.WrapLayer("validation", "exec", fmt.Errorf(`unknown command "template"`))
-			}
-			if len(args) != 1 {
-				usage := "dbx exec <operation> [flags]"
-				if b.mode == ModeREPL {
-					usage = "exec <operation> [flags]"
-				}
-				return util.WrapLayer("validation", "exec", fmt.Errorf("usage: %s", usage))
-			}
 			if flags.validate {
 				if b.mode == ModeREPL {
 					return b.application.handleExecValidate(ctx, args[0])
@@ -98,16 +86,10 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				filters := templateListFilters{Tag: flags.tag}
-				if len(args) > 1 {
-					return util.WrapLayer("validation", "show templates", fmt.Errorf("usage: show templates [query] [--tag value]"))
-				}
 				if len(args) == 1 {
 					filters.Query = args[0]
 				}
 				return b.application.handleShowTemplates(ctx, filters)
-			}
-			if len(args) > 1 {
-				return util.WrapLayer("validation", "show templates", fmt.Errorf("usage: dbx show templates [query] [--tag value]"))
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "show templates"}, func(application *Application, meta *auditMetadata) error {
 				cfg, err := application.templateScopeConfig(b.globals.Connection)

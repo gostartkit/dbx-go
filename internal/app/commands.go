@@ -193,7 +193,7 @@ func (a *Application) handleConnections(ctx context.Context) error {
 }
 
 func (a *Application) handleUseDatabase(ctx context.Context, database string) error {
-	return a.auditCommand(ctx, auditMetadata{Command: "use database"}, func(meta *auditMetadata) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "use"}, func(meta *auditMetadata) error {
 		cfg, db, err := a.requireConnection(ctx)
 		if err != nil {
 			return err
