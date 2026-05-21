@@ -49,6 +49,8 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 			b.showConnectionCommand(),
 			b.showConnectionsCommand(),
 			b.showDatabasesCommand(),
+			b.showUsersCommand(),
+			b.showUserCommand(),
 			b.showTablesCommand(),
 			b.showTableCommand(),
 			b.showColumnsCommand(),

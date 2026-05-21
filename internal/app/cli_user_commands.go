@@ -27,6 +27,47 @@ type dropUserFlags struct {
 	inputs   inputValues
 }
 
+func (b *cliBuilder) showUsersCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:      "users",
+		UsageLine: "dbx show users",
+		Short:     "Show MySQL users",
+		Long:      helpEntries["show users"].body,
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if err := b.requireNoArgs(args); err != nil {
+				return util.WrapLayer("validation", "show users", err)
+			}
+			if b.mode == ModeREPL {
+				return b.application.handleShowUsers(ctx)
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show users", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runShowUsers(ctx, application, meta)
+			})
+		},
+	}
+}
+
+func (b *cliBuilder) showUserCommand() *cmd.Command {
+	return &cmd.Command{
+		Name:        "user",
+		UsageLine:   "dbx show user <name>",
+		Short:       "Show one MySQL user",
+		Long:        helpEntries["show user"].body,
+		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) != 1 {
+				return util.WrapLayer("validation", "show user", fmt.Errorf("usage: dbx show user <name>"))
+			}
+			if b.mode == ModeREPL {
+				return b.application.handleShowUser(ctx, args[0])
+			}
+			return b.withAuditedApplication(ctx, auditMetadata{Command: "show user", DryRun: b.globals.DryRun}, func(application *Application, meta *auditMetadata) error {
+				return b.runShowUser(ctx, application, args[0], meta)
+			})
+		},
+	}
+}
+
 func (b *cliBuilder) createUserCommand() *cmd.Command {
 	flags := &createUserFlags{
 		host:   "%",
@@ -104,6 +145,134 @@ func (b *cliBuilder) dropUserCommand() *cmd.Command {
 			})
 		},
 	}
+}
+
+func (b *cliBuilder) runShowUsers(ctx context.Context, application *Application, meta *auditMetadata) error {
+	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	if err != nil {
+		return err
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+	}
+
+	template, err := application.selectTemplateForCLI("show users", cfg, "")
+	if err != nil {
+		return err
+	}
+	plan, previewPlan, err := buildPlans(template, cfg, map[string]string{})
+	if err != nil {
+		return err
+	}
+
+	if b.globals.DryRun {
+		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
+		if result != nil {
+			result.Connection = cfg.Name
+			result.Command = "show users"
+			applyPreviewSQL(result, previewPlan)
+		}
+		return b.writeOutput(result, func() error {
+			application.printPlanPreview(previewPlan, true)
+			application.printPlanResult(result)
+			return runErr
+		})
+	}
+
+	db, err := application.openConnection(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	users, err := application.connector.QueryStrings(ctx, cfg, db, plan.Actions[0].SQL)
+	if err != nil {
+		return err
+	}
+	result := &UsersResult{
+		OK:         true,
+		Connection: cfg.Name,
+		Users:      users,
+	}
+	return b.writeOutput(result, func() error {
+		if len(users) == 0 {
+			fmt.Fprintln(b.out, "No users found.")
+			return nil
+		}
+		fmt.Fprintln(b.out, "Users:")
+		for _, user := range users {
+			fmt.Fprintf(b.out, "  - %s\n", user)
+		}
+		return nil
+	})
+}
+
+func (b *cliBuilder) runShowUser(ctx context.Context, application *Application, username string, meta *auditMetadata) error {
+	if err := util.ValidateMySQLUsername(username); err != nil {
+		return util.WrapLayer("validation", "validate MySQL username", err)
+	}
+
+	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	if err != nil {
+		return err
+	}
+	if meta != nil {
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+	}
+
+	template, err := application.selectTemplateForCLI("show user", cfg, "")
+	if err != nil {
+		return err
+	}
+	values := map[string]string{"username": username}
+	plan, previewPlan, err := buildPlans(template, cfg, values)
+	if err != nil {
+		return err
+	}
+
+	if b.globals.DryRun {
+		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
+		if result != nil {
+			result.Connection = cfg.Name
+			result.Command = "show user"
+			applyPreviewSQL(result, previewPlan)
+		}
+		return b.writeOutput(result, func() error {
+			application.printPlanPreview(previewPlan, true)
+			application.printPlanResult(result)
+			return runErr
+		})
+	}
+
+	db, err := application.openConnection(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	users, err := application.connector.QueryStrings(ctx, cfg, db, plan.Actions[0].SQL)
+	if err != nil {
+		return err
+	}
+	result := &UsersResult{
+		OK:         true,
+		Connection: cfg.Name,
+		User:       username,
+		Users:      users,
+	}
+	return b.writeOutput(result, func() error {
+		if len(users) == 0 {
+			fmt.Fprintf(b.out, "User %s not found.\n", username)
+			return nil
+		}
+		fmt.Fprintf(b.out, "User %s:\n", username)
+		for _, user := range users {
+			fmt.Fprintf(b.out, "  - %s\n", user)
+		}
+		return nil
+	})
 }
 
 func (b *cliBuilder) runCreateUser(ctx context.Context, application *Application, username string, flags *createUserFlags, meta *auditMetadata) error {

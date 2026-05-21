@@ -13,20 +13,21 @@ import (
 )
 
 type databaseSelectionConnector struct {
-	databases   []string
-	tables      []string
-	columns     []driver.SchemaColumn
-	rowSet      *driver.RowSet
-	createDDL   string
-	statuses    []driver.TableStatus
-	dbErr       error
-	tableErr    error
-	userErr     error
-	openCalls   int
-	listCalls   int
-	tableCalls  int
-	peekLimit   int
-	sampleLimit int
+	databases    []string
+	tables       []string
+	columns      []driver.SchemaColumn
+	rowSet       *driver.RowSet
+	createDDL    string
+	statuses     []driver.TableStatus
+	queryStrings []string
+	dbErr        error
+	tableErr     error
+	userErr      error
+	openCalls    int
+	listCalls    int
+	tableCalls   int
+	peekLimit    int
+	sampleLimit  int
 }
 
 func (c *databaseSelectionConnector) Open(context.Context, *config.ConnectionConfig) (*sql.DB, error) {
@@ -112,7 +113,7 @@ func (c *databaseSelectionConnector) QueryStrings(context.Context, *config.Conne
 	if c.userErr != nil {
 		return nil, c.userErr
 	}
-	return nil, nil
+	return append([]string(nil), c.queryStrings...), nil
 }
 
 func cloneRowSet(value *driver.RowSet) *driver.RowSet {

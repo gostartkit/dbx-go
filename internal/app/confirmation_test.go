@@ -118,6 +118,20 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 			wantOut: "Tables:",
 		},
 		{
+			name: "show users",
+			run: func(app *Application) error {
+				return app.handleShowUsers(context.Background())
+			},
+			wantOut: "Users:",
+		},
+		{
+			name: "show user",
+			run: func(app *Application) error {
+				return app.handleShowUser(context.Background(), "analytics_ro")
+			},
+			wantOut: "User analytics_ro:",
+		},
+		{
 			name: "show columns",
 			run: func(app *Application) error {
 				app.session.Database = "app_prod"
@@ -163,7 +177,7 @@ func TestReadOnlyCommandsDoNotAskConfirmation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			app, out := newReadOnlyTestApp(t, root, &readOnlyConnector{queryStrings: []string{"app_prod", "analytics_v2"}})
+			app, out := newReadOnlyTestApp(t, root, &readOnlyConnector{queryStrings: []string{"app_prod", "analytics_v2", "analytics_ro@%", "analytics_ro@localhost"}})
 			if err := tc.run(app); err != nil {
 				t.Fatalf("command returned error: %v", err)
 			}

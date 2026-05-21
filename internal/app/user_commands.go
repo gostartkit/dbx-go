@@ -10,6 +10,114 @@ import (
 	"pkg.gostartkit.com/dbx/internal/util"
 )
 
+func (a *Application) handleShowUsers(ctx context.Context) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show users", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		cfg, db, err := a.requireConnection(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+
+		template, err := a.resolveTemplateForAction(ctx, "show users", cfg)
+		if err != nil {
+			return util.WrapLayer("template", "resolve show users template", err)
+		}
+
+		plan, previewPlan, err := buildPlans(template, cfg, map[string]string{})
+		if err != nil {
+			return err
+		}
+
+		if a.dryRun {
+			a.printPlanPreview(previewPlan, true)
+			a.printPlanResult(&PlanExecutionResult{
+				OK:         true,
+				Connection: cfg.Name,
+				Command:    "show users",
+				DryRun:     true,
+				Actions: []ActionResult{{
+					Description: plan.Actions[0].Description,
+					SQL:         previewPlan.Actions[0].SQL,
+					Status:      ActionStatusDryRun,
+				}},
+			})
+			return nil
+		}
+
+		users, err := a.connector.QueryStrings(ctx, cfg, db, plan.Actions[0].SQL)
+		if err != nil {
+			return err
+		}
+		if len(users) == 0 {
+			a.prompt.Println("No users found.")
+			return nil
+		}
+		a.prompt.Println("Users:")
+		for _, user := range users {
+			a.prompt.Printf("  - %s\n", user)
+		}
+		return nil
+	})
+}
+
+func (a *Application) handleShowUser(ctx context.Context, username string) error {
+	return a.auditCommand(ctx, auditMetadata{Command: "show user", DryRun: a.dryRun}, func(meta *auditMetadata) error {
+		cfg, db, err := a.requireConnection(ctx)
+		if err != nil {
+			return err
+		}
+		meta.Connection = cfg.Name
+		meta.Mode = cfg.Mode
+
+		username, err = a.resolveUsernameInput(ctx, username)
+		if err != nil {
+			return err
+		}
+
+		template, err := a.resolveTemplateForAction(ctx, "show user", cfg)
+		if err != nil {
+			return util.WrapLayer("template", "resolve show user template", err)
+		}
+
+		values := map[string]string{"username": username}
+		plan, previewPlan, err := buildPlans(template, cfg, values)
+		if err != nil {
+			return err
+		}
+
+		if a.dryRun {
+			a.printPlanPreview(previewPlan, true)
+			a.printPlanResult(&PlanExecutionResult{
+				OK:         true,
+				Connection: cfg.Name,
+				Command:    "show user",
+				DryRun:     true,
+				Actions: []ActionResult{{
+					Description: plan.Actions[0].Description,
+					SQL:         previewPlan.Actions[0].SQL,
+					Status:      ActionStatusDryRun,
+				}},
+			})
+			return nil
+		}
+
+		users, err := a.connector.QueryStrings(ctx, cfg, db, plan.Actions[0].SQL)
+		if err != nil {
+			return err
+		}
+		if len(users) == 0 {
+			a.prompt.Printf("User %s not found.\n", username)
+			return nil
+		}
+		a.prompt.Printf("User %s:\n", username)
+		for _, user := range users {
+			a.prompt.Printf("  - %s\n", user)
+		}
+		return nil
+	})
+}
+
 func (a *Application) handleCreateUser(ctx context.Context, username string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "create user", DryRun: a.dryRun}, func(meta *auditMetadata) error {
 		cfg, db, err := a.requireConnection(ctx)

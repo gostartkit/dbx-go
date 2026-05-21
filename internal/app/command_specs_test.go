@@ -44,7 +44,7 @@ func TestRemovedRootCommandsAreAbsent(t *testing.T) {
 		have[normalizeHelpTopic(command.Name)] = struct{}{}
 	}
 
-	for _, removed := range []string{"count", "peek", "sample", "truncate", "rename", "validate", "edit", "test", "context", "clear"} {
+	for _, removed := range []string{"count", "peek", "sample", "truncate", "rename", "validate", "edit", "test", "context", "clear", "user", "users"} {
 		if _, ok := have[removed]; ok {
 			t.Fatalf("unexpected removed root command %q", removed)
 		}
@@ -69,6 +69,8 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"show rows",
 		"show connections",
 		"show connection",
+		"show users",
+		"show user",
 		"show templates",
 		"show context",
 		"create connection",
@@ -111,7 +113,6 @@ func TestRemovedCommandPathsAreAbsent(t *testing.T) {
 		"describe",
 		"show template",
 		"doctor connection",
-		"show users",
 		"show indexes",
 		"show foreign keys",
 		"show processlist",
@@ -193,7 +194,7 @@ func TestHelpCompletionContainsFinalTopics(t *testing.T) {
 		have[suggestion.Value] = struct{}{}
 	}
 
-	for _, want := range []string{"doctor", "show templates", "run template", "show rows"} {
+	for _, want := range []string{"doctor", "show templates", "run template", "show rows", "show users", "show user"} {
 		if _, ok := have[want]; !ok {
 			t.Fatalf("missing help topic %q", want)
 		}

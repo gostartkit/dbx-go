@@ -116,6 +116,15 @@ func TestPrintHelpTemplateTopics(t *testing.T) {
 	if !strings.Contains(joined, "--validate") {
 		t.Fatalf("help output missing validate flag text: %q", joined)
 	}
+
+	prompt.lines = nil
+	if err := printHelpTopic(&prompt, "show"); err != nil {
+		t.Fatalf("printHelpTopic returned error: %v", err)
+	}
+	joined = strings.Join(prompt.lines, "\n")
+	if !strings.Contains(joined, "users") || !strings.Contains(joined, "user <name>") {
+		t.Fatalf("help output missing user subcommands: %q", joined)
+	}
 }
 
 func TestREPLHelpCommandHasOutput(t *testing.T) {

@@ -59,6 +59,8 @@ Usage:
 Subcommands:
   connections
   connection <name>
+  users
+  user <name>
   context
   databases
   tables
@@ -203,6 +205,22 @@ Show tables in the selected database.
 
 Usage:
   show tables`),
+		},
+		"show users": {
+			title: "show users",
+			body: strings.TrimSpace(`
+Show MySQL users on the selected connection.
+
+Usage:
+  show users`),
+		},
+		"show user": {
+			title: "show user",
+			body: strings.TrimSpace(`
+Show MySQL user accounts matching one username.
+
+Usage:
+  show user <name>`),
 		},
 		"show table": {
 			title: "show table",

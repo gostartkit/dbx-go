@@ -146,6 +146,13 @@ type DatabasesResult struct {
 	Databases  []string `json:"databases,omitempty"`
 }
 
+type UsersResult struct {
+	OK         bool     `json:"ok"`
+	Connection string   `json:"connection,omitempty"`
+	User       string   `json:"user,omitempty"`
+	Users      []string `json:"users,omitempty"`
+}
+
 type TablesResult struct {
 	OK         bool     `json:"ok"`
 	Connection string   `json:"connection,omitempty"`
