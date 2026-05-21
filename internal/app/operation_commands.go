@@ -88,31 +88,25 @@ func (a *Application) handleExec(ctx context.Context, name string, preview bool,
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 
-		spec, err := a.resolveExecutableSpec(cfg, name)
+		definition, implementation, err := a.operationRuntime().Resolve(ctx, cfg, name)
 		if err != nil {
 			return util.WrapLayer("template", "resolve operation "+name, err)
 		}
 
-		values, inputSummary, err := a.collectOperationInputs(ctx, spec, nil, true, a.currentDatabaseName())
+		values, inputSummary, err := a.collectOperationInputs(ctx, definition, nil, true, a.currentDatabaseName())
 		if err != nil {
 			return util.WrapLayer("template", "collect operation inputs", err)
 		}
 
-		plan, previewPlan, err := spec.BuildPlans(cfg, values)
+		plan, err := implementation.Plan(ctx, definition, OperationArgs{Config: cfg, Values: values, DryRun: effectiveDryRun})
 		if err != nil {
 			return err
 		}
 
-		a.printOperationRunPreview(spec, previewPlan, inputSummary, verbose, preview, effectiveDryRun)
+		a.printOperationRunPreview(definition, plan.Preview, inputSummary, verbose, preview, effectiveDryRun)
 
 		if preview {
 			return nil
-		}
-
-		if effectiveDryRun {
-			result, runErr := a.runPlan(ctx, plan, noopTransactionStarter{}, true)
-			a.printPlanResult(result)
-			return runErr
 		}
 
 		confirmed, err := a.confirmExecutionIfNeeded(ctx, "exec")
@@ -124,14 +118,8 @@ func (a *Application) handleExec(ctx context.Context, name string, preview bool,
 			return nil
 		}
 
-		db, err := a.openConnection(ctx, cfg)
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-
-		result, runErr := a.executePlan(ctx, plan, sqlRunner{db: db})
-		a.printPlanResult(result)
+		runErr := implementation.Execute(ctx, plan)
+		a.printPlanResult(plan.Result)
 		return runErr
 	})
 }
@@ -211,21 +199,24 @@ func (a *Application) describeTemplateResult(cfg *config.ConnectionConfig, name 
 }
 
 func (a *Application) operationValidateResult(cfg *config.ConnectionConfig, name string) (*OperationValidationResult, error) {
-	spec, err := a.resolveExecutableSpec(cfg, name)
+	definition, _, err := a.operationRuntime().Resolve(context.Background(), cfg, name)
 	if err != nil {
 		return nil, util.WrapLayer("template", "resolve operation "+name, err)
 	}
-	if err := spec.Validate(); err != nil {
+	if definition == nil || definition.template == nil {
+		return nil, util.WrapLayer("validation", "validate operation "+name, fmt.Errorf("operation definition is required"))
+	}
+	if err := definition.template.Validate(); err != nil {
 		return nil, util.WrapLayer("validation", "validate operation "+name, err)
 	}
 
 	result := &OperationValidationResult{
 		OK:        true,
-		Operation: spec.Operation(),
-		Provider:  spec.Provider(),
-		Scope:     spec.Scope(),
-		Category:  spec.Category(),
-		Command:   spec.Template().Match.Command,
+		Operation: definition.Name,
+		Provider:  operationProviderName(definition.Kind),
+		Scope:     operationScope(definition),
+		Category:  operationCategory(definition),
+		Command:   operationCommand(definition),
 		Valid:     true,
 	}
 	if cfg != nil && strings.TrimSpace(cfg.Name) != "" {
@@ -235,42 +226,42 @@ func (a *Application) operationValidateResult(cfg *config.ConnectionConfig, name
 }
 
 func (a *Application) execOperationResult(ctx context.Context, cfg *config.ConnectionConfig, name string, rawInputs map[string]string, preview bool, dryRun bool, verbose bool, database string) (*OperationRunResult, error) {
-	spec, err := a.resolveExecutableSpec(cfg, name)
+	definition, implementation, err := a.operationRuntime().Resolve(ctx, cfg, name)
 	if err != nil {
 		return nil, util.WrapLayer("template", "resolve operation "+name, err)
 	}
 
-	values, inputSummary, err := a.collectOperationInputs(nil, spec, rawInputs, true, database)
+	values, inputSummary, err := a.collectOperationInputs(nil, definition, rawInputs, true, database)
 	if err != nil {
 		return nil, util.WrapLayer("template", "collect operation inputs", err)
 	}
 
-	plan, previewPlan, err := spec.BuildPlans(cfg, values)
+	plan, err := implementation.Plan(ctx, definition, OperationArgs{Config: cfg, Values: values, DryRun: dryRun})
 	if err != nil {
 		return nil, err
 	}
 
-	redactedInputs := redactTemplateValues(spec.Template(), values)
+	redactedInputs := redactTemplateValues(definition.template, values)
 	result := &OperationRunResult{
 		OK:           true,
 		Connection:   cfg.Name,
 		Command:      "exec",
-		Operation:    spec.Operation(),
-		Provider:     spec.Provider(),
-		Scope:        spec.Scope(),
-		Category:     spec.Category(),
-		Source:       spec.Source(),
+		Operation:    definition.Name,
+		Provider:     operationProviderName(definition.Kind),
+		Scope:        operationScope(definition),
+		Category:     operationCategory(definition),
+		Source:       definition.Source,
 		Preview:      preview,
 		DryRun:       dryRun,
-		Transaction:  spec.Transaction(),
+		Transaction:  plan.TransactionEnabled(),
 		Inputs:       redactedInputs,
 		InputSummary: inputSummary,
-		Actions:      make([]ActionResult, 0, len(previewPlan.Actions)),
+		Actions:      make([]ActionResult, 0, len(plan.Preview.Actions)),
 	}
 
 	switch {
 	case preview:
-		for _, action := range previewPlan.Actions {
+		for _, action := range plan.Preview.Actions {
 			result.Actions = append(result.Actions, ActionResult{
 				Description: action.Description,
 				SQL:         templateVerboseSQL(verbose, action.SQL),
@@ -279,12 +270,13 @@ func (a *Application) execOperationResult(ctx context.Context, cfg *config.Conne
 		}
 		return result, nil
 	case dryRun:
-		planResult, runErr := a.runPlan(ctx, plan, noopTransactionStarter{}, true)
+		runErr := implementation.Execute(ctx, plan)
+		planResult := plan.Result
 		if planResult != nil {
 			result.Transaction = planResult.Transaction
 			for index, action := range planResult.Actions {
-				if verbose && index < len(previewPlan.Actions) {
-					action.SQL = previewPlan.Actions[index].SQL
+				if verbose && index < len(plan.Preview.Actions) {
+					action.SQL = plan.Preview.Actions[index].SQL
 				} else {
 					action.SQL = ""
 				}
@@ -293,21 +285,16 @@ func (a *Application) execOperationResult(ctx context.Context, cfg *config.Conne
 		}
 		return result, runErr
 	default:
-		db, err := a.openConnection(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		defer db.Close()
-
-		planResult, runErr := a.executePlan(ctx, plan, sqlRunner{db: db})
+		runErr := implementation.Execute(ctx, plan)
+		planResult := plan.Result
 		if planResult != nil {
 			result.OK = planResult.OK
 			result.Transaction = planResult.Transaction
 			result.Committed = planResult.Committed
 			result.RolledBack = planResult.RolledBack
 			for index, action := range planResult.Actions {
-				if verbose && index < len(previewPlan.Actions) {
-					action.SQL = previewPlan.Actions[index].SQL
+				if verbose && index < len(plan.Preview.Actions) {
+					action.SQL = plan.Preview.Actions[index].SQL
 				} else {
 					action.SQL = ""
 				}
@@ -318,8 +305,8 @@ func (a *Application) execOperationResult(ctx context.Context, cfg *config.Conne
 	}
 }
 
-func (a *Application) collectOperationInputs(ctx context.Context, spec *executableSpec, rawInputs map[string]string, requireAll bool, database string) (map[string]string, []OperationInputValueResult, error) {
-	template := spec.Template()
+func (a *Application) collectOperationInputs(ctx context.Context, definition *OperationDefinition, rawInputs map[string]string, requireAll bool, database string) (map[string]string, []OperationInputValueResult, error) {
+	template := definition.template
 	values := make(map[string]string)
 	provided := make(map[string]bool)
 	if strings.TrimSpace(database) != "" {
@@ -446,8 +433,8 @@ func (a *Application) printTemplateDescription(result *TemplateDescriptionResult
 	}
 }
 
-func (a *Application) printOperationRunPreview(spec *executableSpec, plan *tpl.ExecutionPlan, inputSummary []OperationInputValueResult, verbose bool, preview bool, dryRun bool) {
-	a.printOperationPlanHeading(spec.Operation(), spec.Provider(), spec.Scope(), spec.Category())
+func (a *Application) printOperationRunPreview(definition *OperationDefinition, plan *tpl.ExecutionPlan, inputSummary []OperationInputValueResult, verbose bool, preview bool, dryRun bool) {
+	a.printOperationPlanHeading(definition.Name, operationProviderName(definition.Kind), operationScope(definition), operationCategory(definition))
 	a.prompt.Println("")
 	a.printOperationInputSummary(inputSummary)
 	a.prompt.Println("")

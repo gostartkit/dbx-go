@@ -3,16 +3,18 @@ package editor
 import "sort"
 
 type CompletionSession struct {
-	BaseLine     string
-	BaseCursor   int
-	Suggestions  []Suggestion
-	Index        int
-	CommonResult CompletionResult
-	HasCommon    bool
-	ListShown    bool
+	OriginalBuffer   Buffer
+	OriginalCursor   Position
+	ReplaceStartRune int
+	ReplaceEndRune   int
+	Suggestions      []Suggestion
+	SelectedIndex    int
+	CommonResult     CompletionResult
+	HasCommon        bool
+	ListShown        bool
 }
 
-func NewCompletionSession(baseLine string, baseCursor int, suggestions []Suggestion) *CompletionSession {
+func NewCompletionSession(buffer Buffer, cursor Position, suggestions []Suggestion) *CompletionSession {
 	if len(suggestions) == 0 {
 		return nil
 	}
@@ -29,10 +31,13 @@ func NewCompletionSession(baseLine string, baseCursor int, suggestions []Suggest
 	if len(cloned) == 0 {
 		return nil
 	}
+	replaceStart, replaceEnd := completionReplaceRange(cloned)
 	return &CompletionSession{
-		BaseLine:    baseLine,
-		BaseCursor:  baseCursor,
-		Suggestions: cloned,
+		OriginalBuffer:   buffer.Clone(),
+		OriginalCursor:   cursor,
+		ReplaceStartRune: replaceStart,
+		ReplaceEndRune:   replaceEnd,
+		Suggestions:      cloned,
 	}
 }
 
@@ -40,32 +45,32 @@ func (s *CompletionSession) Current() Suggestion {
 	if s == nil || len(s.Suggestions) == 0 {
 		return Suggestion{}
 	}
-	if s.Index < 0 || s.Index >= len(s.Suggestions) {
-		s.Index = 0
+	if s.SelectedIndex < 0 || s.SelectedIndex >= len(s.Suggestions) {
+		s.SelectedIndex = 0
 	}
-	return s.Suggestions[s.Index]
+	return s.Suggestions[s.SelectedIndex]
 }
 
 func (s *CompletionSession) Advance() {
 	if s == nil || len(s.Suggestions) == 0 {
 		return
 	}
-	s.Index = (s.Index + 1) % len(s.Suggestions)
+	s.SelectedIndex = (s.SelectedIndex + 1) % len(s.Suggestions)
 }
 
-func (s *CompletionSession) Contains(line string, cursor int) bool {
+func (s *CompletionSession) Contains(buffer Buffer, cursor Position) bool {
 	if s == nil {
 		return false
 	}
 	if s.HasCommon {
-		commonLine, commonCursor := ApplyCompletion(s.BaseLine, s.CommonResult)
-		if line == commonLine && cursor == commonCursor {
+		commonBuffer, commonCursor := ApplyCompletionToBuffer(s.OriginalBuffer, s.OriginalCursor, s.CommonResult)
+		if commonBuffer.String() == buffer.String() && commonCursor == cursor {
 			return true
 		}
 	}
 	for _, suggestion := range s.Suggestions {
-		nextLine, nextCursor := ApplyCompletion(s.BaseLine, suggestion.Result)
-		if line == nextLine && cursor == nextCursor {
+		nextBuffer, nextCursor := ApplyCompletionToBuffer(s.OriginalBuffer, s.OriginalCursor, suggestion.Result)
+		if nextBuffer.String() == buffer.String() && nextCursor == cursor {
 			return true
 		}
 	}
@@ -93,6 +98,14 @@ func ApplyCompletion(line string, result CompletionResult) (string, int) {
 	out = append(out, source[current:]...)
 	cursor := clamp(result.Cursor, 0, len(out))
 	return string(out), cursor
+}
+
+func ApplyCompletionToBuffer(buffer Buffer, cursor Position, result CompletionResult) (Buffer, Position) {
+	next := buffer.Clone()
+	lineIndex := clamp(cursor.Line, 0, len(next.Lines)-1)
+	line, column := ApplyCompletion(next.LineString(lineIndex), result)
+	next.Lines[lineIndex] = []rune(line)
+	return next, Position{Line: lineIndex, Column: column}
 }
 
 func CommonSuggestionResult(baseLine string, suggestions []Suggestion) (CompletionResult, bool) {
@@ -148,6 +161,26 @@ func MatchingSuggestionIndex(baseLine string, suggestions []Suggestion, line str
 		}
 	}
 	return -1
+}
+
+func completionReplaceRange(suggestions []Suggestion) (int, int) {
+	if len(suggestions) == 0 || len(suggestions[0].Result.Edits) == 0 {
+		return 0, 0
+	}
+	start := suggestions[0].Result.Edits[0].StartRune
+	end := suggestions[0].Result.Edits[0].EndRune
+	for _, suggestion := range suggestions[1:] {
+		if len(suggestion.Result.Edits) == 0 {
+			return start, end
+		}
+		if suggestion.Result.Edits[0].StartRune < start {
+			start = suggestion.Result.Edits[0].StartRune
+		}
+		if suggestion.Result.Edits[0].EndRune > end {
+			end = suggestion.Result.Edits[0].EndRune
+		}
+	}
+	return start, end
 }
 
 func commonPrefixRunes(left []rune, right []rune) []rune {

@@ -18,7 +18,8 @@ func (e *Editor) SetBuffer(buffer Buffer) {
 
 func (e *Editor) SetText(text string) {
 	e.buffer = NewBufferFromString(text)
-	e.cursor = Position{Line: 0, Column: len(e.buffer.Lines[0])}
+	lastLine := len(e.buffer.Lines) - 1
+	e.cursor = Position{Line: lastLine, Column: len(e.buffer.Lines[lastLine])}
 }
 
 func (e *Editor) Buffer() Buffer {
@@ -31,6 +32,10 @@ func (e *Editor) Text() string {
 
 func (e *Editor) CurrentLine() string {
 	return string(e.currentLine())
+}
+
+func (e *Editor) LineCount() int {
+	return len(e.buffer.Lines)
 }
 
 func (e *Editor) Cursor() int {
@@ -114,6 +119,13 @@ func (e *Editor) ApplyCompletion(result CompletionResult) {
 	line, cursor := ApplyCompletion(e.CurrentLine(), result)
 	e.setCurrentLine([]rune(line))
 	e.cursor.Column = cursor
+}
+
+func (e *Editor) AppendLine() {
+	e.buffer.ensureLine()
+	e.buffer.Lines = append(e.buffer.Lines, []rune{})
+	e.cursor.Line = len(e.buffer.Lines) - 1
+	e.cursor.Column = 0
 }
 
 func (e *Editor) currentLine() []rune {

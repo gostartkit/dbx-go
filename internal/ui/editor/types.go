@@ -3,6 +3,8 @@ package editor
 import (
 	"errors"
 	"strings"
+
+	"pkg.gostartkit.com/dbx/internal/commandlang"
 )
 
 var ErrInputCanceled = errors.New("input canceled")
@@ -88,8 +90,10 @@ type Completion struct {
 }
 
 type CompletionRequest struct {
-	Buffer Buffer
-	Cursor Position
+	Buffer         Buffer
+	Cursor         Position
+	Tokens         []commandlang.Token
+	CommandContext commandlang.CommandContext
 }
 
 func NewSingleLineCompletionRequest(line string, cursor int) CompletionRequest {
@@ -100,10 +104,13 @@ func NewSingleLineCompletionRequest(line string, cursor int) CompletionRequest {
 	if cursor > len(lineRunes) {
 		cursor = len(lineRunes)
 	}
-	return CompletionRequest{
+	request := CompletionRequest{
 		Buffer: NewBufferFromString(line),
 		Cursor: Position{Line: 0, Column: cursor},
 	}
+	request.Tokens = commandlang.Lex(line)
+	request.CommandContext = commandlang.BuildCommandContext(request.Tokens, cursor)
+	return request
 }
 
 func (r CompletionRequest) CurrentLine() string {

@@ -8,21 +8,24 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+
+	"pkg.gostartkit.com/dbx/internal/commandlang"
 )
 
 type Terminal struct {
-	reader    *bufio.Reader
-	keyReader *KeyReader
-	renderer  *Renderer
-	out       io.Writer
-	inFile    *os.File
-	completer Completer
-	history   *HistoryNavigator
-	isTerm    func() bool
-	rawActive bool
-	prompt    string
-	editor    *Editor
-	session   *CompletionSession
+	reader             *bufio.Reader
+	keyReader          *KeyReader
+	renderer           *Renderer
+	out                io.Writer
+	inFile             *os.File
+	completer          Completer
+	history            *HistoryNavigator
+	isTerm             func() bool
+	rawActive          bool
+	prompt             string
+	continuationPrompt string
+	editor             *Editor
+	session            *CompletionSession
 }
 
 type rawModeWriter struct {
@@ -31,12 +34,13 @@ type rawModeWriter struct {
 
 func NewTerminal(reader *bufio.Reader, out io.Writer, inFile *os.File) *Terminal {
 	terminal := &Terminal{
-		reader:    reader,
-		keyReader: NewKeyReader(reader),
-		renderer:  NewRenderer(out),
-		out:       out,
-		inFile:    inFile,
-		editor:    New(),
+		reader:             reader,
+		keyReader:          NewKeyReader(reader),
+		renderer:           NewRenderer(out),
+		out:                out,
+		inFile:             inFile,
+		editor:             New(),
+		continuationPrompt: "... ",
 	}
 	terminal.isTerm = func() bool {
 		return inFile != nil && term.IsTerminal(int(inFile.Fd()))
@@ -88,7 +92,7 @@ func (t *Terminal) Redraw() {
 	if !t.rawActive {
 		return
 	}
-	t.renderer.Redraw(t.prompt, t.editor)
+	t.renderer.Redraw(t.prompt, t.continuationPrompt, t.editor)
 }
 
 func (t *Terminal) PrintSystemOutput(fn func(io.Writer)) {
@@ -127,82 +131,102 @@ func (t *Terminal) readLineInteractive(prompt string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-
-		if event.Type == KeyTab {
-			if t.applyCompletion() {
-				t.Redraw()
-			}
-			continue
-		}
-
-		t.resetCompletionSession()
-
-		switch event.Type {
-		case KeyEnter:
-			current := t.editor.CurrentLine()
-			t.Redraw()
-			t.writeNewline()
-			if t.history != nil {
-				t.history.Reset()
-			}
-			return strings.TrimSpace(current), nil
-		case KeyCtrlC:
-			t.Redraw()
-			t.writeNewline()
-			if t.history != nil {
-				t.history.Reset()
-			}
-			return "", ErrInputCanceled
-		case KeyCtrlD:
-			if t.editor.CurrentLine() == "" {
-				t.writeNewline()
-				if t.history != nil {
-					t.history.Reset()
-				}
-				return "", io.EOF
-			}
-			if t.editor.DeleteForward() {
-				t.Redraw()
-			}
-		case KeyRune:
-			t.editor.InsertRune(event.Rune)
-			t.Redraw()
-		case KeyBackspace:
-			if t.editor.DeleteBackward() {
-				t.Redraw()
-			}
-		case KeyDelete:
-			if t.editor.DeleteForward() {
-				t.Redraw()
-			}
-		case KeyLeft:
-			if t.editor.MoveLeft() {
-				t.Redraw()
-			}
-		case KeyRight:
-			if t.editor.MoveRight() {
-				t.Redraw()
-			}
-		case KeyHome, KeyCtrlA:
-			if t.editor.MoveHome() {
-				t.Redraw()
-			}
-		case KeyEnd, KeyCtrlE:
-			if t.editor.MoveEnd() {
-				t.Redraw()
-			}
-		case KeyUp:
-			if t.history != nil {
-				t.editor.SetText(t.history.Up(t.editor.CurrentLine()))
-				t.Redraw()
-			}
-		case KeyDown:
-			if t.history != nil {
-				t.editor.SetText(t.history.Down(t.editor.CurrentLine()))
-				t.Redraw()
-			}
+		done, line, err := t.handleEvent(event)
+		if err != nil || done {
+			return line, err
 		}
 	}
+}
+
+func (t *Terminal) handleEvent(event KeyEvent) (bool, string, error) {
+	if event.Type == KeyTab {
+		if t.applyCompletion() {
+			t.Redraw()
+		}
+		return false, "", nil
+	}
+
+	t.resetCompletionSession()
+
+	switch event.Type {
+	case KeyEnter:
+		if commandlang.IsContinuation(commandlang.Lex(t.editor.CurrentLine())) {
+			t.editor.setCurrentLine(trimContinuationMarker([]rune(t.editor.CurrentLine())))
+			t.editor.AppendLine()
+			t.Redraw()
+			return false, "", nil
+		}
+		command := commandlang.JoinLogicalLines(t.editor.Text())
+		t.Redraw()
+		t.writeNewline()
+		if t.history != nil {
+			t.history.Reset()
+		}
+		return true, strings.TrimSpace(command), nil
+	case KeyCtrlC:
+		t.Redraw()
+		t.writeNewline()
+		if t.history != nil {
+			t.history.Reset()
+		}
+		return true, "", ErrInputCanceled
+	case KeyCtrlD:
+		if t.editor.Text() == "" {
+			t.writeNewline()
+			if t.history != nil {
+				t.history.Reset()
+			}
+			return true, "", io.EOF
+		}
+		if t.editor.LineCount() > 1 && t.editor.CurrentLine() == "" {
+			t.writeNewline()
+			if t.history != nil {
+				t.history.Reset()
+			}
+			return true, "", ErrInputCanceled
+		}
+		if t.editor.DeleteForward() {
+			t.Redraw()
+		}
+	case KeyRune:
+		t.editor.InsertRune(event.Rune)
+		t.Redraw()
+	case KeyBackspace:
+		if t.editor.DeleteBackward() {
+			t.Redraw()
+		}
+	case KeyDelete:
+		if t.editor.DeleteForward() {
+			t.Redraw()
+		}
+	case KeyLeft:
+		if t.editor.MoveLeft() {
+			t.Redraw()
+		}
+	case KeyRight:
+		if t.editor.MoveRight() {
+			t.Redraw()
+		}
+	case KeyHome, KeyCtrlA:
+		if t.editor.MoveHome() {
+			t.Redraw()
+		}
+	case KeyEnd, KeyCtrlE:
+		if t.editor.MoveEnd() {
+			t.Redraw()
+		}
+	case KeyUp:
+		if t.history != nil {
+			t.editor.SetText(t.history.Up(t.editor.CurrentLine()))
+			t.Redraw()
+		}
+	case KeyDown:
+		if t.history != nil {
+			t.editor.SetText(t.history.Down(t.editor.CurrentLine()))
+			t.Redraw()
+		}
+	}
+	return false, "", nil
 }
 
 func (t *Terminal) applyCompletion() bool {
@@ -210,9 +234,10 @@ func (t *Terminal) applyCompletion() bool {
 		return false
 	}
 
-	currentLine := t.editor.CurrentLine()
-	cursor := t.editor.Cursor()
-	if t.session != nil && (currentLine != t.session.BaseLine || cursor != t.session.BaseCursor) && !t.session.Contains(currentLine, cursor) {
+	currentBuffer := t.editor.Buffer()
+	currentCursor := t.editor.Position()
+	currentLine := currentBuffer.LineString(currentCursor.Line)
+	if t.session != nil && (!buffersEqual(currentBuffer, t.session.OriginalBuffer) || currentCursor != t.session.OriginalCursor) && !t.session.Contains(currentBuffer, currentCursor) {
 		t.resetCompletionSession()
 	}
 
@@ -227,7 +252,7 @@ func (t *Terminal) applyCompletion() bool {
 		}
 		selected := t.session.Current()
 		t.session.Advance()
-		t.editor.ApplyCompletion(selected.Result)
+		t.applyCompletionResultToSession(selected.Result)
 		return true
 	}
 
@@ -235,6 +260,8 @@ func (t *Terminal) applyCompletion() bool {
 		Buffer: t.editor.Buffer(),
 		Cursor: t.editor.Position(),
 	}
+	request.Tokens = commandlang.Lex(request.Buffer.String())
+	request.CommandContext = commandlang.BuildCommandContext(request.Tokens, bufferRuneOffset(request.Buffer, request.Cursor))
 	completion := t.completer(request)
 	if len(completion.Suggestions) == 0 {
 		t.resetCompletionSession()
@@ -247,24 +274,55 @@ func (t *Terminal) applyCompletion() bool {
 		return true
 	}
 
-	t.session = NewCompletionSession(currentLine, cursor, completion.Suggestions)
+	t.session = NewCompletionSession(currentBuffer, currentCursor, completion.Suggestions)
 	if common, ok := CommonSuggestionResult(currentLine, t.session.Suggestions); ok {
 		nextLine, nextCursor := ApplyCompletion(currentLine, common)
-		if nextLine != currentLine || nextCursor != cursor {
+		if nextLine != currentLine || nextCursor != currentCursor.Column {
 			t.session.CommonResult = common
 			t.session.HasCommon = true
-			if matched := MatchingSuggestionIndex(t.session.BaseLine, t.session.Suggestions, nextLine, nextCursor); matched >= 0 {
-				t.session.Index = (matched + 1) % len(t.session.Suggestions)
+			if matched := MatchingSuggestionIndex(currentLine, t.session.Suggestions, nextLine, nextCursor); matched >= 0 {
+				t.session.SelectedIndex = (matched + 1) % len(t.session.Suggestions)
 			}
-			t.editor.ApplyCompletion(common)
+			t.applyCompletionResultToSession(common)
 			return true
 		}
 	}
 
 	selected := t.session.Current()
 	t.session.Advance()
-	t.editor.ApplyCompletion(selected.Result)
+	t.applyCompletionResultToSession(selected.Result)
 	return true
+}
+
+func (t *Terminal) applyCompletionResultToSession(result CompletionResult) {
+	if t.session == nil {
+		t.editor.ApplyCompletion(result)
+		return
+	}
+	buffer, cursor := ApplyCompletionToBuffer(t.session.OriginalBuffer, t.session.OriginalCursor, result)
+	t.editor.SetBuffer(buffer)
+	t.editor.cursor = cursor
+}
+
+func trimContinuationMarker(line []rune) []rune {
+	trimmed := append([]rune(nil), line...)
+	for len(trimmed) > 0 && (trimmed[len(trimmed)-1] == ' ' || trimmed[len(trimmed)-1] == '\t' || trimmed[len(trimmed)-1] == '\r') {
+		trimmed = trimmed[:len(trimmed)-1]
+	}
+	if len(trimmed) > 0 && trimmed[len(trimmed)-1] == '\\' {
+		trimmed = trimmed[:len(trimmed)-1]
+	}
+	return trimmed
+}
+
+func bufferRuneOffset(buffer Buffer, cursor Position) int {
+	offset := 0
+	lineIndex := clamp(cursor.Line, 0, len(buffer.Lines)-1)
+	for idx := 0; idx < lineIndex; idx++ {
+		offset += len(buffer.Lines[idx]) + 1
+	}
+	offset += clamp(cursor.Column, 0, len(buffer.Lines[lineIndex]))
+	return offset
 }
 
 func (t *Terminal) printSuggestionsTo(w io.Writer, suggestions []Suggestion) {
@@ -300,6 +358,18 @@ func (t *Terminal) writeNewline() {
 
 func (t *Terminal) resetCompletionSession() {
 	t.session = nil
+}
+
+func buffersEqual(left Buffer, right Buffer) bool {
+	if len(left.Lines) != len(right.Lines) {
+		return false
+	}
+	for idx := range left.Lines {
+		if string(left.Lines[idx]) != string(right.Lines[idx]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (w rawModeWriter) Write(p []byte) (int, error) {

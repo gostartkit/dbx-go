@@ -39,3 +39,29 @@ func TestCommonSuggestionResultPreservesSuffix(t *testing.T) {
 		t.Fatalf("cursor = %d", cursor)
 	}
 }
+
+func TestCompletionSessionContainsBufferAppliedFromOriginal(t *testing.T) {
+	t.Parallel()
+
+	session := NewCompletionSession(NewBufferFromString("show col"), Position{Line: 0, Column: len([]rune("show col"))}, []Suggestion{
+		{
+			Value: "columns",
+			Result: CompletionResult{
+				Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "columns"}},
+				Cursor: len([]rune("show columns")),
+			},
+		},
+		{
+			Value: "connections",
+			Result: CompletionResult{
+				Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "connections"}},
+				Cursor: len([]rune("show connections")),
+			},
+		},
+	})
+
+	appliedBuffer, appliedCursor := ApplyCompletionToBuffer(session.OriginalBuffer, session.OriginalCursor, session.Suggestions[1].Result)
+	if !session.Contains(appliedBuffer, appliedCursor) {
+		t.Fatalf("expected session to recognize applied suggestion buffer")
+	}
+}
