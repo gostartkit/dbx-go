@@ -131,6 +131,51 @@ func TestCalculateCompletionReplacementRanges(t *testing.T) {
 	}
 }
 
+func TestCalculateCompletionASTFlagAndValueContexts(t *testing.T) {
+	t.Parallel()
+
+	flagCompletion := calculateCompletion("exec create_user --dr", CompletionContext{})
+	assertSuggestionsContainAll(t, suggestionValues(flagCompletion), []string{"--dry-run"})
+
+	tagCompletion := calculateCompletion("show templates --tag ", CompletionContext{
+		TemplateTags: []string{"readonly", "grant"},
+	})
+	assertSuggestionsContainAll(t, suggestionValues(tagCompletion), []string{"readonly", "grant"})
+}
+
+func TestCalculateCompletionASTSubcommandAndTemplateRender(t *testing.T) {
+	t.Parallel()
+
+	showCompletion := calculateCompletion("show ", CompletionContext{})
+	assertSuggestionsContainAll(t, suggestionValues(showCompletion), []string{"columns", "connections", "context", "rows", "tables", "templates", "users"})
+
+	renderCompletion := calculateCompletion("template render cr", CompletionContext{
+		Templates: []string{"create-user", "create-database"},
+	})
+	assertSuggestionsContainAll(t, suggestionValues(renderCompletion), []string{"create-user", "create-database"})
+}
+
+func TestBuildProviderContextFlagValueSyntax(t *testing.T) {
+	t.Parallel()
+
+	app := newREPLBuilder(nil, nil).buildApp()
+	request := ui.NewSingleLineCompletionRequest("show templates --tag ", len([]rune("show templates --tag ")))
+	ctx := buildProviderContext(app, request, staticCompletionResolver{
+		ctx: CompletionContext{TemplateTags: []string{"readonly"}},
+	})
+	if !ctx.syntaxContext.InFlagValue {
+		t.Fatalf("expected flag value context, got %+v", ctx.syntaxContext)
+	}
+	if ctx.expectingFlag != "--tag" {
+		t.Fatalf("expecting flag = %q", ctx.expectingFlag)
+	}
+	suggestions, err := flagValueProvider{}.Complete(ctx)
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+	assertSuggestionsContainAll(t, suggestionValues(ui.Completion{Suggestions: suggestions}), []string{"readonly"})
+}
+
 func assertSuggestionsMissingAll(t *testing.T, values []string, missing []string) {
 	t.Helper()
 	have := make(map[string]struct{}, len(values))

@@ -13,6 +13,8 @@ type CompletionEdit = editor.CompletionEdit
 type Completer = editor.Completer
 type CommandContext = commandlang.CommandContext
 type CommandToken = commandlang.Token
+type Program = commandlang.Program
+type SyntaxContext = commandlang.SyntaxContext
 type Buffer = editor.Buffer
 type Position = editor.Position
 

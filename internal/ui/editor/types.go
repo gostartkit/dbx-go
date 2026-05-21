@@ -94,6 +94,8 @@ type CompletionRequest struct {
 	Cursor         Position
 	Tokens         []commandlang.Token
 	CommandContext commandlang.CommandContext
+	Program        *commandlang.Program
+	SyntaxContext  commandlang.SyntaxContext
 }
 
 func NewSingleLineCompletionRequest(line string, cursor int) CompletionRequest {
@@ -110,6 +112,8 @@ func NewSingleLineCompletionRequest(line string, cursor int) CompletionRequest {
 	}
 	request.Tokens = commandlang.Lex(line)
 	request.CommandContext = commandlang.BuildCommandContext(request.Tokens, cursor)
+	request.Program = commandlang.ParseTokens(request.Tokens)
+	request.SyntaxContext = commandlang.BuildSyntaxContext(request.Program, cursor, nil)
 	return request
 }
 

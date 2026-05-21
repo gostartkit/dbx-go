@@ -262,6 +262,8 @@ func (t *Terminal) applyCompletion() bool {
 	}
 	request.Tokens = commandlang.Lex(request.Buffer.String())
 	request.CommandContext = commandlang.BuildCommandContext(request.Tokens, bufferRuneOffset(request.Buffer, request.Cursor))
+	request.Program = commandlang.ParseTokens(request.Tokens)
+	request.SyntaxContext = commandlang.BuildSyntaxContext(request.Program, bufferRuneOffset(request.Buffer, request.Cursor), nil)
 	completion := t.completer(request)
 	if len(completion.Suggestions) == 0 {
 		t.resetCompletionSession()

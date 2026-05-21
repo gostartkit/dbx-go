@@ -24,6 +24,10 @@ type providerContext struct {
 	localTokens     []commandlang.Token
 	commandContext  commandlang.CommandContext
 	localContext    commandlang.CommandContext
+	program         *commandlang.Program
+	localProgram    *commandlang.Program
+	syntaxContext   commandlang.SyntaxContext
+	localSyntax     commandlang.SyntaxContext
 	commandPath     []string
 	parentCommand   []string
 	positionalIndex int
@@ -112,14 +116,30 @@ func completionFromApp(app *cmd.App, request ui.CompletionRequest, resolver comp
 }
 
 func buildProviderContext(app *cmd.App, request ui.CompletionRequest, resolver completionResolver) *providerContext {
-	fullPrefix := commandlang.JoinLogicalLines(bufferPrefixString(request.Buffer, request.Cursor))
+	fullPrefix := logicalCompletionPrefix(request.Buffer, request.Cursor)
 	localPrefix := request.CurrentLinePrefix()
+	knownPaths := replKnownCommandPaths()
 	fullTokens := commandlang.Lex(fullPrefix)
 	localTokens := commandlang.Lex(localPrefix)
 	fullContext := commandlang.BuildCommandContext(fullTokens, len([]rune(fullPrefix)))
 	localContext := commandlang.BuildCommandContext(localTokens, len([]rune(localPrefix)))
-	replaceStart, replaceEnd, currentValue, currentFlag := completionEditRange(localContext, len([]rune(localPrefix)))
-	commandPath, parentPath, positionalIndex := resolveCompletionCommandPath(fullTokens)
+	fullProgram := commandlang.ParseTokens(fullTokens)
+	localProgram := commandlang.ParseTokens(localTokens)
+	fullSyntax := commandlang.BuildSyntaxContext(fullProgram, len([]rune(fullPrefix)), knownPaths)
+	localSyntax := commandlang.BuildSyntaxContext(localProgram, len([]rune(localPrefix)), knownPaths)
+	replaceStart, replaceEnd, currentValue, currentFlag := completionEditRangeFromSyntax(localSyntax, len([]rune(localPrefix)))
+	if replaceStart == replaceEnd && currentValue == "" && currentFlag == "" {
+		replaceStart, replaceEnd, currentValue, currentFlag = completionEditRange(localContext, len([]rune(localPrefix)))
+	}
+	commandPath := append([]string(nil), fullSyntax.CommandPath...)
+	parentPath := append([]string(nil), fullSyntax.ParentPath...)
+	positionalIndex := fullSyntax.ArgIndex
+	expectingFlag := ""
+	if fullSyntax.InFlagValue {
+		expectingFlag = fullSyntax.CurrentFlag
+	} else {
+		expectingFlag = fullContext.ExpectingValueForFlag
+	}
 
 	return &providerContext{
 		request:         request,
@@ -129,12 +149,16 @@ func buildProviderContext(app *cmd.App, request ui.CompletionRequest, resolver c
 		localTokens:     localTokens,
 		commandContext:  fullContext,
 		localContext:    localContext,
+		program:         fullProgram,
+		localProgram:    localProgram,
+		syntaxContext:   fullSyntax,
+		localSyntax:     localSyntax,
 		commandPath:     commandPath,
 		parentCommand:   parentPath,
 		positionalIndex: positionalIndex,
 		currentValue:    currentValue,
 		currentFlag:     currentFlag,
-		expectingFlag:   fullContext.ExpectingValueForFlag,
+		expectingFlag:   expectingFlag,
 		replaceStart:    replaceStart,
 		replaceEnd:      replaceEnd,
 		resolver:        resolver,
@@ -144,7 +168,7 @@ func buildProviderContext(app *cmd.App, request ui.CompletionRequest, resolver c
 }
 
 func (p commandProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	if strings.HasPrefix(strings.TrimSpace(ctx.fullPrefix), "help") {
+	if slices.Equal(ctx.commandPath, []string{"help"}) && ctx.syntaxContext.InArg {
 		suggestions := make([]ui.Suggestion, 0)
 		for _, suggestion := range helpCompletionTopics() {
 			if ctx.currentValue != "" && !strings.HasPrefix(suggestion.Value, ctx.currentValue) {
@@ -154,9 +178,12 @@ func (p commandProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error)
 		}
 		return suggestions, nil
 	}
+	if !ctx.syntaxContext.InCommandName && !ctx.syntaxContext.InSubcommand {
+		return nil, nil
+	}
 
 	parent := ctx.parentCommand
-	if len(ctx.commandPath) == 0 {
+	if ctx.syntaxContext.InCommandName {
 		parent = nil
 	}
 	children := directChildCommands(parent)
@@ -174,7 +201,7 @@ func (p commandProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error)
 }
 
 func (p operationProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	if !slices.Equal(ctx.commandPath, []string{"exec"}) || ctx.positionalIndex != 0 {
+	if !slices.Equal(ctx.commandPath, []string{"exec"}) || !ctx.syntaxContext.InArg || ctx.positionalIndex != 0 {
 		return nil, nil
 	}
 	values := operationNames(ctx.resolver, ctx.application)
@@ -190,8 +217,9 @@ func (p operationProvider) Complete(ctx *providerContext) ([]ui.Suggestion, erro
 
 func (p templateProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	switch {
-	case slices.Equal(ctx.commandPath, []string{"describe", "template"}) && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"template", "validate"}) && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"describe", "template"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"template", "validate"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"template", "render"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
 	default:
 		return nil, nil
 	}
@@ -208,9 +236,9 @@ func (p templateProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error
 
 func (p connectionProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	switch {
-	case slices.Equal(ctx.commandPath, []string{"connect"}) && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"show", "connection"}) && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"drop", "connection"}) && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"connect"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"show", "connection"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"drop", "connection"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
 	default:
 		return nil, nil
 	}
@@ -226,7 +254,7 @@ func (p connectionProvider) Complete(ctx *providerContext) ([]ui.Suggestion, err
 
 func (p databaseProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	switch {
-	case slices.Equal(ctx.commandPath, []string{"use", "database"}) && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"use", "database"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
 	default:
 		return nil, nil
 	}
@@ -243,9 +271,9 @@ func (p databaseProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error
 
 func (p tableProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	switch {
-	case slices.Equal(ctx.commandPath, []string{"show", "table"}) && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"show", "columns"}) && ctx.positionalIndex == 0:
-	case slices.Equal(ctx.commandPath, []string{"show", "rows"}) && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"show", "table"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"show", "columns"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
+	case slices.Equal(ctx.commandPath, []string{"show", "rows"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
 	default:
 		return nil, nil
 	}
@@ -261,7 +289,7 @@ func (p tableProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 }
 
 func (p userProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	if !slices.Equal(ctx.commandPath, []string{"drop", "user"}) || ctx.positionalIndex != 0 {
+	if !slices.Equal(ctx.commandPath, []string{"drop", "user"}) || !ctx.syntaxContext.InArg || ctx.positionalIndex != 0 {
 		return nil, nil
 	}
 	values := ctx.resolver.Users()
@@ -284,10 +312,10 @@ func (p flagProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	if len(flags) == 0 {
 		return nil, nil
 	}
-	if ctx.expectingFlag != "" {
+	if ctx.expectingFlag != "" || ctx.syntaxContext.InFlagValue {
 		return nil, nil
 	}
-	if ctx.currentValue == "" && ctx.currentFlag == "" {
+	if !ctx.syntaxContext.InFlagName {
 		return nil, nil
 	}
 	if ctx.currentValue != "" && !strings.HasPrefix(ctx.currentValue, "--") && ctx.currentFlag == "" {
@@ -304,7 +332,7 @@ func (p flagProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 }
 
 func (p flagValueProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	if ctx.expectingFlag == "" {
+	if ctx.expectingFlag == "" || !ctx.syntaxContext.InFlagValue {
 		return nil, nil
 	}
 	switch ctx.expectingFlag {
@@ -347,6 +375,38 @@ func directChildCommands(parent []string) []Suggestion {
 	return suggestions
 }
 
+func replKnownCommandPaths() [][]string {
+	specs := replCommandSpecs()
+	seen := make(map[string]struct{}, len(specs))
+	paths := make([][]string, 0, len(specs))
+	for _, spec := range specs {
+		if spec.Hidden || (spec.Category != "command" && spec.Category != "alias") {
+			continue
+		}
+		values := commandlangTokensForPath(spec.Path)
+		if len(values) == 0 {
+			continue
+		}
+		key := strings.Join(values, "\x00")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		paths = append(paths, values)
+	}
+	for _, values := range [][]string{
+		{"template", "render"},
+	} {
+		key := strings.Join(values, "\x00")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		paths = append(paths, values)
+	}
+	return paths
+}
+
 func completionEditRange(ctx commandlang.CommandContext, cursor int) (int, int, string, string) {
 	if ctx.CursorToken == nil {
 		return cursor, cursor, "", ""
@@ -359,61 +419,33 @@ func completionEditRange(ctx commandlang.CommandContext, cursor int) (int, int, 
 	}
 }
 
+func completionEditRangeFromSyntax(ctx commandlang.SyntaxContext, cursor int) (int, int, string, string) {
+	if ctx.InFlagValue {
+		switch node := ctx.Node.(type) {
+		case *commandlang.ArgNode:
+			return node.Range().StartRune, node.Range().EndRune, node.Value, ctx.CurrentFlag
+		default:
+			return cursor, cursor, "", ctx.CurrentFlag
+		}
+	}
+	if ctx.InFlagName {
+		if node, ok := ctx.Node.(*commandlang.FlagNode); ok {
+			return node.Range().StartRune, node.Range().EndRune, node.Name, node.Name
+		}
+	}
+	switch node := ctx.Node.(type) {
+	case *commandlang.ArgNode:
+		return node.Range().StartRune, node.Range().EndRune, node.Value, ctx.CurrentFlag
+	default:
+		return cursor, cursor, "", ""
+	}
+}
+
 func flagLiteral(token commandlang.Token) string {
 	if token.Type == commandlang.TokenFlag {
 		return token.Literal
 	}
 	return ""
-}
-
-func resolveCompletionCommandPath(tokens []commandlang.Token) ([]string, []string, int) {
-	words := positionalWords(tokens)
-	matched := longestCommandPath(words)
-	parent := matched
-	if len(words) > len(matched) {
-		parent = matched
-	}
-	return matched, parent, max(0, len(words)-len(matched)-1)
-}
-
-func longestCommandPath(words []string) []string {
-	best := []string(nil)
-	for _, spec := range replCommandSpecs() {
-		if spec.Hidden || (spec.Category != "command" && spec.Category != "alias") {
-			continue
-		}
-		tokens := commandlangTokensForPath(spec.Path)
-		if len(tokens) == 0 || len(tokens) > len(words) {
-			continue
-		}
-		if slices.Equal(tokens, words[:len(tokens)]) && len(tokens) > len(best) {
-			best = append([]string(nil), tokens...)
-		}
-	}
-	return best
-}
-
-func positionalWords(tokens []commandlang.Token) []string {
-	values := make([]string, 0)
-	var activeFlag bool
-	for idx := 0; idx < len(tokens); idx++ {
-		token := tokens[idx]
-		switch token.Type {
-		case commandlang.TokenEOF, commandlang.TokenNewline, commandlang.TokenPipe:
-			return values
-		case commandlang.TokenFlag:
-			activeFlag = true
-		case commandlang.TokenEquals:
-			continue
-		case commandlang.TokenWord, commandlang.TokenString:
-			if activeFlag {
-				activeFlag = false
-				continue
-			}
-			values = append(values, token.Literal)
-		}
-	}
-	return values
 }
 
 func commandlangTokensForPath(path string) []string {
@@ -439,6 +471,36 @@ func bufferPrefixString(buffer ui.Buffer, cursor ui.Position) string {
 		parts = append(parts, string(line[:column]))
 	}
 	return strings.Join(parts, "\n")
+}
+
+func logicalCompletionPrefix(buffer ui.Buffer, cursor ui.Position) string {
+	lineIndex := min(cursor.Line, len(buffer.Lines)-1)
+	parts := make([]string, 0, lineIndex+1)
+	for idx := 0; idx < lineIndex; idx++ {
+		line := strings.TrimRight(string(buffer.Lines[idx]), " \t\r")
+		if strings.HasSuffix(line, "\\") {
+			line = strings.TrimSpace(strings.TrimSuffix(line, "\\"))
+		} else {
+			line = strings.TrimSpace(line)
+		}
+		if line != "" {
+			parts = append(parts, line)
+		}
+	}
+	current := ""
+	if lineIndex >= 0 && lineIndex < len(buffer.Lines) {
+		line := buffer.Lines[lineIndex]
+		column := min(cursor.Column, len(line))
+		current = string(line[:column])
+		current = strings.TrimLeft(current, " \t\r")
+	}
+	if len(parts) == 0 {
+		return current
+	}
+	if current == "" {
+		return strings.Join(parts, " ") + " "
+	}
+	return strings.Join(append(parts, current), " ")
 }
 
 func flagsForCommandPath(path []string) []string {
