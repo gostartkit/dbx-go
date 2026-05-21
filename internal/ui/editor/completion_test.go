@@ -65,3 +65,56 @@ func TestCompletionSessionContainsBufferAppliedFromOriginal(t *testing.T) {
 		t.Fatalf("expected session to recognize applied suggestion buffer")
 	}
 }
+
+func TestCompletionSessionKeepsImmutableOriginalState(t *testing.T) {
+	t.Parallel()
+
+	original := NewBufferFromString("show col")
+	session := NewCompletionSession(original, Position{Line: 0, Column: len([]rune("show col"))}, []Suggestion{
+		{
+			Value: "columns",
+			Result: CompletionResult{
+				Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "columns"}},
+				Cursor: len([]rune("show columns")),
+			},
+		},
+	})
+
+	original.Lines[0] = []rune("mutated externally")
+	if got := session.OriginalBuffer.String(); got != "show col" {
+		t.Fatalf("session original buffer = %q", got)
+	}
+	if session.OriginalCursor != (Position{Line: 0, Column: len([]rune("show col"))}) {
+		t.Fatalf("session original cursor = %#v", session.OriginalCursor)
+	}
+}
+
+func TestApplyCompletionToBufferReplaysMultipleEditsFromOriginal(t *testing.T) {
+	t.Parallel()
+
+	original := NewBufferFromString("grant ro al")
+	first := CompletionResult{
+		Edits: []CompletionEdit{
+			{StartRune: 6, EndRune: 8, Text: "readonly"},
+			{StartRune: 9, EndRune: 11, Text: "alice"},
+		},
+		Cursor: len([]rune("grant readonly alice")),
+	}
+	second := CompletionResult{
+		Edits: []CompletionEdit{
+			{StartRune: 6, EndRune: 8, Text: "reporting"},
+			{StartRune: 9, EndRune: 11, Text: "alex"},
+		},
+		Cursor: len([]rune("grant reporting alex")),
+	}
+
+	appliedFirst, _ := ApplyCompletionToBuffer(original, Position{Line: 0, Column: len([]rune("grant ro al"))}, first)
+	appliedSecond, _ := ApplyCompletionToBuffer(original, Position{Line: 0, Column: len([]rune("grant ro al"))}, second)
+
+	if got := appliedFirst.String(); got != "grant readonly alice" {
+		t.Fatalf("first replay = %q", got)
+	}
+	if got := appliedSecond.String(); got != "grant reporting alex" {
+		t.Fatalf("second replay = %q", got)
+	}
+}

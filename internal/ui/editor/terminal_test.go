@@ -359,3 +359,211 @@ func TestTerminalCommonPrefixDoesNotAppendOnCycle(t *testing.T) {
 		t.Fatalf("unexpected concatenated completion: %q", terminal.editor.CurrentLine())
 	}
 }
+
+func TestTerminalCompletionRegressionShowColCandidatesNeverConcatenate(t *testing.T) {
+	t.Parallel()
+
+	terminal := NewTerminal(bufio.NewReader(strings.NewReader("")), &bytes.Buffer{}, nil)
+	terminal.completer = func(request CompletionRequest) Completion {
+		return Completion{
+			Suggestions: []Suggestion{
+				{
+					Value: "columns",
+					Result: CompletionResult{
+						Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "columns"}},
+						Cursor: len([]rune("show columns")),
+					},
+				},
+				{
+					Value: "connection",
+					Result: CompletionResult{
+						Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "connection"}},
+						Cursor: len([]rune("show connection")),
+					},
+				},
+				{
+					Value: "config",
+					Result: CompletionResult{
+						Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "config"}},
+						Cursor: len([]rune("show config")),
+					},
+				},
+			},
+		}
+	}
+	terminal.editor.SetText("show col")
+
+	allowed := map[string]struct{}{
+		"show co":         {},
+		"show columns":    {},
+		"show connection": {},
+		"show config":     {},
+	}
+
+	for idx := 0; idx < 10; idx++ {
+		terminal.applyCompletion()
+		line := terminal.editor.CurrentLine()
+		if _, ok := allowed[line]; !ok {
+			t.Fatalf("tab %d produced unexpected line %q", idx+1, line)
+		}
+		if strings.Contains(line, "connectioncolumns") || strings.Contains(line, "columnsconnection") {
+			t.Fatalf("tab %d produced concatenated completion %q", idx+1, line)
+		}
+	}
+}
+
+func TestTerminalCompletionSessionResetCreatesNewBaseline(t *testing.T) {
+	t.Parallel()
+
+	terminal := NewTerminal(bufio.NewReader(strings.NewReader("")), &bytes.Buffer{}, nil)
+	terminal.completer = func(request CompletionRequest) Completion {
+		return Completion{
+			Suggestions: []Suggestion{
+				{
+					Value: "columns",
+					Result: CompletionResult{
+						Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "columns"}},
+						Cursor: len([]rune("show columns")),
+					},
+				},
+				{
+					Value: "collectors",
+					Result: CompletionResult{
+						Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "collectors"}},
+						Cursor: len([]rune("show collectors")),
+					},
+				},
+			},
+		}
+	}
+
+	terminal.editor.SetText("show col")
+	if !terminal.applyCompletion() {
+		t.Fatalf("expected first completion")
+	}
+	if terminal.session == nil {
+		t.Fatalf("expected completion session")
+	}
+	if got := terminal.session.OriginalBuffer.String(); got != "show col" {
+		t.Fatalf("original baseline = %q", got)
+	}
+
+	done, line, err := terminal.handleEvent(KeyEvent{Type: KeyRune, Rune: 'x'})
+	if done || line != "" || err != nil {
+		t.Fatalf("handleEvent returned done=%v line=%q err=%v", done, line, err)
+	}
+	if terminal.session != nil {
+		t.Fatalf("expected session reset after input")
+	}
+	if got := terminal.editor.CurrentLine(); got != "show columnsx" {
+		t.Fatalf("editor line after input = %q", got)
+	}
+
+	if !terminal.applyCompletion() {
+		t.Fatalf("expected second completion to create new session")
+	}
+	if terminal.session == nil {
+		t.Fatalf("expected recreated completion session")
+	}
+	if got := terminal.session.OriginalBuffer.String(); got != "show columnsx" {
+		t.Fatalf("new original baseline = %q", got)
+	}
+}
+
+func TestTerminalCompletionCyclePreservesSuffixAcrossManyTabs(t *testing.T) {
+	t.Parallel()
+
+	terminal := NewTerminal(bufio.NewReader(strings.NewReader("")), &bytes.Buffer{}, nil)
+	terminal.completer = func(request CompletionRequest) Completion {
+		return Completion{
+			Suggestions: []Suggestion{
+				{
+					Value: "columns",
+					Result: CompletionResult{
+						Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "columns"}},
+						Cursor: len([]rune("show columns")),
+					},
+				},
+				{
+					Value: "collectors",
+					Result: CompletionResult{
+						Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "collectors"}},
+						Cursor: len([]rune("show collectors")),
+					},
+				},
+				{
+					Value: "colormap",
+					Result: CompletionResult{
+						Edits:  []CompletionEdit{{StartRune: 5, EndRune: 8, Text: "colormap"}},
+						Cursor: len([]rune("show colormap")),
+					},
+				},
+			},
+		}
+	}
+	suffix := " --format json"
+	terminal.editor.SetText("show col" + suffix)
+	terminal.editor.MoveHome()
+	for i := 0; i < len([]rune("show col")); i++ {
+		terminal.editor.MoveRight()
+	}
+
+	for idx := 0; idx < 9; idx++ {
+		terminal.applyCompletion()
+		if !strings.HasSuffix(terminal.editor.CurrentLine(), suffix) {
+			t.Fatalf("tab %d lost suffix: %q", idx+1, terminal.editor.CurrentLine())
+		}
+	}
+}
+
+func TestTerminalCompletionCycleReplaysMultipleEditsFromOriginal(t *testing.T) {
+	t.Parallel()
+
+	terminal := NewTerminal(bufio.NewReader(strings.NewReader("")), &bytes.Buffer{}, nil)
+	terminal.completer = func(request CompletionRequest) Completion {
+		return Completion{
+			Suggestions: []Suggestion{
+				{
+					Value: "readonly-alice",
+					Result: CompletionResult{
+						Edits: []CompletionEdit{
+							{StartRune: 6, EndRune: 8, Text: "readonly"},
+							{StartRune: 9, EndRune: 11, Text: "alice"},
+						},
+						Cursor: len([]rune("grant readonly alice")),
+					},
+				},
+				{
+					Value: "reporting-alex",
+					Result: CompletionResult{
+						Edits: []CompletionEdit{
+							{StartRune: 6, EndRune: 8, Text: "reporting"},
+							{StartRune: 9, EndRune: 11, Text: "alex"},
+						},
+						Cursor: len([]rune("grant reporting alex")),
+					},
+				},
+			},
+		}
+	}
+	terminal.editor.SetText("grant ro al")
+
+	if !terminal.applyCompletion() {
+		t.Fatalf("expected first completion")
+	}
+	if got := terminal.editor.CurrentLine(); got != "grant readonly alice" {
+		t.Fatalf("first candidate = %q", got)
+	}
+	if terminal.applyCompletion() {
+		t.Fatalf("second tab should only print suggestions")
+	}
+	if !terminal.applyCompletion() {
+		t.Fatalf("third tab should apply second suggestion")
+	}
+	if got := terminal.editor.CurrentLine(); got != "grant reporting alex" {
+		t.Fatalf("second candidate = %q", got)
+	}
+	if strings.Contains(terminal.editor.CurrentLine(), "readonly") && strings.Contains(terminal.editor.CurrentLine(), "alex") {
+		t.Fatalf("unexpected mixed candidate state: %q", terminal.editor.CurrentLine())
+	}
+}

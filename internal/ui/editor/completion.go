@@ -2,6 +2,25 @@ package editor
 
 import "sort"
 
+// CompletionSession captures one continuous Tab-completion interaction.
+//
+// Invariants:
+//   - OriginalBuffer and OriginalCursor are immutable for the lifetime of the
+//     session. They represent the editor state at the first Tab press that
+//     created the session.
+//   - Every candidate cycle must be replayed from OriginalBuffer. We never
+//     apply an old CompletionEdit on top of an already-completed buffer.
+//   - CompletionEdit ranges supplied by providers are interpreted relative to
+//     OriginalBuffer, not relative to any intermediate candidate or common
+//     prefix buffer shown during cycling.
+//   - Common-prefix application does not change the session baseline. A later
+//     Tab must still resolve candidates from OriginalBuffer.
+//   - The terminal layer must reset the session on ordinary input, cursor
+//     movement, deletion, history navigation, Enter, and Ctrl+C. Once reset, a
+//     later Tab creates a brand-new session with a new immutable baseline.
+//   - Session logic must stay separate from providers: providers map
+//     CompletionRequest -> CompletionResult, while the editor/session maps
+//     OriginalBuffer + CompletionResult -> new editor state.
 type CompletionSession struct {
 	OriginalBuffer   Buffer
 	OriginalCursor   Position
@@ -100,6 +119,10 @@ func ApplyCompletion(line string, result CompletionResult) (string, int) {
 	return string(out), cursor
 }
 
+// ApplyCompletionToBuffer reapplies completion edits against the immutable
+// buffer snapshot captured when a completion session began. Callers must not
+// feed it a previously completed buffer when cycling suggestions; doing so
+// would reintroduce candidate concatenation bugs such as "connectioncolumns".
 func ApplyCompletionToBuffer(buffer Buffer, cursor Position, result CompletionResult) (Buffer, Position) {
 	next := buffer.Clone()
 	lineIndex := clamp(cursor.Line, 0, len(next.Lines)-1)
