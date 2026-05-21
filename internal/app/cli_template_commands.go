@@ -23,14 +23,25 @@ type showTemplatesFlags struct {
 }
 
 func (b *cliBuilder) runGroupCommand() *cmd.Command {
+	subcommands := []*cmd.Command{
+		b.runTemplateCommand(),
+		b.runSQLCommand(),
+	}
 	return &cmd.Command{
-		Name:      "run",
-		UsageLine: "dbx run <subcommand>",
-		Short:     "Run workflows",
-		Long:      helpEntries["run"].body,
-		SubCommands: []*cmd.Command{
-			b.runTemplateCommand(),
-			b.runSQLCommand(),
+		Name:        "run",
+		UsageLine:   "dbx run <subcommand>",
+		Short:       "Run workflows",
+		Long:        helpEntries["run"].body,
+		SubCommands: subcommands,
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) == 0 {
+				usage := "dbx run <subcommand>"
+				if b.mode == ModeREPL {
+					usage = "run <subcommand>"
+				}
+				return util.WrapLayer("validation", "run", fmt.Errorf("usage: %s", usage))
+			}
+			return util.WrapLayer("validation", "run", unknownTargetError("run", args[0], subcommands))
 		},
 	}
 }

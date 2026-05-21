@@ -188,6 +188,80 @@ func TestREPLUnknownCommandSuggestsClosestMatch(t *testing.T) {
 	}
 }
 
+func TestREPLUnknownShowTargetUsesShowContext(t *testing.T) {
+	t.Parallel()
+
+	app, err := NewWithOptions(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, Options{ConfigDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	_, runErr := app.handleLine(context.Background(), "show indexes")
+	if runErr == nil {
+		t.Fatalf("expected error")
+	}
+	message := runErr.Error()
+	if !strings.Contains(message, `unknown show target "indexes"`) {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+	if strings.Contains(message, `Did you mean show?`) {
+		t.Fatalf("unexpected root-level suggestion: %v", runErr)
+	}
+	if !strings.Contains(message, "available show targets:") {
+		t.Fatalf("missing show targets list: %v", runErr)
+	}
+	for _, name := range []string{"databases", "tables", "table", "columns", "rows", "connections", "connection", "users", "user", "templates", "context"} {
+		if !strings.Contains(message, "\n  "+name) {
+			t.Fatalf("missing show target %q in error: %v", name, runErr)
+		}
+	}
+	if strings.Contains(message, "\n  connect\n") || strings.Contains(message, "\n  create\n") {
+		t.Fatalf("unexpected root command in error: %v", runErr)
+	}
+}
+
+func TestREPLUnknownShowTargetSuggestsClosestMatch(t *testing.T) {
+	t.Parallel()
+
+	app, err := NewWithOptions(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, Options{ConfigDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	_, runErr := app.handleLine(context.Background(), "show tabl")
+	if runErr == nil {
+		t.Fatalf("expected error")
+	}
+	message := runErr.Error()
+	if !strings.Contains(message, `unknown show target "tabl"`) {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+	if !strings.Contains(message, `did you mean "table"?`) {
+		t.Fatalf("missing contextual suggestion: %v", runErr)
+	}
+}
+
+func TestREPLUnknownRunTargetSuggestsClosestMatch(t *testing.T) {
+	t.Parallel()
+
+	app, err := NewWithOptions(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, Options{ConfigDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	_, runErr := app.handleLine(context.Background(), "run sq")
+	if runErr == nil {
+		t.Fatalf("expected error")
+	}
+	message := runErr.Error()
+	if !strings.Contains(message, `unknown run target "sq"`) {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+	if !strings.Contains(message, `did you mean "sql"?`) {
+		t.Fatalf("missing contextual suggestion: %v", runErr)
+	}
+}
+
 func TestREPLMissingArgumentShowsUsage(t *testing.T) {
 	t.Parallel()
 

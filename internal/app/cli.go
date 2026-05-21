@@ -175,6 +175,43 @@ func unknownCommandError(name string, commands []*cmd.Command) error {
 	return fmt.Errorf("unknown command %q. Did you mean %s?", name, strings.Join(suggestions, " or "))
 }
 
+func unknownTargetError(command string, target string, subcommands []*cmd.Command) error {
+	lines := []string{
+		fmt.Sprintf("unknown %s target %q", command, target),
+	}
+
+	suggestions := suggestCommands(target, subcommands)
+	if len(suggestions) > 0 {
+		lines = append(lines, fmt.Sprintf(`did you mean %q?`, suggestions[0]))
+	}
+
+	available := availableCommandNames(subcommands)
+	if len(available) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, fmt.Sprintf("available %s targets:", command))
+		for _, candidate := range available {
+			lines = append(lines, "  "+candidate)
+		}
+	}
+
+	return fmt.Errorf("%s", strings.Join(lines, "\n"))
+}
+
+func availableCommandNames(commands []*cmd.Command) []string {
+	names := make([]string, 0, len(commands))
+	for _, command := range commands {
+		if command == nil || command.Hidden {
+			continue
+		}
+		name := strings.TrimSpace(command.Name)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
 func suggestCommands(name string, commands []*cmd.Command) []string {
 	type candidate struct {
 		name     string

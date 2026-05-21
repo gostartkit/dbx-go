@@ -40,23 +40,34 @@ func (b *cliBuilder) createGroupCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) showGroupCommand() *cmd.Command {
+	subcommands := []*cmd.Command{
+		b.showConnectionCommand(),
+		b.showConnectionsCommand(),
+		b.showDatabasesCommand(),
+		b.showUsersCommand(),
+		b.showUserCommand(),
+		b.showTablesCommand(),
+		b.showTableCommand(),
+		b.showColumnsCommand(),
+		b.showRowsCommand(),
+		b.showTemplatesCommand(),
+		b.showContextCommand(),
+	}
 	return &cmd.Command{
-		Name:      "show",
-		UsageLine: "dbx show <subcommand>",
-		Short:     "Show resources",
-		Long:      helpEntries["show"].body,
-		SubCommands: []*cmd.Command{
-			b.showConnectionCommand(),
-			b.showConnectionsCommand(),
-			b.showDatabasesCommand(),
-			b.showUsersCommand(),
-			b.showUserCommand(),
-			b.showTablesCommand(),
-			b.showTableCommand(),
-			b.showColumnsCommand(),
-			b.showRowsCommand(),
-			b.showTemplatesCommand(),
-			b.showContextCommand(),
+		Name:        "show",
+		UsageLine:   "dbx show <subcommand>",
+		Short:       "Show resources",
+		Long:        helpEntries["show"].body,
+		SubCommands: subcommands,
+		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
+			if len(args) == 0 {
+				usage := "dbx show <subcommand>"
+				if b.mode == ModeREPL {
+					usage = "show <subcommand>"
+				}
+				return util.WrapLayer("validation", "show", fmt.Errorf("usage: %s", usage))
+			}
+			return util.WrapLayer("validation", "show", unknownTargetError("show", args[0], subcommands))
 		},
 	}
 }

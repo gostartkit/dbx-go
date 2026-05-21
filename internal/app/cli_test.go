@@ -563,6 +563,76 @@ func TestCLIAmbiguousTemplateFails(t *testing.T) {
 	}
 }
 
+func TestCLIUnknownShowTargetUsesShowContext(t *testing.T) {
+	t.Parallel()
+
+	app, _, stderr := newCLIApp(t, "", t.TempDir())
+	err := app.Run(context.Background(), []string{"show", "indexes"})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	message := err.Error()
+	if !strings.Contains(message, `unknown show target "indexes"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(message, `Did you mean show?`) {
+		t.Fatalf("unexpected root-level suggestion: %v", err)
+	}
+	if !strings.Contains(message, "available show targets:") {
+		t.Fatalf("missing show targets list: %v", err)
+	}
+	if !strings.Contains(message, "\n  users") || !strings.Contains(message, "\n  user") {
+		t.Fatalf("missing show user targets: %v", err)
+	}
+	if strings.Contains(message, "\n  connect\n") || strings.Contains(message, "\n  create\n") {
+		t.Fatalf("unexpected root commands in error: %v", err)
+	}
+	_ = stderr
+}
+
+func TestCLIUnknownShowTargetSuggestsClosestMatch(t *testing.T) {
+	t.Parallel()
+
+	app, _, _ := newCLIApp(t, "", t.TempDir())
+	err := app.Run(context.Background(), []string{"show", "tabl"})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), `did you mean "table"?`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCLIRootUnknownCommandStillSuggestsRootMatch(t *testing.T) {
+	t.Parallel()
+
+	app, _, _ := newCLIApp(t, "", t.TempDir())
+	err := app.Run(context.Background(), []string{"sho"})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), `unknown command "sho"`) || !strings.Contains(err.Error(), "Did you mean show?") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCLIUnknownRunTargetSuggestsClosestMatch(t *testing.T) {
+	t.Parallel()
+
+	app, _, _ := newCLIApp(t, "", t.TempDir())
+	err := app.Run(context.Background(), []string{"run", "sq"})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	message := err.Error()
+	if !strings.Contains(message, `unknown run target "sq"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(message, `did you mean "sql"?`) {
+		t.Fatalf("missing contextual suggestion: %v", err)
+	}
+}
+
 func TestCLIConnectionShowJSONRedactsSecrets(t *testing.T) {
 	t.Parallel()
 
