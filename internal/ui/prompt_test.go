@@ -49,6 +49,20 @@ func TestPromptRedrawLineIgnoresHintForStableRendering(t *testing.T) {
 	}
 }
 
+func TestPromptRedrawLineWithCursorRestoresCursorPosition(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	prompt := NewPrompt(strings.NewReader(""), &out)
+
+	prompt.redrawLineWithCursor("dbx> ", "select", 3, "")
+
+	want := "\r\033[2Kdbx> select\033[3D"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
 func TestPromptPrintSuggestionsWithDescriptions(t *testing.T) {
 	t.Parallel()
 
@@ -74,6 +88,7 @@ func TestPromptPrintSystemOutputClearsLineAndRedrawsInRawMode(t *testing.T) {
 	prompt.rawActive = true
 	prompt.label = "dbx(prod)> "
 	prompt.current = "connec"
+	prompt.cursor = len([]rune(prompt.current))
 
 	prompt.PrintSystemOutput(func(w io.Writer) {
 		w.Write([]byte("connect             connect to a saved connection\n"))
@@ -340,6 +355,7 @@ func TestPromptApplyCompletionDoubleTabPrintsCandidateListAndRedraws(t *testing.
 	prompt.rawActive = true
 	prompt.label = "dbx(prod)> "
 	prompt.current = "use db1"
+	prompt.cursor = len([]rune(prompt.current))
 	prompt.completer = func(string) Completion {
 		return Completion{
 			Suggestions: []Suggestion{
@@ -375,5 +391,61 @@ func TestRawModeWriterNormalizesLineEndings(t *testing.T) {
 
 	if got, want := out.String(), "alpha\r\nbeta\r\ngamma"; got != want {
 		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestPromptReadKeyEventParsesANSISequences(t *testing.T) {
+	t.Parallel()
+
+	input := strings.NewReader("\x1b[D\x1b[C\x1b[A\x1b[B\x1b[H\x1b[F\x1b[1~\x1b[4~\x1b[7~\x1b[8~\x1b[3~\x1bOH\x1bOF")
+	prompt := NewPrompt(input, &bytes.Buffer{})
+
+	kinds := []keyKind{
+		keyLeft,
+		keyRight,
+		keyUp,
+		keyDown,
+		keyHome,
+		keyEnd,
+		keyHome,
+		keyEnd,
+		keyHome,
+		keyEnd,
+		keyDelete,
+		keyHome,
+		keyEnd,
+	}
+
+	for idx, want := range kinds {
+		event, err := prompt.readKeyEvent()
+		if err != nil {
+			t.Fatalf("readKeyEvent[%d] returned error: %v", idx, err)
+		}
+		if event.kind != want {
+			t.Fatalf("readKeyEvent[%d] = %v, want %v", idx, event.kind, want)
+		}
+	}
+}
+
+func TestPromptReadKeyEventReadsUTF8RuneAndIgnoresEscapeText(t *testing.T) {
+	t.Parallel()
+
+	input := strings.NewReader("你\x1b[200~")
+	prompt := NewPrompt(input, &bytes.Buffer{})
+
+	event, err := prompt.readKeyEvent()
+	if err != nil {
+		t.Fatalf("readKeyEvent rune returned error: %v", err)
+	}
+	if event.kind != keyRune || event.r != '你' {
+		t.Fatalf("first event = %#v", event)
+	}
+
+	event, err = prompt.readKeyEvent()
+	if err != nil {
+		t.Fatalf("readKeyEvent escape returned error: %v", err)
+	}
+	if event.kind != keyIgnored {
+		t.Fatalf("escape event = %v, want ignored", event.kind)
 	}
 }

@@ -2,12 +2,13 @@ package ui
 
 import (
 	"bufio"
-	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 )
@@ -39,6 +40,7 @@ type Prompt struct {
 	rawActive bool
 	label     string
 	current   string
+	cursor    int
 	session   *CompletionSession
 }
 
@@ -53,6 +55,8 @@ type CompletionSession struct {
 	CommonInput string
 	ListShown   bool
 }
+
+var ErrPromptCanceled = errors.New("prompt canceled")
 
 func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 	var inFile *os.File
@@ -208,64 +212,172 @@ func (p *Prompt) readPromptInteractive(label string) (string, error) {
 	p.rawActive = true
 	p.label = label
 	p.current = ""
+	p.cursor = 0
 	p.resetCompletionSession()
 	defer func() {
 		p.rawActive = false
 		p.label = ""
 		p.current = ""
+		p.cursor = 0
 		p.resetCompletionSession()
 	}()
 
 	fmt.Fprint(p.out, label)
 
-	current := ""
+	editor := newLineEditor(p.history)
 	for {
-		b, err := p.reader.ReadByte()
+		event, err := p.readKeyEvent()
 		if err != nil {
 			return "", err
 		}
 
-		switch b {
-		case '\n', '\r':
-			p.redrawLine(label, current, "")
+		if event.kind == keyTab {
+			current := p.applyCompletion(editor.String())
+			editor.SetLine(current)
+			p.redrawCurrentLine(label, editor.String(), editor.Cursor())
+			continue
+		}
+
+		p.resetCompletionSession()
+
+		result := editor.HandleKey(event)
+		switch {
+		case result.submit:
+			current := editor.String()
+			p.redrawLineWithCursor(label, current, editor.Cursor(), "")
 			p.writeNewline()
 			if p.history != nil {
 				p.history.Reset()
 			}
-			p.resetCompletionSession()
 			return strings.TrimSpace(current), nil
-		case 3:
+		case result.cancel:
+			p.redrawLineWithCursor(label, editor.String(), editor.Cursor(), "")
+			p.writeNewline()
 			if p.history != nil {
 				p.history.Reset()
 			}
-			p.resetCompletionSession()
-			return "", context.Canceled
-		case '\t':
-			current = p.applyCompletion(current)
-			p.redrawCurrentLine(label, current)
-		case 127, 8:
-			p.resetCompletionSession()
-			if current == "" {
-				continue
+			return "", ErrPromptCanceled
+		case result.eof:
+			p.writeNewline()
+			if p.history != nil {
+				p.history.Reset()
 			}
-			runes := []rune(current)
-			current = string(runes[:len(runes)-1])
-			p.redrawCurrentLine(label, current)
-		case 27:
-			p.resetCompletionSession()
-			updated, handled, escErr := p.handleEscapeSequence(current)
-			if escErr != nil {
-				return "", escErr
-			}
-			if handled {
-				current = updated
-				p.redrawCurrentLine(label, current)
-			}
-		default:
-			p.resetCompletionSession()
-			current += string(b)
-			p.redrawCurrentLine(label, current)
+			return "", io.EOF
+		case result.changed:
+			p.redrawCurrentLine(label, editor.String(), editor.Cursor())
 		}
+	}
+}
+
+func (p *Prompt) readKeyEvent() (keyEvent, error) {
+	b, err := p.reader.ReadByte()
+	if err != nil {
+		return keyEvent{}, err
+	}
+
+	switch b {
+	case '\n', '\r':
+		return keyEvent{kind: keyEnter}, nil
+	case '\t':
+		return keyEvent{kind: keyTab}, nil
+	case 1:
+		return keyEvent{kind: keyCtrlA}, nil
+	case 3:
+		return keyEvent{kind: keyCtrlC}, nil
+	case 4:
+		return keyEvent{kind: keyCtrlD}, nil
+	case 5:
+		return keyEvent{kind: keyCtrlE}, nil
+	case 8, 127:
+		return keyEvent{kind: keyBackspace}, nil
+	case 27:
+		return p.readEscapeSequence()
+	default:
+		if b < utf8.RuneSelf {
+			return keyEvent{kind: keyRune, r: rune(b)}, nil
+		}
+		if err := p.reader.UnreadByte(); err != nil {
+			return keyEvent{}, err
+		}
+		r, _, err := p.reader.ReadRune()
+		if err != nil {
+			return keyEvent{}, err
+		}
+		return keyEvent{kind: keyRune, r: r}, nil
+	}
+}
+
+func (p *Prompt) readEscapeSequence() (keyEvent, error) {
+	first, err := p.reader.ReadByte()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return keyEvent{kind: keyIgnored}, nil
+		}
+		return keyEvent{}, err
+	}
+
+	switch first {
+	case '[':
+		return p.readCSISequence()
+	case 'O':
+		return p.readSS3Sequence()
+	default:
+		return keyEvent{kind: keyIgnored}, nil
+	}
+}
+
+func (p *Prompt) readCSISequence() (keyEvent, error) {
+	sequence := make([]byte, 0, 4)
+	for len(sequence) < 8 {
+		b, err := p.reader.ReadByte()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return keyEvent{kind: keyIgnored}, nil
+			}
+			return keyEvent{}, err
+		}
+		sequence = append(sequence, b)
+		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '~' {
+			break
+		}
+	}
+
+	switch string(sequence) {
+	case "A":
+		return keyEvent{kind: keyUp}, nil
+	case "B":
+		return keyEvent{kind: keyDown}, nil
+	case "C":
+		return keyEvent{kind: keyRight}, nil
+	case "D":
+		return keyEvent{kind: keyLeft}, nil
+	case "H", "1~", "7~":
+		return keyEvent{kind: keyHome}, nil
+	case "F", "4~", "8~":
+		return keyEvent{kind: keyEnd}, nil
+	case "3~":
+		return keyEvent{kind: keyDelete}, nil
+	default:
+		return keyEvent{kind: keyIgnored}, nil
+	}
+}
+
+func (p *Prompt) readSS3Sequence() (keyEvent, error) {
+	b, err := p.reader.ReadByte()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return keyEvent{kind: keyIgnored}, nil
+		}
+		return keyEvent{}, err
+	}
+
+	switch b {
+	case 'H':
+		return keyEvent{kind: keyHome}, nil
+	case 'F':
+		return keyEvent{kind: keyEnd}, nil
+	default:
+		return keyEvent{kind: keyIgnored}, nil
 	}
 }
 
@@ -317,41 +429,23 @@ func (p *Prompt) applyCompletion(current string) string {
 	return applySuggestion(p.session.BaseInput, selected)
 }
 
-func (p *Prompt) handleEscapeSequence(current string) (string, bool, error) {
-	first, err := p.reader.ReadByte()
-	if err != nil {
-		return current, false, err
-	}
-	if first != '[' {
-		return current, false, nil
-	}
-
-	second, err := p.reader.ReadByte()
-	if err != nil {
-		return current, false, err
-	}
-
-	switch second {
-	case 'A':
-		if p.history == nil {
-			return current, false, nil
-		}
-		return p.history.Up(current), true, nil
-	case 'B':
-		if p.history == nil {
-			return current, false, nil
-		}
-		return p.history.Down(current), true, nil
-	case 'C', 'D':
-		return current, false, nil
-	default:
-		return current, false, nil
-	}
+func (p *Prompt) redrawLine(label string, current string, hint string) {
+	p.redrawLineWithCursor(label, current, len([]rune(current)), hint)
 }
 
-func (p *Prompt) redrawLine(label string, current string, hint string) {
+func (p *Prompt) redrawLineWithCursor(label string, current string, cursor int, hint string) {
 	_ = hint
 	fmt.Fprintf(p.out, "\r\033[2K%s%s", label, current)
+	bufferLen := len([]rune(current))
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor > bufferLen {
+		cursor = bufferLen
+	}
+	if moveLeft := bufferLen - cursor; moveLeft > 0 {
+		fmt.Fprintf(p.out, "\033[%dD", moveLeft)
+	}
 }
 
 func (p *Prompt) ClearLine() {
@@ -365,7 +459,7 @@ func (p *Prompt) Redraw() {
 	if !p.rawActive {
 		return
 	}
-	p.redrawLine(p.label, p.current, "")
+	p.redrawLineWithCursor(p.label, p.current, p.cursor, "")
 }
 
 func (p *Prompt) PrintSystemOutput(fn func(io.Writer)) {
@@ -394,10 +488,11 @@ func (p *Prompt) writeNewline() {
 	fmt.Fprint(p.out, "\n")
 }
 
-func (p *Prompt) redrawCurrentLine(label string, current string) {
+func (p *Prompt) redrawCurrentLine(label string, current string, cursor int) {
 	p.label = label
 	p.current = current
-	p.redrawLine(label, current, "")
+	p.cursor = cursor
+	p.redrawLineWithCursor(label, current, cursor, "")
 }
 
 func (p *Prompt) resetCompletionSession() {
