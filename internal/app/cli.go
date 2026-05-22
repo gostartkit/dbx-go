@@ -108,7 +108,7 @@ func (b *cliBuilder) buildApp() *cmd.App {
 	cli.SetRootCommand(&cmd.Command{
 		UsageLine: "dbx [flags] [command]",
 		Short:     cli.Short,
-		Long:      helpEntries[""].body,
+		Long:      helpLong(""),
 		Run:       b.runRoot,
 	})
 	cli.AddCommands(
@@ -252,7 +252,7 @@ func (b *cliBuilder) helpCommand() *cmd.Command {
 		Name:      "help",
 		UsageLine: "dbx help [command...]",
 		Short:     "Show command help",
-		Long:      helpEntries[""].body,
+		Long:      helpLong(""),
 		Run: func(_ context.Context, _ *cmd.Command, args []string) error {
 			topic := normalizeHelpTopic(strings.Join(args, " "))
 			if b.mode == ModeREPL {

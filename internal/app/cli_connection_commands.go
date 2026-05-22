@@ -37,7 +37,7 @@ func (b *cliBuilder) connectCommand() *cmd.Command {
 		Name:        "connect",
 		UsageLine:   "dbx connect <name>",
 		Short:       "Connect to a saved connection",
-		Long:        helpEntries["connect"].body,
+		Long:        helpLong("connect"),
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
@@ -82,7 +82,7 @@ func (b *cliBuilder) connectionsCommand() *cmd.Command {
 		Name:      "connections",
 		UsageLine: "dbx connections",
 		Short:     "List saved connections",
-		Long:      helpEntries["connections"].body,
+		Long:      helpLong("connections"),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				if err := b.requireNoArgs(args); err != nil {
@@ -163,7 +163,7 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 		Name:      "doctor",
 		UsageLine: "dbx doctor",
 		Short:     "Inspect the selected connection statically",
-		Long:      helpEntries["doctor"].body,
+		Long:      helpLong("doctor"),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "doctor", err)
@@ -216,7 +216,7 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 		Name:      "create",
 		UsageLine: "dbx connection create <name> [flags]",
 		Short:     "Create a saved connection",
-		Long:      helpEntries["connection create"].body,
+		Long:      helpLong("connection create"),
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 			nil,
@@ -315,7 +315,7 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 		Name:        "delete",
 		UsageLine:   "dbx connection delete <name> [flags]",
 		Short:       "Delete a saved connection",
-		Long:        helpEntries["connection delete"].body,
+		Long:        helpLong("connection delete"),
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
@@ -345,7 +345,7 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 		Name:        "show",
 		UsageLine:   "dbx connection show <name>",
 		Short:       "Show a saved connection",
-		Long:        helpEntries["connection show"].body,
+		Long:        helpLong("connection show"),
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {

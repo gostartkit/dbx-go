@@ -13,7 +13,7 @@ func (b *cliBuilder) showColumnsCommand() *cmd.Command {
 		Name:        "columns",
 		UsageLine:   "dbx show columns <table>",
 		Short:       "Show columns for a table in the selected database",
-		Long:        helpEntries["show columns"].body,
+		Long:        helpLong("show columns"),
 		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {

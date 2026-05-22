@@ -32,7 +32,7 @@ func (b *cliBuilder) showUsersCommand() *cmd.Command {
 		Name:      "users",
 		UsageLine: "dbx show users",
 		Short:     "Show MySQL users",
-		Long:      helpEntries["show users"].body,
+		Long:      helpLong("show users"),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "show users", err)
@@ -56,7 +56,7 @@ func (b *cliBuilder) createUserCommand() *cmd.Command {
 		Name:      "user",
 		UsageLine: "dbx create user <name> [flags]",
 		Short:     "Create a MySQL user",
-		Long:      helpEntries["create user"].body,
+		Long:      helpLong("create user"),
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
 			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Completion: b.completeUsers}},
@@ -95,7 +95,7 @@ func (b *cliBuilder) dropUserCommand() *cmd.Command {
 		Name:      "user",
 		UsageLine: "dbx drop user <name> [flags]",
 		Short:     "Drop a MySQL user",
-		Long:      helpEntries["drop user"].body,
+		Long:      helpLong("drop user"),
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
 			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Completion: b.completeUsers}},

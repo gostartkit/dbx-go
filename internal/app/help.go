@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
+	cmdpkg "pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/commandlang"
 )
 
@@ -13,11 +15,24 @@ type helpEntry struct {
 	body  string
 }
 
-var helpEntries = func() map[string]helpEntry {
-	entries := map[string]helpEntry{
-		"": {
-			title: "dbx commands",
-			body: strings.TrimSpace(`
+type helpCommandOverride struct {
+	summary string
+	extra   string
+}
+
+type helpCommandCatalog struct {
+	byPath map[string]cmdpkg.CommandSpec
+}
+
+var (
+	helpCommandCatalogOnce sync.Once
+	helpCommandCatalogData helpCommandCatalog
+)
+
+var helpEntries = map[string]helpEntry{
+	"": {
+		title: "dbx commands",
+		body: strings.TrimSpace(`
 Core commands:
   connect <name>       Connect to a saved connection
   use <name>           Select the current database
@@ -41,46 +56,10 @@ Examples:
 
   exec
   exec create_database_with_user --validate`),
-		},
-		"connect": {
-			title: "connect",
-			body: strings.TrimSpace(`
-Connect to a saved connection.
-
-Usage:
-  connect <name>`),
-		},
-		"show": {
-			title: "show",
-			body: strings.TrimSpace(`
-Inspect saved configuration and database state.
-
-Usage:
-  dbx show <subcommand>
-
-Subcommands:
-  connections
-  connection <name>
-  users
-  context
-  databases
-  tables
-  table <name>
-  columns <table>
-  rows <table>
-  templates [query] [--tag value]`),
-		},
-		"connections": {
-			title: "show connections",
-			body: strings.TrimSpace(`
-Show all saved connections.
-
-Usage:
-  show connections`),
-		},
-		"connection": {
-			title: "connection commands",
-			body: strings.TrimSpace(`
+	},
+	"connection": {
+		title: "connection commands",
+		body: strings.TrimSpace(`
 Connection commands use a single verb-first style.
 
 Commands:
@@ -88,254 +67,285 @@ Commands:
   show connection <name>
   create connection <name>
   drop connection <name>`),
-		},
-		"connection create": {
-			title: "create connection",
-			body: strings.TrimSpace(`
-Create a saved connection.
+	},
+}
 
-This command writes:
-  ~/.config/dbx/{name}/config.json
+var helpTopicAliases = map[string]string{
+	"connection create": "create connection",
+	"connection delete": "drop connection",
+	"connection show":   "show connection",
+	"connections":       "show connections",
+	"context":           "show context",
+}
 
-Usage:
-  create connection <name> [--overwrite] [flags]`),
-		},
-		"connection delete": {
-			title: "drop connection",
-			body: strings.TrimSpace(`
-Drop a saved connection after confirmation.
-
-Usage:
-  drop connection <name> [flags]`),
-		},
-		"connection show": {
-			title: "show connection",
-			body: strings.TrimSpace(`
-Show a saved connection with secrets redacted.
-
-Usage:
-  show connection <name>`),
-		},
-		"create": {
-			title: "create",
-			body: strings.TrimSpace(`
-Create saved connections and database resources.
-
-Usage:
-  dbx create <subcommand>
-
-Subcommands:
-  connection <name>
-  database <name>
-  user <name>`),
-		},
-		"audit log": {
-			title: "audit log",
-			body: strings.TrimSpace(`
+var helpExtraBodies = map[string]string{
+	"audit log": strings.TrimSpace(`
 Show recent audit entries from:
-  ~/.config/dbx/logs/audit.jsonl
+  ~/.config/dbx/logs/audit.jsonl`),
+}
 
-Usage:
-  audit log`),
-		},
-		"create database": {
-			title: "create database",
-			body: strings.TrimSpace(`
-Create a database from the resolved operation spec.
-
-Usage:
-  create database <name> [flags]`),
-		},
-		"drop database": {
-			title: "drop database",
-			body: strings.TrimSpace(`
-Drop a database from the resolved operation spec.
-
-Usage:
-  drop database <name> [flags]`),
-		},
-		"create user": {
-			title: "create user",
-			body: strings.TrimSpace(`
-Create a MySQL user from the resolved operation spec.
-
-Usage:
-  create user <name> [flags]`),
-		},
-		"show rows": {
-			title: "show rows",
-			body: strings.TrimSpace(`
-Show rows from a table.
-
-Usage:
-  show rows <table> [--limit n]`),
-		},
-		"drop": {
-			title: "drop",
-			body: strings.TrimSpace(`
-Drop saved connections and database resources.
-
-Usage:
-  dbx drop <subcommand>
-
-Subcommands:
-  connection <name>
-  database <name>
-  user <name>`),
-		},
-		"drop user": {
-			title: "drop user",
-			body: strings.TrimSpace(`
-Drop a MySQL user from the resolved operation spec.
-
-Usage:
-  drop user <name> [flags]`),
-		},
-		"show databases": {
-			title: "show databases",
-			body: strings.TrimSpace(`
-Show databases on the selected connection.
-
-Usage:
-  show databases [flags]`),
-		},
-		"show tables": {
-			title: "show tables",
-			body: strings.TrimSpace(`
-Show tables in the selected database.
-
-Usage:
-  show tables`),
-		},
-		"show users": {
-			title: "show users",
-			body: strings.TrimSpace(`
-Show MySQL users on the selected connection.
-
-Usage:
-  show users`),
-		},
-		"show table": {
-			title: "show table",
-			body: strings.TrimSpace(`
-Show CREATE TABLE output for one table.
-
-Usage:
-  show table <name>`),
-		},
-		"show columns": {
-			title: "show columns",
-			body: strings.TrimSpace(`
-Show columns for a table in the selected database.
-
-Usage:
-  show columns <table>`),
-		},
-		"show templates": {
-			title: "show templates",
-			body: strings.TrimSpace(`
-Show resolved workflow templates.
-
-Usage:
-  show templates [query] [--tag value]`),
-		},
-		"exec": {
-			title: "exec",
-			body: strings.TrimSpace(`
-Execute a named operation.
-
-Usage:
-  dbx exec <operation> [--preview] [--verbose] [--validate]`),
-		},
-		"use": {
-			title: "use",
-			body: strings.TrimSpace(`
-Select the current database.
-
-Usage:
-  use <name>`),
-		},
-		"context": {
-			title: "show context",
-			body: strings.TrimSpace(`
-Show the current connection, database, and dry-run mode.
-
-Usage:
-  show context`),
-		},
-		"doctor": {
-			title: "doctor",
-			body: strings.TrimSpace(`
-Inspect the selected connection statically without opening the network path.
-
+var helpCommandOverrides = map[string]helpCommandOverride{
+	"create connection": {
+		summary: "Create a saved connection.",
+		extra: strings.TrimSpace(`
+This command writes:
+  ~/.config/dbx/{name}/config.json`),
+	},
+	"create database": {
+		summary: "Create a database from the resolved operation spec.",
+	},
+	"create user": {
+		summary: "Create a MySQL user from the resolved operation spec.",
+	},
+	"doctor": {
+		summary: "Inspect the selected connection statically without opening the network path.",
+		extra: strings.TrimSpace(`
 Checks:
   config structure
   password sources
   proxy URL shape
   SSH auth settings
-  known_hosts presence
-
-Usage:
-  doctor`),
-		},
-		"exit": {
-			title: "exit",
-			body: strings.TrimSpace(`
-Exit the REPL.
-
-Aliases:
-  quit
-  q`),
-		},
-	}
-
-	entries["show connections"] = entries["connections"]
-	entries["create connection"] = entries["connection create"]
-	entries["drop connection"] = entries["connection delete"]
-	entries["show connection"] = entries["connection show"]
-	entries["show context"] = entries["context"]
-
-	return entries
-}()
+  known_hosts presence`),
+	},
+	"drop database": {
+		summary: "Drop a database from the resolved operation spec.",
+	},
+	"drop user": {
+		summary: "Drop a MySQL user from the resolved operation spec.",
+	},
+	"exec": {
+		summary: "Execute a named operation.",
+	},
+	"show table": {
+		summary: "Show CREATE TABLE output for one table.",
+	},
+	"show templates": {
+		summary: "Show resolved workflow templates.",
+	},
+}
 
 func printHelpTopic(prompt printer, topic string) error {
-	topic = normalizeHelpTopic(topic)
+	topic = canonicalHelpTopic(topic)
 
 	if entry, ok := helpEntries[topic]; ok {
-		if entry.title != "" {
-			prompt.Println(entry.title)
-		}
-		if entry.body != "" {
-			prompt.Println(entry.body)
-		}
+		printHelpEntry(prompt, entry)
+		return nil
+	}
+
+	if spec, ok := commandHelpSpec(topic); ok {
+		printHelpEntry(prompt, renderCommandHelp(topic, spec))
 		return nil
 	}
 
 	if doc, ok := commandlang.DefaultRegistry().Help(topic); ok {
-		if doc.Title != "" {
-			prompt.Println(doc.Title)
-		}
-		if doc.Body != "" {
-			prompt.Println(doc.Body)
-		}
+		printHelpEntry(prompt, helpEntry{title: doc.Title, body: doc.Body})
 		return nil
 	}
 
 	if spec, ok := commandSpecByPath(topic); ok {
-		if spec.Path != "" {
-			prompt.Println(spec.Path)
-		}
-		if spec.Description != "" {
-			prompt.Println(spec.Description)
-		}
+		printHelpEntry(prompt, helpEntry{title: spec.Path, body: spec.Description})
 		return nil
 	}
 
 	return fmt.Errorf("unknown help topic %q; use help", topic)
 }
 
+func printHelpEntry(prompt printer, entry helpEntry) {
+	if entry.title != "" {
+		prompt.Println(entry.title)
+	}
+	if entry.body != "" {
+		prompt.Println(entry.body)
+	}
+}
+
+func helpLong(topic string) string {
+	topic = canonicalHelpTopic(topic)
+	if entry, ok := helpEntries[topic]; ok {
+		return entry.body
+	}
+	if override, ok := helpCommandOverrides[topic]; ok {
+		sections := make([]string, 0, 2)
+		if summary := strings.TrimSpace(override.summary); summary != "" {
+			sections = append(sections, summary)
+		}
+		if extra := strings.TrimSpace(override.extra); extra != "" {
+			sections = append(sections, extra)
+		}
+		return strings.Join(sections, "\n\n")
+	}
+	return helpExtraBodies[topic]
+}
+
+func commandHelpSpec(topic string) (cmdpkg.CommandSpec, bool) {
+	spec, ok := helpCommandSpecCatalog().byPath[canonicalHelpTopic(topic)]
+	return spec, ok
+}
+
+func helpCommandSpecCatalog() *helpCommandCatalog {
+	helpCommandCatalogOnce.Do(func() {
+		app := (&cliBuilder{
+			mode:    ModeREPL,
+			out:     io.Discard,
+			err:     io.Discard,
+			globals: &cliGlobals{Format: "text"},
+		}).buildApp()
+		spec := app.SpecFor(cmdpkg.SurfaceREPL)
+
+		byPath := make(map[string]cmdpkg.CommandSpec, len(spec.Commands)*2)
+		for _, command := range spec.Commands {
+			indexHelpCommandSpec(byPath, nil, command)
+		}
+		helpCommandCatalogData = helpCommandCatalog{byPath: byPath}
+	})
+	return &helpCommandCatalogData
+}
+
+func indexHelpCommandSpec(dst map[string]cmdpkg.CommandSpec, parent []string, spec cmdpkg.CommandSpec) {
+	path := append(append([]string(nil), parent...), spec.Name)
+	key := normalizeHelpTopic(strings.Join(path, " "))
+	if key != "" {
+		spec.Path = append([]string(nil), path...)
+		dst[key] = spec
+		for _, alias := range spec.Aliases {
+			aliasKey := normalizeHelpTopic(strings.Join(append(append([]string(nil), parent...), alias), " "))
+			if aliasKey != "" {
+				dst[aliasKey] = spec
+			}
+		}
+	}
+
+	for _, sub := range spec.SubCommands {
+		indexHelpCommandSpec(dst, path, sub)
+	}
+}
+
+func renderCommandHelp(topic string, spec cmdpkg.CommandSpec) helpEntry {
+	title := normalizeHelpTopic(strings.Join(spec.Path, " "))
+	if title == "" {
+		title = topic
+	}
+
+	sections := make([]string, 0, 6)
+	override := helpCommandOverrides[title]
+	summary := strings.TrimSpace(override.summary)
+	if summary == "" {
+		summary = strings.TrimSpace(spec.Short)
+	}
+	if summary != "" {
+		sections = append(sections, summary)
+	}
+	extra := strings.TrimSpace(override.extra)
+	if extra == "" {
+		extra = strings.TrimSpace(helpExtraBodies[title])
+	}
+	if extra != "" {
+		sections = append(sections, extra)
+	}
+	if usage := strings.TrimSpace(spec.UsageLine); usage != "" {
+		sections = append(sections, "Usage:\n  "+usage)
+	}
+
+	aliases := visibleAliases(spec, topic)
+	if len(aliases) > 0 {
+		sections = append(sections, "Aliases:\n  "+strings.Join(aliases, "\n  "))
+	}
+
+	subcommands := visibleSubcommands(spec.SubCommands)
+	if len(subcommands) > 0 {
+		lines := make([]string, 0, len(subcommands))
+		for _, sub := range subcommands {
+			line := sub.Name
+			if len(sub.Positionals) > 0 {
+				line += " " + formatPositionals(sub.Positionals)
+			}
+			lines = append(lines, line)
+		}
+		sections = append(sections, "Subcommands:\n  "+strings.Join(lines, "\n  "))
+	}
+
+	flags := visibleFlags(spec.Flags)
+	if len(flags) > 0 {
+		lines := make([]string, 0, len(flags))
+		for _, flag := range flags {
+			line := "--" + flag.Name
+			if flag.Type != "" && flag.Type != "bool" {
+				line += " <" + flag.Type + ">"
+			}
+			if usage := strings.TrimSpace(flag.Usage); usage != "" {
+				line += "  " + usage
+			}
+			lines = append(lines, line)
+		}
+		sections = append(sections, "Flags:\n  "+strings.Join(lines, "\n  "))
+	}
+
+	return helpEntry{
+		title: title,
+		body:  strings.Join(sections, "\n\n"),
+	}
+}
+
+func visibleAliases(spec cmdpkg.CommandSpec, topic string) []string {
+	aliases := make([]string, 0, len(spec.Aliases))
+	for _, alias := range spec.Aliases {
+		alias = normalizeHelpTopic(alias)
+		if alias == "" || alias == topic {
+			continue
+		}
+		aliases = append(aliases, alias)
+	}
+	return aliases
+}
+
+func visibleSubcommands(subcommands []cmdpkg.CommandSpec) []cmdpkg.CommandSpec {
+	visible := make([]cmdpkg.CommandSpec, 0, len(subcommands))
+	for _, sub := range subcommands {
+		if sub.Hidden {
+			continue
+		}
+		visible = append(visible, sub)
+	}
+	return visible
+}
+
+func visibleFlags(flags []cmdpkg.FlagSpec) []cmdpkg.FlagSpec {
+	visible := make([]cmdpkg.FlagSpec, 0, len(flags))
+	for _, flag := range flags {
+		if flag.Hidden {
+			continue
+		}
+		visible = append(visible, flag)
+	}
+	return visible
+}
+
+func formatPositionals(positionals []cmdpkg.PositionalSpec) string {
+	parts := make([]string, 0, len(positionals))
+	for _, positional := range positionals {
+		name := positional.Name
+		if positional.Variadic {
+			name += "..."
+		}
+		if positional.Required {
+			parts = append(parts, "<"+name+">")
+			continue
+		}
+		parts = append(parts, "["+name+"]")
+	}
+	return strings.Join(parts, " ")
+}
+
 func normalizeHelpTopic(topic string) string {
 	return strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")
+}
+
+func canonicalHelpTopic(topic string) string {
+	topic = normalizeHelpTopic(topic)
+	if alias, ok := helpTopicAliases[topic]; ok {
+		return alias
+	}
+	return topic
 }
 
 type printer interface {

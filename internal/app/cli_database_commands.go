@@ -27,7 +27,7 @@ func (b *cliBuilder) createGroupCommand() *cmd.Command {
 		Name:      "create",
 		UsageLine: "dbx create <subcommand>",
 		Short:     "Create database resources",
-		Long:      helpEntries["create"].body,
+		Long:      helpLong("create"),
 		SubCommands: []*cmd.Command{
 			b.createConnectionCommand(),
 			b.createDatabaseCommand(),
@@ -53,7 +53,7 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 		Name:        "show",
 		UsageLine:   "dbx show <subcommand>",
 		Short:       "Show resources",
-		Long:        helpEntries["show"].body,
+		Long:        helpLong("show"),
 		SubCommands: subcommands,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if len(args) == 0 {
@@ -73,7 +73,7 @@ func (b *cliBuilder) dropGroupCommand() *cmd.Command {
 		Name:      "drop",
 		UsageLine: "dbx drop <subcommand>",
 		Short:     "Drop resources",
-		Long:      helpEntries["drop"].body,
+		Long:      helpLong("drop"),
 		SubCommands: []*cmd.Command{
 			b.dropConnectionCommand(),
 			b.dropDatabaseCommand(),
@@ -88,7 +88,7 @@ func (b *cliBuilder) showDatabasesCommand() *cmd.Command {
 		Name:      "databases",
 		UsageLine: "dbx show databases [flags]",
 		Short:     "Show databases on a connection",
-		Long:      helpEntries["show databases"].body,
+		Long:      helpLong("show databases"),
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.template, "template", "", "template name", "")
 			bindInputFlag(f, flags.inputs)
@@ -120,7 +120,7 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 		Name:      "database",
 		UsageLine: "dbx create database <name> [flags]",
 		Short:     "Create a database from a template",
-		Long:      helpEntries["create database"].body,
+		Long:      helpLong("create database"),
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true}},
 			nil,
@@ -149,7 +149,7 @@ func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 		Name:      "database",
 		UsageLine: "dbx drop database <name> [flags]",
 		Short:     "Drop a database from a template",
-		Long:      helpEntries["drop database"].body,
+		Long:      helpLong("drop database"),
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true}},
 			nil,
@@ -174,7 +174,7 @@ func (b *cliBuilder) useGroupCommand() *cmd.Command {
 		Name:        "use",
 		UsageLine:   "dbx use <name>",
 		Short:       "Select the current database",
-		Long:        helpEntries["use"].body,
+		Long:        helpLong("use"),
 		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true, Completion: b.completeDatabases}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {

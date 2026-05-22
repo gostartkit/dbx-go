@@ -13,7 +13,7 @@ func (b *cliBuilder) showTableCommand() *cmd.Command {
 		Name:        "table",
 		UsageLine:   "dbx show table <table>",
 		Short:       "Show table details",
-		Long:        helpEntries["show table"].body,
+		Long:        helpLong("show table"),
 		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {

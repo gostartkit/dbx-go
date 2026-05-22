@@ -24,7 +24,7 @@ func (b *cliBuilder) execGroupCommand() *cmd.Command {
 		Name:      "exec",
 		UsageLine: "dbx exec <operation> [flags]",
 		Short:     "Execute an operation",
-		Long:      helpEntries["exec"].body,
+		Long:      helpLong("exec"),
 		Positionals: []cmd.PositionalArg{{
 			Name:       "operation",
 			Usage:      "operation name",
@@ -77,7 +77,7 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 		Name:        "templates",
 		UsageLine:   "dbx show templates [query] [--tag value]",
 		Short:       "List resolved workflow templates",
-		Long:        helpEntries["show templates"].body,
+		Long:        helpLong("show templates"),
 		Positionals: []cmd.PositionalArg{{Name: "query", Usage: "optional substring filter"}},
 		SetFlags: func(f *cmd.FlagSet) {
 			f.StringVar(&flags.tag, "tag", "", "filter by template tag", "")

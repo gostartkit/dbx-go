@@ -20,7 +20,7 @@ func (b *cliBuilder) showRowsCommand() *cmd.Command {
 		Name:        "rows",
 		UsageLine:   "dbx show rows <table> [--limit n]",
 		Short:       "Show rows from a table",
-		Long:        helpEntries["show rows"].body,
+		Long:        helpLong("show rows"),
 		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
 		SetFlags: func(f *cmd.FlagSet) {
 			f.IntVar(&flags.limit, "limit", defaultRowInspectionLimit, "row limit", "")
