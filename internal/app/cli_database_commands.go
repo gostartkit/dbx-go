@@ -243,23 +243,7 @@ func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Applica
 		return err
 	}
 
-	var result *PlanExecutionResult
-	if b.globals.DryRun {
-		result, err = application.runPlan(ctx, plan, noopTransactionStarter{}, true)
-	} else {
-		db, openErr := application.openConnection(ctx, cfg)
-		if openErr != nil {
-			return openErr
-		}
-		defer db.Close()
-
-		result, err = application.runPlan(ctx, plan, sqlRunner{db: db}, false)
-	}
-	if result != nil {
-		result.Connection = cfg.Name
-		result.Command = "create database"
-		applyPreviewSQL(result, previewPlan)
-	}
+	result, err := b.executeCLIPlan(ctx, application, cfg, "create database", plan, previewPlan)
 	if !strings.EqualFold(b.globals.Format, "json") {
 		application.printPlanResult(result)
 	}
@@ -307,17 +291,7 @@ func (b *cliBuilder) runShowDatabases(ctx context.Context, application *Applicat
 	}
 
 	if b.globals.DryRun {
-		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
-		if result != nil {
-			result.Connection = cfg.Name
-			result.Command = "show databases"
-			applyPreviewSQL(result, previewPlan)
-		}
-		return b.writeOutput(result, func() error {
-			application.printPlanPreview(previewPlan, true)
-			application.printPlanResult(result)
-			return runErr
-		})
+		return b.writeDryRunPlanResult(ctx, application, cfg, "show databases", plan, previewPlan)
 	}
 
 	db, err := application.openConnection(ctx, cfg)
@@ -388,22 +362,7 @@ func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Applicati
 		return err
 	}
 
-	var result *PlanExecutionResult
-	if b.globals.DryRun {
-		result, err = application.runPlan(ctx, plan, noopTransactionStarter{}, true)
-	} else {
-		db, openErr := application.openConnection(ctx, cfg)
-		if openErr != nil {
-			return openErr
-		}
-		defer db.Close()
-		result, err = application.runPlan(ctx, plan, sqlRunner{db: db}, false)
-	}
-	if result != nil {
-		result.Connection = cfg.Name
-		result.Command = "drop database"
-		applyPreviewSQL(result, previewPlan)
-	}
+	result, err := b.executeCLIPlan(ctx, application, cfg, "drop database", plan, previewPlan)
 	if !strings.EqualFold(b.globals.Format, "json") {
 		application.printPlanResult(result)
 	}

@@ -95,17 +95,7 @@ func (b *cliBuilder) runShowTables(ctx context.Context, application *Application
 	}
 
 	if b.globals.DryRun {
-		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
-		if result != nil {
-			result.Connection = cfg.Name
-			result.Command = "show tables"
-			applyPreviewSQL(result, previewPlan)
-		}
-		return b.writeOutput(result, func() error {
-			application.printPlanPreview(previewPlan, true)
-			application.printPlanResult(result)
-			return runErr
-		})
+		return b.writeDryRunPlanResult(ctx, application, cfg, "show tables", plan, previewPlan)
 	}
 
 	db, err := application.openConnection(ctx, cfg)

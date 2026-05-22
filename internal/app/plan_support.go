@@ -43,6 +43,44 @@ func applyPreviewSQL(result *PlanExecutionResult, previewPlan *tpl.ExecutionPlan
 	}
 }
 
+func (b *cliBuilder) executeCLIPlan(ctx context.Context, application *Application, cfg *config.ConnectionConfig, command string, plan *tpl.ExecutionPlan, previewPlan *tpl.ExecutionPlan) (*PlanExecutionResult, error) {
+	var (
+		result *PlanExecutionResult
+		err    error
+	)
+
+	if b.globals.DryRun {
+		result, err = application.runPlan(ctx, plan, noopTransactionStarter{}, true)
+	} else {
+		db, openErr := application.openConnection(ctx, cfg)
+		if openErr != nil {
+			return nil, openErr
+		}
+		defer db.Close()
+
+		result, err = application.runPlan(ctx, plan, sqlRunner{db: db}, false)
+	}
+	if result != nil {
+		result.Connection = cfg.Name
+		result.Command = command
+		applyPreviewSQL(result, previewPlan)
+	}
+	return result, err
+}
+
+func (b *cliBuilder) writeDryRunPlanResult(ctx context.Context, application *Application, cfg *config.ConnectionConfig, command string, plan *tpl.ExecutionPlan, previewPlan *tpl.ExecutionPlan) error {
+	if !b.globals.DryRun {
+		return fmt.Errorf("dry-run plan output requires dry-run mode")
+	}
+
+	result, runErr := b.executeCLIPlan(ctx, application, cfg, command, plan, previewPlan)
+	return b.writeOutput(result, func() error {
+		application.printPlanPreview(previewPlan, true)
+		application.printPlanResult(result)
+		return runErr
+	})
+}
+
 type noopTransactionStarter struct{}
 
 func (noopTransactionStarter) ExecContext(context.Context, string, ...any) (sql.Result, error) {

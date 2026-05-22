@@ -50,17 +50,7 @@ func (b *cliBuilder) runShowCreateTable(ctx context.Context, application *Applic
 	}
 
 	if b.globals.DryRun {
-		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
-		if result != nil {
-			result.Connection = cfg.Name
-			result.Command = "show create table"
-			applyPreviewSQL(result, previewPlan)
-		}
-		return b.writeOutput(result, func() error {
-			application.printPlanPreview(previewPlan, true)
-			application.printPlanResult(result)
-			return runErr
-		})
+		return b.writeDryRunPlanResult(ctx, application, cfg, "show create table", plan, previewPlan)
 	}
 
 	db, err := application.openConnection(ctx, cfg)

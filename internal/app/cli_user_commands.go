@@ -140,17 +140,7 @@ func (b *cliBuilder) runShowUsers(ctx context.Context, application *Application,
 	}
 
 	if b.globals.DryRun {
-		result, runErr := application.runPlan(ctx, plan, noopTransactionStarter{}, true)
-		if result != nil {
-			result.Connection = cfg.Name
-			result.Command = "show users"
-			applyPreviewSQL(result, previewPlan)
-		}
-		return b.writeOutput(result, func() error {
-			application.printPlanPreview(previewPlan, true)
-			application.printPlanResult(result)
-			return runErr
-		})
+		return b.writeDryRunPlanResult(ctx, application, cfg, "show users", plan, previewPlan)
 	}
 
 	db, err := application.openConnection(ctx, cfg)
@@ -237,22 +227,7 @@ func (b *cliBuilder) runCreateUser(ctx context.Context, application *Application
 		return err
 	}
 
-	var result *PlanExecutionResult
-	if b.globals.DryRun {
-		result, err = application.runPlan(ctx, plan, noopTransactionStarter{}, true)
-	} else {
-		db, openErr := application.openConnection(ctx, cfg)
-		if openErr != nil {
-			return openErr
-		}
-		defer db.Close()
-		result, err = application.runPlan(ctx, plan, sqlRunner{db: db}, false)
-	}
-	if result != nil {
-		result.Connection = cfg.Name
-		result.Command = "create user"
-		applyPreviewSQL(result, previewPlan)
-	}
+	result, err := b.executeCLIPlan(ctx, application, cfg, "create user", plan, previewPlan)
 	if !strings.EqualFold(b.globals.Format, "json") {
 		application.printPlanResult(result)
 	}
@@ -343,22 +318,7 @@ func (b *cliBuilder) runDropUser(ctx context.Context, application *Application, 
 		return err
 	}
 
-	var result *PlanExecutionResult
-	if b.globals.DryRun {
-		result, err = application.runPlan(ctx, plan, noopTransactionStarter{}, true)
-	} else {
-		db, openErr := application.openConnection(ctx, cfg)
-		if openErr != nil {
-			return openErr
-		}
-		defer db.Close()
-		result, err = application.runPlan(ctx, plan, sqlRunner{db: db}, false)
-	}
-	if result != nil {
-		result.Connection = cfg.Name
-		result.Command = "drop user"
-		applyPreviewSQL(result, previewPlan)
-	}
+	result, err := b.executeCLIPlan(ctx, application, cfg, "drop user", plan, previewPlan)
 	if !strings.EqualFold(b.globals.Format, "json") {
 		application.printPlanResult(result)
 	}
