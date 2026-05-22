@@ -7,7 +7,7 @@ require (
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.53.0
 	golang.org/x/term v0.43.0
-	pkg.gostartkit.com/cmd v0.2.1-0.20260522063353-c5a6bc4e10d3
+	pkg.gostartkit.com/cmd v0.2.1-0.20260522071506-d1501640b445
 )
 
 require (
