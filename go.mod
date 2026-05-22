@@ -7,7 +7,7 @@ require (
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.53.0
 	golang.org/x/term v0.43.0
-	pkg.gostartkit.com/cmd v0.2.1-0.20260522082509-ec310b3acadf
+	pkg.gostartkit.com/cmd v0.2.1-0.20260522084441-5e91cdc7972a
 )
 
 require (
@@ -15,4 +15,4 @@ require (
 	golang.org/x/sys v0.44.0 // indirect
 )
 
-replace pkg.gostartkit.com/cmd => ../cmd
+// replace pkg.gostartkit.com/cmd => ../cmd

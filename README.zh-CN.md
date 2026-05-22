@@ -1,6 +1,7 @@
 # dbx
 
 [English README](README.md)
+[架构走读](ARCHITECTURE.zh-CN.md)
 
 `dbx` 是一个以 REPL 为核心、使用 Go 编写的 MySQL 运维 CLI。它把日常数据库操作收敛成有引导的模板化流程，REPL 与一次性 CLI 共享同一棵命令树，并且原生支持直连、SSH、SOCKS5、SOCKS5 -> SSH 四种链路，不依赖外部 SSH 命令。
 
@@ -340,24 +341,32 @@ dbx --connection prod create database app_demo \
 `dbx` 刻意保持小而清晰，按职责拆分：
 
 - [cmd/dbx/main.go](cmd/dbx/main.go)：程序入口、信号感知退出、CLI 根命令
-- [internal/app/](internal/app)：共享命令树、REPL 处理、一次性 CLI 流程、结果输出
-- [internal/repl/](internal/repl)：最小化 REPL 循环
+- [internal/app/](internal/app)：共享命令树、REPL 处理、一次性 CLI 流程、执行编排、结果输出
+- [internal/commandlang/](internal/commandlang)：补全与命令感知 help 使用的语法模型
 - [internal/config/](internal/config)：配置加载、session、history、audit log、超时默认值
 - [internal/connect/](internal/connect)：带超时的连接辅助
 - [internal/driver/](internal/driver)：MySQL、SSH、SOCKS5 传输实现
 - [internal/template/](internal/template)：模板解析与渲染
-- [internal/ui/](internal/ui)：轻量 prompt、history、补全
+- [internal/ui/](internal/ui)：轻量 prompt 与补全相关 UI 类型
+- [internal/ui/editor/](internal/ui/editor)：行缓冲与 completion edit 原语
 - [internal/util/](internal/util)：校验、路径、分层错误、脱敏辅助
+
+当前真正的 REPL runtime 由 `pkg.gostartkit.com/cmd` 提供；仓库中的 `internal/repl/` 目录目前存在，但不在活跃执行路径上。
+
+如果你想看更细的包职责说明、执行链路分析以及当前实现观察，可以继续阅读 [ARCHITECTURE.zh-CN.md](ARCHITECTURE.zh-CN.md)。
 
 ## 项目布局
 
 ```text
 dbx/
+├── ARCHITECTURE.md
+├── ARCHITECTURE.zh-CN.md
 ├── cmd/
 │   └── dbx/
 │       └── main.go
 ├── internal/
 │   ├── app/
+│   ├── commandlang/
 │   ├── config/
 │   ├── connect/
 │   ├── driver/

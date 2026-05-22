@@ -1,6 +1,7 @@
 # dbx
 
 [中文文档](README.zh-CN.md)
+[Architecture walkthrough](ARCHITECTURE.md)
 
 `dbx` is a REPL-first MySQL operator CLI written in Go. It keeps day-to-day database work guided and template-driven, shares one command tree between the REPL and one-shot CLI mode, and supports direct, SSH, SOCKS5, and SOCKS5 -> SSH transport paths without shelling out to external SSH tools.
 
@@ -340,24 +341,32 @@ The session file persists the selected connection and selected database. Command
 `dbx` stays intentionally small and split by responsibility:
 
 - [cmd/dbx/main.go](cmd/dbx/main.go): process startup, signal-aware shutdown, CLI root
-- [internal/app/](internal/app): shared command tree, REPL handlers, one-shot CLI flow, reporting
-- [internal/repl/](internal/repl): minimal REPL loop
+- [internal/app/](internal/app): shared command tree, REPL handlers, one-shot CLI flow, execution orchestration, reporting
+- [internal/commandlang/](internal/commandlang): syntax model used by completion and command-aware help
 - [internal/config/](internal/config): config loading, session file, history file, audit log, timeout defaults
 - [internal/connect/](internal/connect): timeout-aware connection helpers
 - [internal/driver/](internal/driver): MySQL, SSH, and SOCKS5 transport implementation
 - [internal/template/](internal/template): template resolution and rendering
-- [internal/ui/](internal/ui): lightweight prompt helpers, history, completion
+- [internal/ui/](internal/ui): lightweight prompt helpers and completion-facing UI types
+- [internal/ui/editor/](internal/ui/editor): line buffer and completion edit primitives
 - [internal/util/](internal/util): validation, paths, layered errors, redaction helpers
+
+The active REPL runtime is currently provided by `pkg.gostartkit.com/cmd`; `internal/repl/` exists in the repository but is not part of the active execution path today.
+
+For a package-by-package code walkthrough, execution flow analysis, and notes on the current implementation shape, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Project Layout
 
 ```text
 dbx/
+├── ARCHITECTURE.md
+├── ARCHITECTURE.zh-CN.md
 ├── cmd/
 │   └── dbx/
 │       └── main.go
 ├── internal/
 │   ├── app/
+│   ├── commandlang/
 │   ├── config/
 │   ├── connect/
 │   ├── driver/
