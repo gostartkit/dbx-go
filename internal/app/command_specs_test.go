@@ -3,11 +3,9 @@ package app
 import (
 	"context"
 	"slices"
-	"strings"
 	"testing"
 
 	"pkg.gostartkit.com/cmd"
-	"pkg.gostartkit.com/dbx/internal/commandmeta"
 )
 
 func TestRootCommandSetMatchesShellSurface(t *testing.T) {
@@ -23,7 +21,7 @@ func TestRootCommandSetMatchesShellSurface(t *testing.T) {
 		have[normalizeHelpTopic(command.Name)] = struct{}{}
 	}
 
-	want := []string{"connect", "use", "show", "create", "drop", "exec", "doctor", "audit", "help", "exit"}
+	want := []string{"connect", "use", "show", "create", "drop", "exec", "doctor", "audit", "exit"}
 	if len(have) != len(want) {
 		t.Fatalf("root command count = %d, want %d (%v)", len(have), len(want), have)
 	}
@@ -84,7 +82,6 @@ func TestSharedCommandPathsIncludeFinalCommands(t *testing.T) {
 		"exec",
 		"doctor",
 		"audit log",
-		"help",
 		"exit",
 	} {
 		if _, ok := have[want]; !ok {
@@ -190,36 +187,33 @@ func TestCLIAndREPLShareCommandTree(t *testing.T) {
 	}
 }
 
-func TestVisibleManifestMatchesREPLCommandTree(t *testing.T) {
+func TestREPLCommandSpecsMatchCommandTree(t *testing.T) {
 	t.Parallel()
 
-	spec := (&cliBuilder{
+	commandTree := (&cliBuilder{
 		mode:    ModeREPL,
 		globals: &cliGlobals{Format: "text"},
 	}).buildApp().Spec()
 
 	have := map[string]struct{}{}
-	for _, command := range spec.Commands {
+	for _, command := range commandTree.Commands {
 		collectSpecPaths(have, "", command)
 	}
 
 	want := map[string]struct{}{}
-	for _, command := range commandmeta.FlattenCommands(commandmeta.DefaultManifest()) {
-		if command.Command == nil || command.Hidden {
+	for _, spec := range replCommandSpecs() {
+		if spec.Hidden {
 			continue
 		}
-		path := normalizeHelpTopic(strings.Join(command.Path, " "))
-		if path != "" {
-			want[path] = struct{}{}
-		}
+		want[normalizeHelpTopic(spec.Path)] = struct{}{}
 	}
 
 	if len(have) != len(want) {
-		t.Fatalf("visible repl/manifest path counts differ: %d vs %d", len(have), len(want))
+		t.Fatalf("visible repl/spec path counts differ: %d vs %d", len(have), len(want))
 	}
 	for path := range want {
 		if _, ok := have[path]; !ok {
-			t.Fatalf("repl tree missing manifest command path %q", path)
+			t.Fatalf("repl tree missing command spec path %q", path)
 		}
 	}
 }

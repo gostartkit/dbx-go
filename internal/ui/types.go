@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"pkg.gostartkit.com/dbx/internal/commandlang"
 	"pkg.gostartkit.com/dbx/internal/ui/editor"
 )
 
@@ -10,10 +9,6 @@ type Suggestion = editor.Suggestion
 type CompletionRequest = editor.CompletionRequest
 type CompletionResult = editor.CompletionResult
 type CompletionEdit = editor.CompletionEdit
-type CommandContext = commandlang.CommandContext
-type CommandToken = commandlang.Token
-type Program = commandlang.Program
-type SyntaxContext = commandlang.SyntaxContext
 type Buffer = editor.Buffer
 type Position = editor.Position
 

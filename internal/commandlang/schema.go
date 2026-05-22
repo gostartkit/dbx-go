@@ -3,9 +3,8 @@ package commandlang
 import (
 	"fmt"
 	"strings"
-	"sync"
 
-	"pkg.gostartkit.com/dbx/internal/commandmeta"
+	"pkg.gostartkit.com/cmd"
 )
 
 type ValueType string
@@ -110,88 +109,140 @@ type HelpDoc struct {
 	Body  string
 }
 
-var (
-	defaultRegistryOnce sync.Once
-	defaultRegistryData *Registry
-)
-
-func DefaultRegistry() *Registry {
-	defaultRegistryOnce.Do(func() {
-		defaultRegistryData = registryFromManifest(commandmeta.DefaultManifest())
-	})
-	return defaultRegistryData
-}
-
-func registryFromManifest(manifest *commandmeta.Manifest) *Registry {
-	if manifest == nil {
-		return &Registry{}
+func RegistryFromAppSpec(spec cmd.AppSpec) *Registry {
+	commands := make([]*CommandSpec, 0, len(spec.Commands)+len(spec.Builtins))
+	for _, command := range builtinCommandSpecs(spec.Builtins) {
+		commands = append(commands, commandSpecFromAppSpec(command, spec.GlobalFlags))
 	}
-	commands := make([]*CommandSpec, 0, len(manifest.Commands))
-	for _, command := range manifest.Commands {
-		commands = append(commands, commandSpecFromManifest(command))
+	for _, command := range spec.Commands {
+		commands = append(commands, commandSpecFromAppSpec(command, spec.GlobalFlags))
 	}
 	return &Registry{Commands: commands}
 }
 
-func commandSpecFromManifest(command *commandmeta.Command) *CommandSpec {
-	if command == nil {
-		return nil
+func builtinCommandSpecs(builtins []string) []cmd.CommandSpec {
+	commands := make([]cmd.CommandSpec, 0, len(builtins))
+	for _, builtin := range builtins {
+		switch strings.TrimSpace(builtin) {
+		case "help":
+			commands = append(commands, cmd.CommandSpec{
+				Name:      "help",
+				UsageLine: "dbx help [topic]",
+				Short:     "Show help for a command or topic.",
+				Positionals: []cmd.PositionalSpec{{
+					Name:          "topic",
+					Usage:         "Command or topic to describe.",
+					CompletionKey: "topic",
+				}},
+			})
+		}
 	}
+	return commands
+}
+
+func commandSpecFromAppSpec(command cmd.CommandSpec, globalFlags []cmd.FlagSpec) *CommandSpec {
+	flags := append([]cmd.FlagSpec(nil), globalFlags...)
+	flags = append(flags, command.Flags...)
+
 	spec := &CommandSpec{
 		Name:        command.Name,
 		Aliases:     append([]string(nil), command.Aliases...),
-		Description: command.Description,
-		HandlerName: command.HandlerName,
+		Description: command.Short,
+		HandlerName: command.HandlerID,
 		Hidden:      command.Hidden,
-		Flags:       make([]*FlagSpec, 0, len(command.Flags)),
-		Args:        make([]*ArgSpec, 0, len(command.Args)),
-		Subcommands: make([]*CommandSpec, 0, len(command.Subcommands)),
+		Flags:       make([]*FlagSpec, 0, len(flags)),
+		Args:        make([]*ArgSpec, 0, len(command.Positionals)),
+		Subcommands: make([]*CommandSpec, 0, len(command.SubCommands)),
 	}
-	for _, flag := range command.Flags {
-		spec.Flags = append(spec.Flags, flagSpecFromManifest(flag))
+
+	for _, flag := range flags {
+		spec.Flags = append(spec.Flags, flagSpecFromAppSpec(flag))
 	}
-	for _, arg := range command.Args {
-		spec.Args = append(spec.Args, argSpecFromManifest(arg))
+	for _, arg := range command.Positionals {
+		spec.Args = append(spec.Args, argSpecFromAppSpec(arg))
 	}
-	for _, sub := range command.Subcommands {
-		spec.Subcommands = append(spec.Subcommands, commandSpecFromManifest(sub))
+	for _, subcommand := range command.SubCommands {
+		spec.Subcommands = append(spec.Subcommands, commandSpecFromAppSpec(subcommand, globalFlags))
 	}
+
 	return spec
 }
 
-func flagSpecFromManifest(flag *commandmeta.Flag) *FlagSpec {
-	if flag == nil {
-		return nil
+func flagSpecFromAppSpec(flag cmd.FlagSpec) *FlagSpec {
+	name := strings.TrimSpace(flag.Name)
+	if name != "" && !strings.HasPrefix(name, "--") {
+		name = "--" + name
 	}
+
 	return &FlagSpec{
-		Name:               flag.Name,
-		Short:              flag.Short,
-		Description:        flag.Description,
-		ValueType:          valueTypeFromManifest(flag.ValueType),
+		Name:               name,
+		Short:              normalizeShortFlag(flag.Shorthand),
+		Description:        flag.Usage,
+		ValueType:          valueTypeFromSpec(flag.Type, flag.Kind, flag.CompletionKey, flag.Enum),
 		Required:           flag.Required,
 		Repeatable:         flag.Repeatable,
-		EnumValues:         append([]string(nil), flag.EnumValues...),
-		CompletionProvider: flag.CompletionProvider,
+		EnumValues:         append([]string(nil), flag.Enum...),
+		CompletionProvider: strings.TrimSpace(flag.CompletionKey),
 	}
 }
 
-func argSpecFromManifest(arg *commandmeta.Arg) *ArgSpec {
-	if arg == nil {
-		return nil
-	}
+func argSpecFromAppSpec(arg cmd.PositionalSpec) *ArgSpec {
 	return &ArgSpec{
 		Name:               arg.Name,
-		Description:        arg.Description,
+		Description:        arg.Usage,
 		Required:           arg.Required,
-		Repeatable:         arg.Repeatable,
-		ValueType:          valueTypeFromManifest(arg.ValueType),
-		EnumValues:         append([]string(nil), arg.EnumValues...),
-		CompletionProvider: arg.CompletionProvider,
+		Repeatable:         arg.Variadic,
+		ValueType:          valueTypeFromSpec("", arg.Kind, arg.CompletionKey, arg.Enum),
+		EnumValues:         append([]string(nil), arg.Enum...),
+		CompletionProvider: strings.TrimSpace(arg.CompletionKey),
 	}
 }
 
-func valueTypeFromManifest(value commandmeta.ValueType) ValueType {
-	return ValueType(value)
+func normalizeShortFlag(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.HasPrefix(value, "-") {
+		return value
+	}
+	return "-" + value
+}
+
+func valueTypeFromSpec(flagType string, kind string, completionKey string, enum []string) ValueType {
+	switch strings.TrimSpace(flagType) {
+	case "bool":
+		return ValueBool
+	}
+	if len(enum) > 0 {
+		return ValueEnum
+	}
+
+	target := strings.TrimSpace(kind)
+	if target == "" {
+		target = strings.TrimSpace(completionKey)
+	}
+
+	switch target {
+	case "connection":
+		return ValueConnection
+	case "database":
+		return ValueDatabase
+	case "table":
+		return ValueTable
+	case "user":
+		return ValueUser
+	case "schema":
+		return ValueSchema
+	case "operation":
+		return ValueOperation
+	case "template":
+		return ValueTemplate
+	case "enum":
+		return ValueEnum
+	default:
+		return ValueString
+	}
 }
 
 func (r *Registry) LookupCommand(path []string) (*CommandSpec, int) {

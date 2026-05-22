@@ -87,15 +87,6 @@ func TestHandleConnectionDoctorCanSelectInvalidConnection(t *testing.T) {
 	}
 }
 
-func TestHelpConnectionOmitsDoctorConnection(t *testing.T) {
-	t.Parallel()
-
-	entry := helpEntries["connection"].body
-	if strings.Contains(entry, "doctor connection") {
-		t.Fatalf("connection help unexpectedly mentions removed command: %q", entry)
-	}
-}
-
 func TestDoctorConnectionCommonChecks(t *testing.T) {
 	t.Parallel()
 

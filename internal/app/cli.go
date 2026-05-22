@@ -112,7 +112,7 @@ func (b *cliBuilder) buildApp() *cmd.App {
 	cli.SetRootCommand(&cmd.Command{
 		UsageLine: "dbx [flags] [command]",
 		Short:     cli.Short,
-		Long:      helpLong(""),
+		Long:      commandLong(""),
 	})
 	cli.AddCommands(
 		b.connectCommand(),
@@ -123,7 +123,6 @@ func (b *cliBuilder) buildApp() *cmd.App {
 		b.execGroupCommand(),
 		b.doctorGroupCommand(),
 		b.auditGroupCommand(),
-		b.helpCommand(),
 		b.exitCommand(),
 	)
 	return cli
@@ -253,35 +252,17 @@ func (b *cliBuilder) requireNoArgs(args []string) error {
 }
 
 func (b *cliBuilder) exitCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "exit",
-		UsageFallback: "dbx exit",
-		ShortFallback: "Exit the shell",
-		Aliases:       []string{"quit"},
+	return &cmd.Command{
+		Name:      "exit",
+		UsageLine: "dbx exit",
+		Short:     "Exit the REPL.",
+		Long:      commandLong("exit"),
+		Aliases:   []string{"quit"},
 		Run: func(context.Context, *cmd.Command, []string) error {
 			if b.mode == ModeREPL {
 				return errREPLExit
 			}
 			return nil
 		},
-	})
-}
-
-func (b *cliBuilder) helpCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "help",
-		UsageFallback: "dbx help [command...]",
-		ShortFallback: "Show command help",
-		Long:          helpLong(""),
-		Run: func(_ context.Context, _ *cmd.Command, args []string) error {
-			topic := normalizeHelpTopic(strings.Join(args, " "))
-			if b.mode == ModeREPL {
-				if b.application == nil {
-					return fmt.Errorf("repl application is not configured")
-				}
-				return b.application.handleHelp(topic)
-			}
-			return printHelpTopic(writerPrinter{w: b.out}, topic)
-		},
-	})
+	}
 }

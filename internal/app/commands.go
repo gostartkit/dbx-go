@@ -29,10 +29,6 @@ func (a *Application) handleLine(ctx context.Context, line string) (bool, error)
 	return false, err
 }
 
-func (a *Application) handleHelp(topic string) error {
-	return printHelpTopic(a.prompt, topic)
-}
-
 func formatREPLError(line string, err error) error {
 	if err == nil {
 		return nil

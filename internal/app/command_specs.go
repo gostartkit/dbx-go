@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"pkg.gostartkit.com/dbx/internal/commandmeta"
+	"pkg.gostartkit.com/cmd"
 )
 
 type CommandSpec struct {
@@ -74,17 +74,7 @@ func helpCompletionTopics() []Suggestion {
 
 func replCommandSpecCatalog() *commandSpecCatalog {
 	replCommandSpecCatalogOnce.Do(func() {
-		specs := make([]CommandSpec, 0, 64)
-		for _, command := range commandmeta.FlattenCommands(commandmeta.DefaultManifest()) {
-			path := normalizeHelpTopic(strings.Join(command.Path, " "))
-			specs = append(specs, CommandSpec{
-				Path:        path,
-				UsageLine:   command.Command.UsageLine,
-				Description: command.Command.Description,
-				Category:    commandCategory(command.Alias),
-				Hidden:      command.Hidden,
-			})
-		}
+		specs := replSpecsFromCommandTree()
 
 		indexed := make([]indexedCommandSpec, 0, len(specs))
 		byPath := make(map[string]CommandSpec, len(specs))
@@ -124,9 +114,49 @@ func replCommandSpecCatalog() *commandSpecCatalog {
 	return &replCommandSpecCatalogData
 }
 
-func commandCategory(alias bool) string {
-	if alias {
-		return "alias"
+func replSpecsFromCommandTree() []CommandSpec {
+	spec := (&cliBuilder{
+		mode:    ModeREPL,
+		globals: &cliGlobals{Format: "text"},
+	}).buildApp().SpecFor(cmd.SurfaceREPL)
+
+	specs := make([]CommandSpec, 0, 64)
+	for _, command := range spec.Commands {
+		collectCommandSpecs(&specs, "", command)
 	}
-	return "command"
+	return specs
+}
+
+func collectCommandSpecs(dst *[]CommandSpec, prefix string, command cmd.CommandSpec) {
+	path := normalizeHelpTopic(strings.Join(command.Path, " "))
+	if path != "" {
+		*dst = append(*dst, CommandSpec{
+			Path:        path,
+			UsageLine:   command.UsageLine,
+			Description: command.Short,
+			Category:    "command",
+			Hidden:      command.Hidden,
+		})
+	}
+
+	for _, alias := range command.Aliases {
+		aliasPath := normalizeHelpTopic(prefix + " " + alias)
+		if aliasPath != "" {
+			*dst = append(*dst, CommandSpec{
+				Path:        aliasPath,
+				UsageLine:   command.UsageLine,
+				Description: command.Short,
+				Category:    "alias",
+				Hidden:      command.Hidden,
+			})
+		}
+	}
+
+	for _, subcommand := range command.SubCommands {
+		nextPrefix := path
+		if nextPrefix == "" {
+			nextPrefix = normalizeHelpTopic(prefix + " " + command.Name)
+		}
+		collectCommandSpecs(dst, nextPrefix, subcommand)
+	}
 }

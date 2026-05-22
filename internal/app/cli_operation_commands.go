@@ -20,21 +20,17 @@ type showTemplatesFlags struct {
 
 func (b *cliBuilder) execGroupCommand() *cmd.Command {
 	flags := &execOperationFlags{inputs: inputValues{}}
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "exec",
-		UsageFallback: "dbx exec <operation> [flags]",
-		ShortFallback: "Execute an operation",
-		Positionals: b.manifestPositionals("exec", []cmd.PositionalArg{{
-			Name:       "operation",
-			Usage:      "operation name",
-			Required:   true,
-			Completion: b.completeOperations,
-		}}),
+	return &cmd.Command{
+		Name:        "exec",
+		UsageLine:   "dbx exec <operation> [flags]",
+		Short:       "Execute a named operation.",
+		Long:        commandLong("exec"),
+		Positionals: []cmd.PositionalArg{operationPositional(b.completeOperations)},
 		SetFlags: func(f *cmd.FlagSet) {
 			bindInputFlag(f, flags.inputs)
-			b.bindManifestBoolFlag(f, "exec", "preview", &flags.preview, false, "render the workflow plan without executing")
-			b.bindManifestBoolFlag(f, "exec", "verbose", &flags.verbose, false, "include redacted SQL preview")
-			b.bindManifestBoolFlag(f, "exec", "validate", &flags.validate, false, "validate the operation without running it")
+			f.BoolVar(&flags.preview, "preview", false, "Show the execution preview before running.", "")
+			f.BoolVar(&flags.verbose, "verbose", false, "Include detailed execution output.", "")
+			f.BoolVar(&flags.validate, "validate", false, "Validate the resolved operation and exit.", "")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if flags.validate {
@@ -67,18 +63,21 @@ func (b *cliBuilder) execGroupCommand() *cmd.Command {
 				return b.execOperation(ctx, application, args[0], flags, meta)
 			})
 		},
-	})
+	}
 }
 
 func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 	flags := &showTemplatesFlags{}
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "show templates",
-		UsageFallback: "dbx show templates [query] [--tag value]",
-		ShortFallback: "List resolved workflow templates",
-		Positionals:   b.manifestPositionals("show templates", []cmd.PositionalArg{{Name: "query", Usage: "optional substring filter"}}),
+	return &cmd.Command{
+		Name:        "templates",
+		UsageLine:   "dbx show templates [query] [--tag value]",
+		Short:       "Show resolved workflow templates.",
+		Long:        commandLong("show templates"),
+		Positionals: []cmd.PositionalArg{templateQueryPositional()},
 		SetFlags: func(f *cmd.FlagSet) {
-			b.bindManifestStringFlag(f, "show templates", "tag", &flags.tag, "", "filter by template tag")
+			f.StringVar(&flags.tag, "tag", "", "Filter templates by tag.", "")
+			f.SetCompletion("tag", b.completeTemplateTags)
+			f.SetCompletionKey("tag", "template-tag")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
@@ -111,7 +110,7 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 				})
 			})
 		},
-	})
+	}
 }
 
 func (b *cliBuilder) execOperation(ctx context.Context, application *Application, name string, flags *execOperationFlags, meta *auditMetadata) error {

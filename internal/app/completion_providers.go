@@ -119,7 +119,7 @@ func completionFromApp(app *cmd.App, request ui.CompletionRequest, resolver comp
 func buildProviderContext(app *cmd.App, request ui.CompletionRequest, resolver completionResolver) *providerContext {
 	fullPrefix := logicalCompletionPrefix(request.Buffer, request.Cursor)
 	localPrefix := request.CurrentLinePrefix()
-	registry := commandlang.DefaultRegistry()
+	registry := commandlang.RegistryFromAppSpec(app.SpecFor(cmd.SurfaceREPL))
 	fullTokens := commandlang.Lex(fullPrefix)
 	localTokens := commandlang.Lex(localPrefix)
 	fullContext := commandlang.BuildCommandContext(fullTokens, len([]rune(fullPrefix)))
@@ -232,13 +232,7 @@ func (p operationProvider) Complete(ctx *providerContext) ([]ui.Suggestion, erro
 
 func (p templateProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	if schemaCompletionRoute(ctx) != "template" {
-		switch {
-		case slices.Equal(ctx.commandPath, []string{"describe", "template"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		case slices.Equal(ctx.commandPath, []string{"template", "validate"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		case slices.Equal(ctx.commandPath, []string{"template", "render"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		default:
-			return nil, nil
-		}
+		return nil, nil
 	}
 	values := resolverTemplates(ctx.resolver)
 	suggestions := make([]ui.Suggestion, 0, len(values))
@@ -253,13 +247,7 @@ func (p templateProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error
 
 func (p connectionProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	if schemaCompletionRoute(ctx) != "connection" {
-		switch {
-		case slices.Equal(ctx.commandPath, []string{"connect"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		case slices.Equal(ctx.commandPath, []string{"show", "connection"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		case slices.Equal(ctx.commandPath, []string{"drop", "connection"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		default:
-			return nil, nil
-		}
+		return nil, nil
 	}
 	suggestions := make([]ui.Suggestion, 0)
 	for _, connection := range resolverConnections(ctx.resolver) {
@@ -273,11 +261,7 @@ func (p connectionProvider) Complete(ctx *providerContext) ([]ui.Suggestion, err
 
 func (p databaseProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	if schemaCompletionRoute(ctx) != "database" {
-		switch {
-		case slices.Equal(ctx.commandPath, []string{"use"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		default:
-			return nil, nil
-		}
+		return nil, nil
 	}
 	values := ctx.resolver.Databases()
 	suggestions := make([]ui.Suggestion, 0, len(values))
@@ -292,13 +276,7 @@ func (p databaseProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error
 
 func (p tableProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 	if schemaCompletionRoute(ctx) != "table" {
-		switch {
-		case slices.Equal(ctx.commandPath, []string{"show", "table"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		case slices.Equal(ctx.commandPath, []string{"show", "columns"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		case slices.Equal(ctx.commandPath, []string{"show", "rows"}) && ctx.syntaxContext.InArg && ctx.positionalIndex == 0:
-		default:
-			return nil, nil
-		}
+		return nil, nil
 	}
 	values := ctx.resolver.Tables()
 	suggestions := make([]ui.Suggestion, 0, len(values))
@@ -312,7 +290,7 @@ func (p tableProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 }
 
 func (p userProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	if schemaCompletionRoute(ctx) != "user" && (!slices.Equal(ctx.commandPath, []string{"drop", "user"}) || !ctx.syntaxContext.InArg || ctx.positionalIndex != 0) {
+	if schemaCompletionRoute(ctx) != "user" {
 		return nil, nil
 	}
 	values := ctx.resolver.Users()
@@ -331,10 +309,7 @@ func (p schemaProvider) Complete(*providerContext) ([]ui.Suggestion, error) {
 }
 
 func (p flagProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
-	flags := schemaFlagNames(ctx.syntaxContext.CommandSpec)
-	if len(flags) == 0 {
-		flags = flagsForCommandPath(ctx.commandPath)
-	}
+	flags := mergeFlagNames(schemaFlagNames(ctx.syntaxContext.CommandSpec), flagsForCommandPath(ctx.commandPath))
 	if len(flags) == 0 {
 		return nil, nil
 	}
@@ -355,6 +330,25 @@ func (p flagProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {
 		suggestions = append(suggestions, newCompletionSuggestion(ctx.replaceStart, ctx.replaceEnd, flag, flag, "flag", "flag"))
 	}
 	return suggestions, nil
+}
+
+func mergeFlagNames(left []string, right []string) []string {
+	if len(left) == 0 {
+		return append([]string(nil), right...)
+	}
+	if len(right) == 0 {
+		return append([]string(nil), left...)
+	}
+	merged := make([]string, 0, len(left)+len(right))
+	seen := make(map[string]struct{}, len(left)+len(right))
+	for _, flag := range append(append([]string(nil), left...), right...) {
+		if _, ok := seen[flag]; ok {
+			continue
+		}
+		seen[flag] = struct{}{}
+		merged = append(merged, flag)
+	}
+	return merged
 }
 
 func (p flagValueProvider) Complete(ctx *providerContext) ([]ui.Suggestion, error) {

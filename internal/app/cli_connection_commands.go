@@ -33,12 +33,14 @@ type connectionCreateFlags struct {
 }
 
 func (b *cliBuilder) connectCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:                "connect",
-		UsageFallback:       "dbx connect <name>",
-		PreferFallbackUsage: true,
-		ShortFallback:       "Connect to a saved connection",
-		Positionals:         b.manifestPositionals("connect", []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}}),
+	return &cmd.Command{
+		Name:      "connect",
+		UsageLine: "dbx connect [name]",
+		Short:     "Connect to a saved connection.",
+		Long:      commandLong("connect"),
+		Positionals: []cmd.PositionalArg{
+			connectionPositional(false, b.completeConnections),
+		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				switch len(args) {
@@ -74,17 +76,15 @@ func (b *cliBuilder) connectCommand() *cmd.Command {
 				})
 			})
 		},
-	})
+	}
 }
 
 func (b *cliBuilder) connectionsCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:                "show connections",
-		Name:                "connections",
-		UsageFallback:       "dbx connections",
-		PreferFallbackUsage: true,
-		ShortFallback:       "List saved connections",
-		Long:                helpLong("connections"),
+	return &cmd.Command{
+		Name:      "connections",
+		UsageLine: "dbx connections",
+		Short:     "Show saved connections.",
+		Long:      commandLong("connections"),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				if err := b.requireNoArgs(args); err != nil {
@@ -113,54 +113,53 @@ func (b *cliBuilder) connectionsCommand() *cmd.Command {
 				})
 			})
 		},
-	})
+	}
 }
 
 func (b *cliBuilder) showConnectionsCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "show connections",
-		Name:          "connections",
-		UsageFallback: "dbx show connections",
-		ShortFallback: "Show saved connections",
-		Long:          helpLong("connections"),
-		Run:           b.connectionsCommand().Run,
-	})
+	return &cmd.Command{
+		Name:      "connections",
+		UsageLine: "dbx show connections",
+		Short:     "Show saved connections.",
+		Long:      commandLong("connections"),
+		Run:       b.connectionsCommand().Run,
+	}
 }
 
 func (b *cliBuilder) showConnectionCommand() *cmd.Command {
 	command := b.connectionShowCommand()
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "show connection",
-		Name:          "connection",
-		UsageFallback: "dbx show connection <name>",
-		ShortFallback: "Show a saved connection",
-		Long:          command.Long,
-		Positionals:   append([]cmd.PositionalArg(nil), command.Positionals...),
-		Run:           command.Run,
-	})
+	return &cmd.Command{
+		Name:        "connection",
+		UsageLine:   "dbx show connection <name>",
+		Short:       "Show a saved connection.",
+		Long:        command.Long,
+		Positionals: append([]cmd.PositionalArg(nil), command.Positionals...),
+		Run:         command.Run,
+	}
 }
 
 func (b *cliBuilder) createConnectionCommand() *cmd.Command {
 	command := b.connectionCreateCommand()
 	command.Name = "connection"
 	command.UsageLine = "dbx create connection <name> [flags]"
-	command.Short = manifestShort("create connection", "Create a saved connection")
+	command.Short = "Create a saved connection."
 	return command
 }
 
 func (b *cliBuilder) dropConnectionCommand() *cmd.Command {
 	command := b.connectionDeleteCommand()
 	command.Name = "connection"
-	command.UsageLine = manifestUsageLine("drop connection", "dbx drop connection <name> [flags]")
-	command.Short = manifestShort("drop connection", "Drop a saved connection")
+	command.UsageLine = "dbx drop connection <name> [flags]"
+	command.Short = "Drop a saved connection."
 	return command
 }
 
 func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "doctor",
-		UsageFallback: "dbx doctor",
-		ShortFallback: "Inspect the selected connection statically",
+	return &cmd.Command{
+		Name:      "doctor",
+		UsageLine: "dbx doctor",
+		Short:     "Inspect the selected connection statically without opening the network path.",
+		Long:      commandLong("doctor"),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "doctor", err)
@@ -204,7 +203,7 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 				return nil
 			})
 		},
-	})
+	}
 }
 
 func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
@@ -212,10 +211,10 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "create",
 		UsageLine: "dbx connection create <name> [flags]",
-		Short:     manifestShort("connection create", "Create a saved connection"),
-		Long:      helpLong("connection create"),
+		Short:     "Create a saved connection.",
+		Long:      commandLong("connection create"),
 		Positionals: b.positionalsForMode(
-			[]cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
+			[]cmd.PositionalArg{connectionPositional(true, b.completeConnections)},
 			nil,
 		),
 		SetFlags: func(f *cmd.FlagSet) {
@@ -311,9 +310,9 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "delete",
 		UsageLine:   "dbx connection delete <name> [flags]",
-		Short:       manifestShort("connection delete", "Delete a saved connection"),
-		Long:        helpLong("connection delete"),
-		Positionals: b.manifestPositionals("connection delete", []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}}),
+		Short:       "Delete a saved connection.",
+		Long:        commandLong("connection delete"),
+		Positionals: []cmd.PositionalArg{connectionPositional(true, b.completeConnections)},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				return b.application.handleConnectionDelete(ctx, args[0])
@@ -340,10 +339,10 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "show",
-		UsageLine:   manifestUsageLine("connection show", "dbx connection show <name>"),
-		Short:       manifestShort("connection show", "Show a saved connection"),
-		Long:        helpLong("connection show"),
-		Positionals: b.manifestPositionals("connection show", []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}}),
+		UsageLine:   "dbx connection show <name>",
+		Short:       "Show a saved connection.",
+		Long:        commandLong("connection show"),
+		Positionals: []cmd.PositionalArg{connectionPositional(true, b.completeConnections)},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				return b.application.handleConnectionShow(ctx, args[0])

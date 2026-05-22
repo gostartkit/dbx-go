@@ -128,7 +128,7 @@ func TestParseProgramCommandsAndFlags(t *testing.T) {
 func TestBuildSyntaxContext(t *testing.T) {
 	t.Parallel()
 
-	registry := DefaultRegistry()
+	registry := testRegistry()
 
 	tests := []struct {
 		name            string
@@ -247,7 +247,7 @@ func TestBuildSyntaxContext(t *testing.T) {
 func TestBuildSyntaxContextWithSchemaMetadata(t *testing.T) {
 	t.Parallel()
 
-	registry := DefaultRegistry()
+	registry := testRegistry()
 	tests := []struct {
 		input     string
 		cursor    int

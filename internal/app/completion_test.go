@@ -144,21 +144,11 @@ func TestCalculateCompletionASTFlagAndValueContexts(t *testing.T) {
 	assertSuggestionsContainAll(t, suggestionValues(tagCompletion), []string{"readonly", "grant"})
 }
 
-func TestCalculateCompletionASTSubcommandAndTemplateRender(t *testing.T) {
+func TestCalculateCompletionASTSubcommandSuggestions(t *testing.T) {
 	t.Parallel()
 
 	showCompletion := calculateCompletion("show ", CompletionContext{})
 	assertSuggestionsContainAll(t, suggestionValues(showCompletion), []string{"columns", "connections", "context", "rows", "tables", "templates", "users"})
-
-	renderCompletion := calculateCompletion("template render cr", CompletionContext{
-		Templates: []string{"create-user", "create-database"},
-	})
-	assertSuggestionsContainAll(t, suggestionValues(renderCompletion), []string{"create-user", "create-database"})
-
-	connectionUse := calculateCompletion("connection use pr", CompletionContext{
-		Connections: []CompletionConnection{{Name: "prod", Driver: "mysql", Mode: "ssh"}},
-	})
-	assertSuggestionsContainAll(t, suggestionValues(connectionUse), []string{"prod"})
 }
 
 func TestBuildProviderContextFlagValueSyntax(t *testing.T) {

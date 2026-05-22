@@ -18,6 +18,9 @@ func bindInputFlag(f *cmd.FlagSet, values inputValues) {
 		values[key] = parsedValue
 		return nil
 	}, "")
+	f.MarkRepeatable("input")
+	f.SetKind("input", "template_input")
+	f.SetCompletionKey("input", "template-input")
 }
 
 func splitInputValue(value string) (string, string, error) {

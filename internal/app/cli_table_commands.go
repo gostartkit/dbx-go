@@ -9,11 +9,12 @@ import (
 )
 
 func (b *cliBuilder) showTableCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "show table",
-		UsageFallback: "dbx show table <table>",
-		ShortFallback: "Show table details",
-		Positionals:   b.manifestPositionals("show table", []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}}),
+	return &cmd.Command{
+		Name:        "table",
+		UsageLine:   "dbx show table <table>",
+		Short:       "Show CREATE TABLE output for one table.",
+		Long:        commandLong("show table"),
+		Positionals: []cmd.PositionalArg{tablePositional(b.completeTables)},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				return b.application.handleShowCreateTable(ctx, args[0])
@@ -22,7 +23,7 @@ func (b *cliBuilder) showTableCommand() *cmd.Command {
 				return b.runShowTable(ctx, application, args[0], meta)
 			})
 		},
-	})
+	}
 }
 
 func (b *cliBuilder) runShowCreateTable(ctx context.Context, application *Application, table string, meta *auditMetadata) error {

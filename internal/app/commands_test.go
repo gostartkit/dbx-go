@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,99 +156,12 @@ func TestHandleConnectionShowIncludesParseErrors(t *testing.T) {
 	}
 }
 
-type testPrinter struct {
-	lines []string
-}
-
-func (p *testPrinter) Println(args ...any) {
-	if len(args) == 0 {
-		p.lines = append(p.lines, "")
-		return
-	}
-	parts := make([]string, 0, len(args))
-	for _, arg := range args {
-		parts = append(parts, fmt.Sprint(arg))
-	}
-	p.lines = append(p.lines, strings.TrimSpace(strings.Join(parts, " ")))
-}
-
 func TestNormalizeHelpTopic(t *testing.T) {
 	t.Parallel()
 
 	got := normalizeHelpTopic("  create   connection  ")
 	if got != "create connection" {
 		t.Fatalf("normalizeHelpTopic = %q", got)
-	}
-}
-
-func TestPrintHelpTopic(t *testing.T) {
-	t.Parallel()
-
-	var prompt testPrinter
-	if err := printHelpTopic(&prompt, "create connection"); err != nil {
-		t.Fatalf("printHelpTopic returned error: %v", err)
-	}
-
-	joined := strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "Create a saved connection.") {
-		t.Fatalf("help output missing expected text: %q", joined)
-	}
-	if !strings.Contains(joined, "~/.config/dbx/{name}/config.json") {
-		t.Fatalf("help output missing config path: %q", joined)
-	}
-}
-
-func TestPrintHelpTemplateTopics(t *testing.T) {
-	t.Parallel()
-
-	var prompt testPrinter
-	if err := printHelpTopic(&prompt, "show templates"); err != nil {
-		t.Fatalf("printHelpTopic returned error: %v", err)
-	}
-	joined := strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "Show resolved workflow templates") {
-		t.Fatalf("help output missing show templates text: %q", joined)
-	}
-
-	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "show template"); err == nil {
-		t.Fatalf("expected removed help topic to fail")
-	}
-
-	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "exec"); err != nil {
-		t.Fatalf("printHelpTopic returned error: %v", err)
-	}
-	joined = strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "Execute a named operation") {
-		t.Fatalf("help output missing exec command text: %q", joined)
-	}
-	if !strings.Contains(joined, "--validate") {
-		t.Fatalf("help output missing validate flag text: %q", joined)
-	}
-	if strings.Contains(joined, "template <name>") {
-		t.Fatalf("help output still contains removed template subcommand: %q", joined)
-	}
-
-	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "show"); err != nil {
-		t.Fatalf("printHelpTopic returned error: %v", err)
-	}
-	joined = strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "users") {
-		t.Fatalf("help output missing users subcommand: %q", joined)
-	}
-	if strings.Contains(joined, "user <name>") {
-		t.Fatalf("help output still contains removed user subcommand: %q", joined)
-	}
-
-	prompt.lines = nil
-	if err := printHelpTopic(&prompt, "template"); err != nil {
-		t.Fatalf("printHelpTopic returned error: %v", err)
-	}
-	joined = strings.Join(prompt.lines, "\n")
-	if !strings.Contains(joined, "Subcommands:") || !strings.Contains(joined, "render") {
-		t.Fatalf("schema help output missing template subcommands: %q", joined)
 	}
 }
 
@@ -268,9 +180,6 @@ func TestREPLHelpCommandHasOutput(t *testing.T) {
 	if !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "Available Commands:") {
 		t.Fatalf("help output missing expected sections: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "connect\n  connect prod") || !strings.Contains(out.String(), "show tables\n  show table users") || !strings.Contains(out.String(), "exec\n  exec create_database_with_user --validate") {
-		t.Fatalf("help output missing grouped examples: %q", out.String())
-	}
 }
 
 func TestREPLHelpTopicsHaveOutput(t *testing.T) {
@@ -281,7 +190,7 @@ func TestREPLHelpTopicsHaveOutput(t *testing.T) {
 		want string
 	}{
 		{line: "help show", want: "Usage: dbx show <subcommand>"},
-		{line: "help connect", want: "Usage: dbx connect <name>"},
+		{line: "help connect", want: "Usage: dbx connect [name]"},
 		{line: "help exec", want: "Usage: dbx exec <operation> [flags]"},
 	}
 

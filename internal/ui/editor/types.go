@@ -2,8 +2,6 @@ package editor
 
 import (
 	"strings"
-
-	"pkg.gostartkit.com/dbx/internal/commandlang"
 )
 
 type Position struct {
@@ -87,12 +85,8 @@ type Completion struct {
 }
 
 type CompletionRequest struct {
-	Buffer         Buffer
-	Cursor         Position
-	Tokens         []commandlang.Token
-	CommandContext commandlang.CommandContext
-	Program        *commandlang.Program
-	SyntaxContext  commandlang.SyntaxContext
+	Buffer Buffer
+	Cursor Position
 }
 
 func NewSingleLineCompletionRequest(line string, cursor int) CompletionRequest {
@@ -103,15 +97,10 @@ func NewSingleLineCompletionRequest(line string, cursor int) CompletionRequest {
 	if cursor > len(lineRunes) {
 		cursor = len(lineRunes)
 	}
-	request := CompletionRequest{
+	return CompletionRequest{
 		Buffer: NewBufferFromString(line),
 		Cursor: Position{Line: 0, Column: cursor},
 	}
-	request.Tokens = commandlang.Lex(line)
-	request.CommandContext = commandlang.BuildCommandContext(request.Tokens, cursor)
-	request.Program = commandlang.ParseTokens(request.Tokens)
-	request.SyntaxContext = commandlang.BuildSyntaxContextWithRegistry(request.Program, cursor, commandlang.DefaultRegistry())
-	return request
 }
 
 func (r CompletionRequest) CurrentLine() string {

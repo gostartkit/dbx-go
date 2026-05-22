@@ -1114,7 +1114,11 @@ func TestCLIHelpForMultiWordCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Create a database from the resolved operation spec.") {
+	output := stdout.String()
+	if !strings.Contains(output, "Usage: dbx create database <name> [flags]") {
+		t.Fatalf("help output missing usage: %q", output)
+	}
+	if !strings.Contains(output, "Flags:") || !strings.Contains(output, "Arguments:") {
 		t.Fatalf("help output missing expected text: %q", stdout.String())
 	}
 }

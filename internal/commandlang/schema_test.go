@@ -8,7 +8,7 @@ import (
 func TestDefaultRegistryLookup(t *testing.T) {
 	t.Parallel()
 
-	registry := DefaultRegistry()
+	registry := testRegistry()
 
 	spec, matched := registry.LookupCommand([]string{"exec"})
 	if spec == nil || spec.Name != "exec" || matched != 1 {
@@ -91,7 +91,7 @@ func TestValidateProgramWithSchema(t *testing.T) {
 func TestRegistryHelp(t *testing.T) {
 	t.Parallel()
 
-	registry := DefaultRegistry()
+	registry := testRegistry()
 	for _, topic := range []string{"exec", "template", "connection"} {
 		doc, ok := registry.Help(topic)
 		if !ok {

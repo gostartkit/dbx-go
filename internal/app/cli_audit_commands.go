@@ -8,21 +8,23 @@ import (
 )
 
 func (b *cliBuilder) auditGroupCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "audit",
-		UsageFallback: "dbx audit <subcommand>",
-		ShortFallback: "Inspect local audit records",
+	return &cmd.Command{
+		Name:      "audit",
+		UsageLine: "dbx audit <subcommand>",
+		Short:     "Inspect local audit records",
+		Long:      commandLong("audit"),
 		SubCommands: []*cmd.Command{
 			b.auditLogCommand(),
 		},
-	})
+	}
 }
 
 func (b *cliBuilder) auditLogCommand() *cmd.Command {
-	return b.newManifestCommand(manifestCommandOptions{
-		Path:          "audit log",
-		UsageFallback: "dbx audit log",
-		ShortFallback: "Show recent audit log entries",
+	return &cmd.Command{
+		Name:      "log",
+		UsageLine: "dbx audit log",
+		Short:     "Show recent audit log entries.",
+		Long:      commandLong("audit log"),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "audit log", err)
@@ -40,5 +42,5 @@ func (b *cliBuilder) auditLogCommand() *cmd.Command {
 				})
 			})
 		},
-	})
+	}
 }
