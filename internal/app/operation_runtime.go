@@ -17,8 +17,6 @@ type OperationKind string
 const (
 	OperationBuiltin  OperationKind = "builtin"
 	OperationTemplate OperationKind = "template"
-	OperationDSL      OperationKind = "dsl"
-	OperationFile     OperationKind = "file"
 )
 
 type OperationDefinition struct {
@@ -74,16 +72,11 @@ type templateOperationImplementation struct {
 	app *Application
 }
 
-type dslOperationImplementation struct{}
-type fileOperationImplementation struct{}
-
 func (a *Application) operationRuntime() *operationRuntime {
 	return &operationRuntime{
 		implementations: []OperationImplementation{
 			builtinOperationImplementation{app: a},
 			templateOperationImplementation{app: a},
-			dslOperationImplementation{},
-			fileOperationImplementation{},
 		},
 	}
 }
@@ -132,8 +125,6 @@ func (r *operationRuntime) List(ctx context.Context, cfg *config.ConnectionConfi
 
 func (builtinOperationImplementation) Kind() OperationKind  { return OperationBuiltin }
 func (templateOperationImplementation) Kind() OperationKind { return OperationTemplate }
-func (dslOperationImplementation) Kind() OperationKind      { return OperationDSL }
-func (fileOperationImplementation) Kind() OperationKind     { return OperationFile }
 
 func (i builtinOperationImplementation) Resolve(_ context.Context, name string, _ *config.ConnectionConfig) (*OperationDefinition, error) {
 	for _, candidate := range tpl.Builtins() {
@@ -196,30 +187,6 @@ func (i builtinOperationImplementation) Execute(ctx context.Context, plan *Opera
 
 func (i templateOperationImplementation) Execute(ctx context.Context, plan *OperationPlan) error {
 	return executeOperationPlan(ctx, i.app, plan)
-}
-
-func (dslOperationImplementation) Resolve(context.Context, string, *config.ConnectionConfig) (*OperationDefinition, error) {
-	return nil, fmt.Errorf("%w: dsl", errOperationNotFound)
-}
-
-func (fileOperationImplementation) Resolve(context.Context, string, *config.ConnectionConfig) (*OperationDefinition, error) {
-	return nil, fmt.Errorf("%w: file", errOperationNotFound)
-}
-
-func (dslOperationImplementation) Plan(context.Context, *OperationDefinition, OperationArgs) (*OperationPlan, error) {
-	return nil, fmt.Errorf("dsl operations are not implemented yet")
-}
-
-func (fileOperationImplementation) Plan(context.Context, *OperationDefinition, OperationArgs) (*OperationPlan, error) {
-	return nil, fmt.Errorf("file operations are not implemented yet")
-}
-
-func (dslOperationImplementation) Execute(context.Context, *OperationPlan) error {
-	return fmt.Errorf("dsl operations are not implemented yet")
-}
-
-func (fileOperationImplementation) Execute(context.Context, *OperationPlan) error {
-	return fmt.Errorf("file operations are not implemented yet")
 }
 
 func operationDefinitionFromTemplate(template *tpl.Template, kind OperationKind) *OperationDefinition {
@@ -300,10 +267,6 @@ func operationProviderName(kind OperationKind) string {
 		return "builtin"
 	case OperationTemplate:
 		return "template"
-	case OperationDSL:
-		return "dsl"
-	case OperationFile:
-		return "file"
 	default:
 		return string(kind)
 	}
