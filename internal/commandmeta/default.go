@@ -478,7 +478,7 @@ func DefaultManifest() *Manifest {
 				{
 					Name:        "exit",
 					UsageLine:   "exit",
-					Aliases:     []string{"quit", "q"},
+					Aliases:     []string{"quit"},
 					Description: "Exit the REPL.",
 					HandlerName: "exit",
 				},

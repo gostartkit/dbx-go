@@ -15,7 +15,7 @@ func TestDefaultRegistryLookup(t *testing.T) {
 		t.Fatalf("exec lookup = %#v matched=%d", spec, matched)
 	}
 
-	spec, matched = registry.LookupCommand([]string{"q"})
+	spec, matched = registry.LookupCommand([]string{"quit"})
 	if spec == nil || spec.Name != "exit" || matched != 1 {
 		t.Fatalf("alias lookup = %#v matched=%d", spec, matched)
 	}

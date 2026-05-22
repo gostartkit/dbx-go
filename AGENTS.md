@@ -180,7 +180,6 @@ audit log
 
 exit
 quit
-q
 ```
 
 ### REPL Input UX

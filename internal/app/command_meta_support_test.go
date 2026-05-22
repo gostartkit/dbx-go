@@ -60,7 +60,7 @@ func TestNewManifestCommandUsesManifestDefaults(t *testing.T) {
 	if command.Short != "Exit the REPL." {
 		t.Fatalf("command short = %q, want %q", command.Short, "Exit the REPL.")
 	}
-	if len(command.Aliases) != 2 || command.Aliases[0] != "quit" || command.Aliases[1] != "q" {
+	if len(command.Aliases) != 1 || command.Aliases[0] != "quit" {
 		t.Fatalf("command aliases = %#v", command.Aliases)
 	}
 }

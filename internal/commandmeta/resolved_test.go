@@ -16,7 +16,7 @@ func TestLookupCommandPathMatchesVisiblePathAndAlias(t *testing.T) {
 		t.Fatalf("expected visible path lookup to be canonical")
 	}
 
-	alias, ok := LookupCommandPath(DefaultManifest(), "q")
+	alias, ok := LookupCommandPath(DefaultManifest(), "quit")
 	if !ok {
 		t.Fatalf("expected alias lookup to succeed")
 	}

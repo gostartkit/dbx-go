@@ -257,7 +257,7 @@ func (b *cliBuilder) exitCommand() *cmd.Command {
 		Path:          "exit",
 		UsageFallback: "dbx exit",
 		ShortFallback: "Exit the shell",
-		Aliases:       []string{"quit", "q"},
+		Aliases:       []string{"quit"},
 		Run: func(context.Context, *cmd.Command, []string) error {
 			if b.mode == ModeREPL {
 				return errREPLExit
