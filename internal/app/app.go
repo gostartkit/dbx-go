@@ -11,7 +11,6 @@ import (
 
 	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/config"
-	"pkg.gostartkit.com/dbx/internal/repl"
 	tpl "pkg.gostartkit.com/dbx/internal/template"
 	"pkg.gostartkit.com/dbx/internal/ui"
 	"pkg.gostartkit.com/dbx/internal/util"
@@ -23,8 +22,10 @@ type Options struct {
 }
 
 type Application struct {
+	in                          io.Reader
 	prompt                      *ui.Prompt
 	out                         io.Writer
+	err                         io.Writer
 	store                       *config.Store
 	connector                   connectorClient
 	templates                   *tpl.Service
@@ -51,11 +52,11 @@ type Application struct {
 	completionTablesLoadingDB   string
 }
 
-func New(in io.Reader, out io.Writer, _ io.Writer) (*Application, error) {
-	return NewWithOptions(in, out, nil, Options{})
+func New(in io.Reader, out io.Writer, errOut io.Writer) (*Application, error) {
+	return NewWithOptions(in, out, errOut, Options{})
 }
 
-func NewWithOptions(in io.Reader, out io.Writer, _ io.Writer, opts Options) (*Application, error) {
+func NewWithOptions(in io.Reader, out io.Writer, errOut io.Writer, opts Options) (*Application, error) {
 	rootDir := opts.ConfigDir
 	if rootDir == "" {
 		var err error
@@ -76,19 +77,22 @@ func NewWithOptions(in io.Reader, out io.Writer, _ io.Writer, opts Options) (*Ap
 	}
 
 	application := &Application{
+		in:        in,
 		prompt:    ui.NewPrompt(in, out),
 		out:       out,
+		err:       out,
 		store:     store,
 		connector: defaultConnector(),
 		templates: tpl.NewService(store),
 		session:   &Session{},
 		history:   history,
 	}
+	if errOut != nil {
+		application.err = errOut
+	}
 	if opts.Connector != nil {
 		application.connector = opts.Connector
 	}
-	application.prompt.SetCompleter(application.completeInput)
-	application.prompt.SetHistory(history)
 
 	if loadErr := application.loadReconnectCandidate(); loadErr != nil {
 		application.prompt.Printf("Warning: %v\n", loadErr)
@@ -101,7 +105,32 @@ func (a *Application) Run(ctx context.Context) error {
 	if err := a.maybeReconnect(ctx); err != nil {
 		return err
 	}
-	return repl.New(a.prompt, a.promptLabel, a.handleLine).Run(ctx)
+	return a.replCommandApp().RunWith(ctx, a.replRuntime())
+}
+
+func (a *Application) replRuntime() cmd.REPLRuntime {
+	return cmd.REPLRuntime{
+		In:         a.in,
+		Out:        a.out,
+		Err:        a.err,
+		PromptFunc: a.replPrompt,
+		History:    a.replHistoryHooks(),
+	}
+}
+
+func (a *Application) replPrompt(context.Context, *cmd.REPL) string {
+	return a.promptLabel()
+}
+
+func (a *Application) replHistoryHooks() *cmd.REPLHistoryHooks {
+	return &cmd.REPLHistoryHooks{
+		Load: func(context.Context) ([]string, error) {
+			return append([]string(nil), a.history...), nil
+		},
+		Append: func(_ context.Context, line string) error {
+			return a.recordHistory(line)
+		},
+	}
 }
 
 func (a *Application) Close() error {
@@ -304,14 +333,12 @@ func (a *Application) recordHistory(line string) error {
 		return nil
 	}
 	if len(a.history) > 0 && a.history[len(a.history)-1] == line {
-		a.prompt.AppendHistory(line)
 		return nil
 	}
 	if err := a.store.AppendHistory(line); err != nil {
 		return util.WrapLayer("config", "persist history", err)
 	}
 	a.history = append(a.history, line)
-	a.prompt.AppendHistory(line)
 	if len(a.history) > 1000 {
 		a.history = append([]string(nil), a.history[len(a.history)-1000:]...)
 	}

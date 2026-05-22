@@ -9,17 +9,12 @@ import (
 	"strings"
 
 	"golang.org/x/term"
-
-	"pkg.gostartkit.com/dbx/internal/ui/editor"
 )
 
-var ErrPromptCanceled = editor.ErrInputCanceled
-
 type Prompt struct {
-	reader   *bufio.Reader
-	out      io.Writer
-	inFile   *os.File
-	terminal *editor.Terminal
+	reader *bufio.Reader
+	out    io.Writer
+	inFile *os.File
 }
 
 func NewPrompt(in io.Reader, out io.Writer) *Prompt {
@@ -30,39 +25,18 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 
 	reader := bufio.NewReader(in)
 	return &Prompt{
-		reader:   reader,
-		out:      out,
-		inFile:   inFile,
-		terminal: editor.NewTerminal(reader, out, inFile),
+		reader: reader,
+		out:    out,
+		inFile: inFile,
 	}
 }
 
-func (p *Prompt) SetCompleter(completer Completer) {
-	p.terminal.SetCompleter(completer)
-}
-
-func (p *Prompt) SetHistory(entries []string) {
-	p.terminal.SetHistory(entries)
-}
-
-func (p *Prompt) Writer() io.Writer {
-	return p.out
-}
-
-func (p *Prompt) AppendHistory(entry string) bool {
-	return p.terminal.AppendHistory(entry)
-}
-
 func (p *Prompt) Println(args ...any) {
-	p.terminal.Println(args...)
+	fmt.Fprintln(p.out, args...)
 }
 
 func (p *Prompt) Printf(format string, args ...any) {
-	p.terminal.Printf(format, args...)
-}
-
-func (p *Prompt) ReadPrompt(label string) (string, error) {
-	return p.terminal.ReadLine(label)
+	fmt.Fprintf(p.out, format, args...)
 }
 
 func (p *Prompt) Ask(label, defaultValue string) (string, error) {
@@ -154,18 +128,6 @@ func (p *Prompt) Confirm(label string, defaultYes bool) (bool, error) {
 
 		fmt.Fprintln(p.out, "Please answer y or n.")
 	}
-}
-
-func (p *Prompt) ClearLine() {
-	p.terminal.ClearLine()
-}
-
-func (p *Prompt) Redraw() {
-	p.terminal.Redraw()
-}
-
-func (p *Prompt) PrintSystemOutput(fn func(io.Writer)) {
-	p.terminal.PrintSystemOutput(fn)
 }
 
 func (p *Prompt) readLine() (string, error) {

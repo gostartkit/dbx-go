@@ -104,12 +104,15 @@ func (b *cliBuilder) buildApp() *cmd.App {
 	cli.Long = "dbx is a lightweight MySQL shell with shared CLI and REPL commands."
 	if b.mode == ModeCLI {
 		cli.SetFlags = b.setGlobalFlags
+		cli.EnableREPL()
+		cli.ConfigureREPL(func(cfg *cmd.REPLConfig) {
+			cfg.Driver = applicationREPLDriver{builder: b}
+		})
 	}
 	cli.SetRootCommand(&cmd.Command{
 		UsageLine: "dbx [flags] [command]",
 		Short:     cli.Short,
 		Long:      helpLong(""),
-		Run:       b.runRoot,
 	})
 	cli.AddCommands(
 		b.connectCommand(),
@@ -124,6 +127,25 @@ func (b *cliBuilder) buildApp() *cmd.App {
 		b.exitCommand(),
 	)
 	return cli
+}
+
+type applicationREPLDriver struct {
+	builder *cliBuilder
+}
+
+func (d applicationREPLDriver) Run(ctx context.Context, _ *cmd.REPL) error {
+	if d.builder == nil {
+		return fmt.Errorf("repl builder is not configured")
+	}
+
+	application, err := d.builder.newApplication()
+	if err != nil {
+		return err
+	}
+	defer application.Close()
+
+	d.builder.prepareApplication(application)
+	return application.Run(ctx)
 }
 
 func (b *cliBuilder) syncREPLGlobals(application *Application) {
@@ -143,20 +165,6 @@ func (b *cliBuilder) setGlobalFlags(f *cmd.FlagSet) {
 	f.SetEnum("format", "text", "json")
 }
 
-func (b *cliBuilder) runRoot(ctx context.Context, root *cmd.Command, args []string) error {
-	if b.mode == ModeREPL {
-		return nil
-	}
-	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
-	if err != nil {
-		return err
-	}
-	defer application.Close()
-
-	application.dryRun = b.globals.DryRun
-	return application.Run(ctx)
-}
-
 func (b *cliBuilder) positionalsForMode(cli []cmd.PositionalArg, repl []cmd.PositionalArg) []cmd.PositionalArg {
 	if b.mode == ModeREPL {
 		return repl
@@ -169,17 +177,17 @@ func (b *cliBuilder) withApplication(ctx context.Context, fn func(application *A
 		if b.application == nil {
 			return fmt.Errorf("repl application is not configured")
 		}
-		b.syncREPLGlobals(b.application)
+		b.prepareApplication(b.application)
 		return fn(b.application)
 	}
 
-	application, err := NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
+	application, err := b.newApplication()
 	if err != nil {
 		return err
 	}
 	defer application.Close()
 
-	application.dryRun = b.globals.DryRun
+	b.prepareApplication(application)
 	err = fn(application)
 	if err != nil && strings.EqualFold(b.globals.Format, "json") && !util.IsOutputHandled(err) {
 		if writeErr := b.writeOutput(&ErrorEnvelope{
@@ -207,6 +215,18 @@ func (b *cliBuilder) applicationOptions() Options {
 	options := b.options
 	options.ConfigDir = b.globals.ConfigDir
 	return options
+}
+
+func (b *cliBuilder) newApplication() (*Application, error) {
+	return NewWithOptions(b.in, b.out, b.err, b.applicationOptions())
+}
+
+func (b *cliBuilder) prepareApplication(application *Application) {
+	if application == nil {
+		return
+	}
+	b.syncREPLGlobals(application)
+	application.dryRun = b.globals.DryRun
 }
 
 func (b *cliBuilder) writeOutput(value any, text func() error) error {

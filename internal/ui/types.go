@@ -10,7 +10,6 @@ type Suggestion = editor.Suggestion
 type CompletionRequest = editor.CompletionRequest
 type CompletionResult = editor.CompletionResult
 type CompletionEdit = editor.CompletionEdit
-type Completer = editor.Completer
 type CommandContext = commandlang.CommandContext
 type CommandToken = commandlang.Token
 type Program = commandlang.Program

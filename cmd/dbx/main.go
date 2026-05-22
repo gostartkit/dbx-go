@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/app"
 	"pkg.gostartkit.com/dbx/internal/util"
 )
@@ -18,7 +19,12 @@ func main() {
 
 	cli := app.NewCommandApp(os.Stdin, os.Stdout, os.Stderr)
 
-	if err := cli.Run(ctx, os.Args[1:]); err != nil {
+	if err := cli.RunWith(ctx, cmd.AutoRuntime{
+		Args: os.Args[1:],
+		In:   os.Stdin,
+		Out:  os.Stdout,
+		Err:  os.Stderr,
+	}); err != nil {
 		if errors.Is(err, context.Canceled) {
 			return
 		}

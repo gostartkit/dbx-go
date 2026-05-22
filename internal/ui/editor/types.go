@@ -1,13 +1,10 @@
 package editor
 
 import (
-	"errors"
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/commandlang"
 )
-
-var ErrInputCanceled = errors.New("input canceled")
 
 type Position struct {
 	Line   int
@@ -131,35 +128,6 @@ func (r CompletionRequest) CurrentLineSuffix() string {
 	line := []rune(r.CurrentLine())
 	cursor := clamp(r.Cursor.Column, 0, len(line))
 	return string(line[cursor:])
-}
-
-type Completer func(request CompletionRequest) Completion
-
-type KeyType int
-
-const (
-	KeyIgnored KeyType = iota
-	KeyRune
-	KeyEnter
-	KeyTab
-	KeyBackspace
-	KeyDelete
-	KeyLeft
-	KeyRight
-	KeyUp
-	KeyDown
-	KeyHome
-	KeyEnd
-	KeyCtrlA
-	KeyCtrlC
-	KeyCtrlD
-	KeyCtrlE
-	KeyAlt
-)
-
-type KeyEvent struct {
-	Type KeyType
-	Rune rune
 }
 
 func clamp(value int, min int, max int) int {

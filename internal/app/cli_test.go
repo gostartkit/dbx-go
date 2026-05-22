@@ -1133,6 +1133,49 @@ func TestCLIHelpRootCommandHasOutput(t *testing.T) {
 	}
 }
 
+func TestCLIAutoRuntimeNoArgsShowsUsageWithoutTTY(t *testing.T) {
+	t.Parallel()
+
+	app, stdout, stderr := newCLIApp(t, "", t.TempDir())
+	err := app.RunWith(context.Background(), cmd.AutoRuntime{
+		In:  strings.NewReader(""),
+		Out: stdout,
+		Err: stderr,
+	})
+	if err != nil {
+		t.Fatalf("RunWith returned error: %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage:") {
+		t.Fatalf("expected usage in stderr, got %q", stderr.String())
+	}
+}
+
+func TestCLIReplCommandRunsREPLWithCmdRuntime(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	app, stdout, stderr := newCLIAppWithOptions(t, "quit\n", Options{ConfigDir: root})
+
+	if err := app.Run(context.Background(), []string{"--config-dir", root, "repl"}); err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "dbx> ") {
+		t.Fatalf("expected repl prompt in stdout, got %q", stdout.String())
+	}
+
+	store := config.NewStore(root)
+	history, err := store.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory returned error: %v", err)
+	}
+	if len(history) != 1 || history[0] != "quit" {
+		t.Fatalf("history = %#v, want [quit]", history)
+	}
+}
+
 func TestCLIJSONErrorIncludesCode(t *testing.T) {
 	t.Parallel()
 

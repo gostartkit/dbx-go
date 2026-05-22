@@ -15,12 +15,6 @@ import (
 
 func (a *Application) handleLine(ctx context.Context, line string) (bool, error) {
 	line = strings.TrimSpace(line)
-	if line != "" {
-		if err := a.recordHistory(line); err != nil {
-			a.prompt.Printf("Warning: %v\n", err)
-		}
-	}
-
 	if line == "" {
 		return false, nil
 	}
