@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"pkg.gostartkit.com/cmd"
+	"pkg.gostartkit.com/dbx/internal/commandmeta"
 )
 
 func TestRootCommandSetMatchesShellSurface(t *testing.T) {
@@ -184,6 +186,40 @@ func TestCLIAndREPLShareCommandTree(t *testing.T) {
 	for path := range cliCommands {
 		if _, ok := replCommands[path]; !ok {
 			t.Fatalf("repl tree missing cli command path %q", path)
+		}
+	}
+}
+
+func TestVisibleManifestMatchesREPLCommandTree(t *testing.T) {
+	t.Parallel()
+
+	spec := (&cliBuilder{
+		mode:    ModeREPL,
+		globals: &cliGlobals{Format: "text"},
+	}).buildApp().Spec()
+
+	have := map[string]struct{}{}
+	for _, command := range spec.Commands {
+		collectSpecPaths(have, "", command)
+	}
+
+	want := map[string]struct{}{}
+	for _, command := range commandmeta.FlattenCommands(commandmeta.DefaultManifest()) {
+		if command.Command == nil || command.Hidden {
+			continue
+		}
+		path := normalizeHelpTopic(strings.Join(command.Path, " "))
+		if path != "" {
+			want[path] = struct{}{}
+		}
+	}
+
+	if len(have) != len(want) {
+		t.Fatalf("visible repl/manifest path counts differ: %d vs %d", len(have), len(want))
+	}
+	for path := range want {
+		if _, ok := have[path]; !ok {
+			t.Fatalf("repl tree missing manifest command path %q", path)
 		}
 	}
 }

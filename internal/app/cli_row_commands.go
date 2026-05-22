@@ -15,15 +15,14 @@ type rowLimitFlags struct {
 }
 
 func (b *cliBuilder) showRowsCommand() *cmd.Command {
-	flags := &rowLimitFlags{limit: defaultRowInspectionLimit}
-	return &cmd.Command{
-		Name:        "rows",
-		UsageLine:   "dbx show rows <table> [--limit n]",
-		Short:       "Show rows from a table",
-		Long:        helpLong("show rows"),
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
+	flags := &rowLimitFlags{limit: manifestFlagDefaultInt("show rows", "limit", defaultRowInspectionLimit)}
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show rows",
+		UsageFallback: "dbx show rows <table> [--limit n]",
+		ShortFallback: "Show rows from a table",
+		Positionals:   b.manifestPositionals("show rows", []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}}),
 		SetFlags: func(f *cmd.FlagSet) {
-			f.IntVar(&flags.limit, "limit", defaultRowInspectionLimit, "row limit", "")
+			b.bindManifestIntFlag(f, "show rows", "limit", &flags.limit, defaultRowInspectionLimit, "row limit")
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
@@ -33,7 +32,7 @@ func (b *cliBuilder) showRowsCommand() *cmd.Command {
 				return b.runRowPreview(ctx, application, "show rows", "peek rows", args[0], flags.limit, false, meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) runRowPreview(ctx context.Context, application *Application, command string, templateCommand string, table string, limit int, random bool, meta *auditMetadata) error {

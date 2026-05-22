@@ -175,18 +175,18 @@ func (a *Application) handleConnect(ctx context.Context) error {
 
 func (a *Application) handleConnections(ctx context.Context) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show connections"}, func(meta *auditMetadata) error {
-		connections, err := a.store.ListConnections()
+		result, err := a.listConnectionSummaries()
 		if err != nil {
 			return util.WrapLayer("config", "list configured connections", err)
 		}
-		if len(connections) == 0 {
+		if len(result.Connections) == 0 {
 			a.prompt.Println("No configured connections found.")
 			return nil
 		}
 
 		a.prompt.Println("Configured connections:")
-		for _, connection := range connections {
-			a.prompt.Printf("  - %s (%s %s %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address())
+		for _, connection := range result.Connections {
+			a.prompt.Println(formatConnectionSummaryLine(connection))
 		}
 		return nil
 	})

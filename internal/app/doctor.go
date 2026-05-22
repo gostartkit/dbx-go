@@ -91,15 +91,15 @@ func (a *Application) resolveConnectionNameForSelection(ctx context.Context, nam
 		return name, nil
 	}
 
-	connections, err := a.store.ListConnections()
+	records, err := a.store.ListConnectionRecords()
 	if err != nil {
 		return "", util.WrapLayer("config", "list configured connections", err)
 	}
-	if len(connections) == 0 {
+	if len(records) == 0 {
 		return "", util.WrapLayer("config", action, fmt.Errorf("no saved connections; run create connection <name>"))
 	}
 
-	selected, err := a.promptForConnectionSelection(ctx, connections)
+	selected, err := a.promptForConnectionRecordSelection(ctx, records)
 	if err != nil {
 		return "", err
 	}

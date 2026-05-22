@@ -9,12 +9,11 @@ import (
 )
 
 func (b *cliBuilder) showColumnsCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:        "columns",
-		UsageLine:   "dbx show columns <table>",
-		Short:       "Show columns for a table in the selected database",
-		Long:        helpLong("show columns"),
-		Positionals: []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}},
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show columns",
+		UsageFallback: "dbx show columns <table>",
+		ShortFallback: "Show columns for a table in the selected database",
+		Positionals:   b.manifestPositionals("show columns", []cmd.PositionalArg{{Name: "table", Usage: "table name", Required: true, Completion: b.completeTables}}),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				return b.application.handleShowColumns(ctx, args[0])
@@ -23,7 +22,7 @@ func (b *cliBuilder) showColumnsCommand() *cmd.Command {
 				return b.runShowColumns(ctx, application, args[0], meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) runShowColumns(ctx context.Context, application *Application, table string, meta *auditMetadata) error {

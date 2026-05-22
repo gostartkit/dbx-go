@@ -140,54 +140,14 @@ func (a *Application) deleteConnectionByName(name string) error {
 
 func (a *Application) handleConnectionShow(ctx context.Context, name string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show connection", Connection: name}, func(meta *auditMetadata) error {
-		cfg, err := a.store.LoadConnection(name)
+		result, err := a.showConnection(name)
 		if err != nil {
-			return util.WrapLayer("config", "load connection "+name, err)
+			return err
 		}
-		meta.Mode = cfg.Mode
-
-		a.prompt.Printf("Name: %s\n", cfg.Name)
-		a.prompt.Printf("Driver: %s\n", cfg.Driver)
-		a.prompt.Printf("Mode: %s\n", cfg.Mode)
-		a.prompt.Println()
-		a.prompt.Printf("Host: %s\n", cfg.Address())
-		a.prompt.Printf("User: %s\n", cfg.User)
-		a.prompt.Printf("Connect timeout: %s\n", cfg.ConnectTimeout())
-		a.prompt.Printf("Query timeout: %s\n", cfg.QueryTimeout())
-		a.prompt.Println()
-		a.prompt.Println("Password:")
-		switch {
-		case cfg.PasswordPrompt:
-			a.prompt.Println("  prompt every time")
-		case strings.TrimSpace(cfg.PasswordEnv) != "":
-			a.prompt.Printf("  env: %s\n", cfg.PasswordEnv)
-		case strings.TrimSpace(cfg.Password) != "":
-			a.prompt.Println("  saved: [redacted]")
-		default:
-			a.prompt.Println("  not configured")
+		meta.Mode = result.Mode
+		for _, line := range formatRedactedConnectionLines(result) {
+			a.prompt.Println(line)
 		}
-
-		if cfg.Proxy != nil && strings.TrimSpace(cfg.Proxy.URL) != "" {
-			a.prompt.Println()
-			a.prompt.Println("Proxy:")
-			a.prompt.Printf("  url: %s\n", config.RedactProxyURL(cfg.Proxy.URL))
-		}
-
-		if cfg.UsesSSH() && cfg.SSH != nil {
-			a.prompt.Println()
-			a.prompt.Println("SSH:")
-			a.prompt.Printf("  host: %s:%d\n", cfg.SSH.Host, cfg.SSH.Port)
-			a.prompt.Printf("  user: %s\n", cfg.SSH.User)
-			if strings.TrimSpace(cfg.SSH.PrivateKey) != "" {
-				a.prompt.Printf("  private_key: %s\n", cfg.SSH.PrivateKey)
-			}
-			if strings.TrimSpace(cfg.SSH.PasswordEnv) != "" {
-				a.prompt.Printf("  password_env: %s\n", cfg.SSH.PasswordEnv)
-			} else if strings.TrimSpace(cfg.SSH.Password) != "" {
-				a.prompt.Println("  password: [redacted]")
-			}
-		}
-
 		return nil
 	})
 }

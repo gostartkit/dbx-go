@@ -61,6 +61,120 @@ func TestCLIConnectionCreateGeneratesConfig(t *testing.T) {
 	}
 }
 
+func TestCLIShowConnectionJSONIncludesInvalidStatus(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidPath := store.ConnectionConfigPath("broken")
+	if err := os.MkdirAll(filepath.Dir(invalidPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invalidPath, []byte(`{"name":"broken","driver":"mysql","mode":"direct","host":"127.0.0.1","port":70000,"user":"root"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"show", "connection", "broken", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	var result RedactedConnection
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if result.Name != "broken" || result.Valid {
+		t.Fatalf("unexpected invalid connection result: %+v", result)
+	}
+	if !strings.Contains(result.Issue, "port must be greater than zero") {
+		t.Fatalf("unexpected issue: %+v", result)
+	}
+}
+
+func TestCLIShowConnectionJSONHandlesParseErrors(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidPath := store.ConnectionConfigPath("broken")
+	if err := os.MkdirAll(filepath.Dir(invalidPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invalidPath, []byte(`{"name":"broken",`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"show", "connection", "broken", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	var result RedactedConnection
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if result.Name != "broken" || result.Valid {
+		t.Fatalf("unexpected invalid connection result: %+v", result)
+	}
+	if !strings.Contains(result.Issue, "unexpected end of JSON input") {
+		t.Fatalf("unexpected issue: %+v", result)
+	}
+}
+
+func TestCLIShowConnectionsJSONIncludesInvalidConnections(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidPath := store.ConnectionConfigPath("broken")
+	if err := os.MkdirAll(filepath.Dir(invalidPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invalidPath, []byte(`{"name":"broken","driver":"mysql","mode":"direct","host":"127.0.0.1","port":70000,"user":"root"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, stdout, stderr := newCLIApp(t, "", root)
+	err := app.Run(context.Background(), []string{"show", "connections", "--format", "json", "--config-dir", root})
+	if err != nil {
+		t.Fatalf("Run returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	var result ConnectionsResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v\noutput=%s", err, stdout.String())
+	}
+	if len(result.Connections) != 2 {
+		t.Fatalf("unexpected connections: %+v", result.Connections)
+	}
+	if result.Connections[0].Name != "broken" || result.Connections[0].Valid {
+		t.Fatalf("unexpected invalid connection summary: %+v", result.Connections[0])
+	}
+	if !strings.Contains(result.Connections[0].Issue, "port must be greater than zero") {
+		t.Fatalf("unexpected invalid connection issue: %+v", result.Connections[0])
+	}
+	if result.Connections[1].Name != "prod" || !result.Connections[1].Valid {
+		t.Fatalf("unexpected valid connection summary: %+v", result.Connections[1])
+	}
+}
+
 func TestCLIConnectionCreateProxySSHGeneratesConfig(t *testing.T) {
 	t.Parallel()
 

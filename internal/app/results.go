@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
@@ -132,6 +133,8 @@ type ConnectionSummary struct {
 	Driver   string `json:"driver"`
 	Mode     string `json:"mode"`
 	Address  string `json:"address"`
+	Valid    bool   `json:"valid"`
+	Issue    string `json:"issue,omitempty"`
 	ViaProxy string `json:"via_proxy,omitempty"`
 	ViaSSH   string `json:"via_ssh,omitempty"`
 }
@@ -250,6 +253,8 @@ type RedactedConnection struct {
 	Host           string               `json:"host"`
 	Port           int                  `json:"port"`
 	User           string               `json:"user"`
+	Valid          bool                 `json:"valid"`
+	Issue          string               `json:"issue,omitempty"`
 	ConnectTimeout int                  `json:"connect_timeout_seconds"`
 	QueryTimeout   int                  `json:"query_timeout_seconds"`
 	Password       RedactedPassword     `json:"password"`
@@ -296,6 +301,7 @@ func summarizeConnection(cfg config.ConnectionConfig) ConnectionSummary {
 		Driver:  cfg.Driver,
 		Mode:    cfg.Mode,
 		Address: cfg.Address(),
+		Valid:   true,
 	}
 	if cfg.Mode == "proxy" || cfg.Mode == "proxy-ssh" {
 		if cfg.Proxy != nil {
@@ -313,6 +319,67 @@ func summarizeConnection(cfg config.ConnectionConfig) ConnectionSummary {
 	return summary
 }
 
+func summarizeConnectionRecord(record config.ConnectionRecord) ConnectionSummary {
+	if record.Config == nil {
+		return ConnectionSummary{
+			Name:  record.Name,
+			Valid: false,
+			Issue: connectionIssueText(record.Error),
+		}
+	}
+
+	summary := summarizeConnection(*record.Config)
+	if record.Error != nil {
+		summary.Valid = false
+		summary.Issue = connectionIssueText(record.Error)
+	}
+	return summary
+}
+
+func redactConnectionRecord(record config.ConnectionRecord) *RedactedConnection {
+	if record.Config == nil {
+		return &RedactedConnection{
+			Name:  record.Name,
+			Valid: false,
+			Issue: connectionIssueText(record.Error),
+		}
+	}
+
+	result := redactConnection(record.Config)
+	if record.Error != nil {
+		result.Valid = false
+		result.Issue = connectionIssueText(record.Error)
+	}
+	return result
+}
+
+func formatConnectionSummaryLine(connection ConnectionSummary) string {
+	if !connection.Valid {
+		issue := strings.TrimSpace(connection.Issue)
+		if issue == "" {
+			issue = "invalid configuration"
+		}
+		return fmt.Sprintf("  - %s [invalid] (%s)", emptyValue(connection.Name, "<unknown>"), issue)
+	}
+	if connection.ViaProxy != "" && connection.ViaSSH != "" {
+		return fmt.Sprintf("  - %s (%s %s %s via %s -> %s)", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaProxy, connection.ViaSSH)
+	}
+	if connection.ViaProxy != "" {
+		return fmt.Sprintf("  - %s (%s %s %s via %s)", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaProxy)
+	}
+	if connection.ViaSSH != "" {
+		return fmt.Sprintf("  - %s (%s %s %s via %s)", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaSSH)
+	}
+	return fmt.Sprintf("  - %s (%s %s %s)", connection.Name, connection.Driver, connection.Mode, connection.Address)
+}
+
+func connectionIssueText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return strings.TrimSpace(err.Error())
+}
+
 func redactConnection(cfg *config.ConnectionConfig) *RedactedConnection {
 	if cfg == nil {
 		return nil
@@ -327,6 +394,7 @@ func redactConnection(cfg *config.ConnectionConfig) *RedactedConnection {
 		Host:           cfg.Host,
 		Port:           cfg.Port,
 		User:           cfg.User,
+		Valid:          true,
 		ConnectTimeout: cfg.Timeout.ConnectSeconds,
 		QueryTimeout:   cfg.Timeout.QuerySeconds,
 		Password:       redactPassword(cfg),
@@ -354,6 +422,75 @@ func redactConnection(cfg *config.ConnectionConfig) *RedactedConnection {
 	}
 
 	return result
+}
+
+func formatRedactedConnectionLines(result *RedactedConnection) []string {
+	if result == nil {
+		return nil
+	}
+
+	lines := []string{
+		"Name: " + result.Name,
+	}
+	if strings.TrimSpace(result.Driver) != "" {
+		lines = append(lines, "Driver: "+result.Driver)
+	}
+	if strings.TrimSpace(result.Mode) != "" {
+		lines = append(lines, "Mode: "+result.Mode)
+	}
+	if !result.Valid {
+		lines = append(lines, "Status: invalid")
+		if strings.TrimSpace(result.Issue) != "" {
+			lines = append(lines, "Issue: "+result.Issue)
+		}
+	}
+	if strings.TrimSpace(result.Host) != "" || result.Port != 0 || strings.TrimSpace(result.User) != "" || result.ConnectTimeout != 0 || result.QueryTimeout != 0 || result.Password.Mode != "" {
+		lines = append(lines, "")
+		if strings.TrimSpace(result.Host) != "" || result.Port != 0 {
+			lines = append(lines, fmt.Sprintf("Host: %s:%d", result.Host, result.Port))
+		}
+		if strings.TrimSpace(result.User) != "" {
+			lines = append(lines, "User: "+result.User)
+		}
+		if result.ConnectTimeout != 0 {
+			lines = append(lines, fmt.Sprintf("Connect timeout: %d", result.ConnectTimeout))
+		}
+		if result.QueryTimeout != 0 {
+			lines = append(lines, fmt.Sprintf("Query timeout: %d", result.QueryTimeout))
+		}
+		lines = append(lines, "")
+		lines = append(lines, "Password:")
+		switch result.Password.Mode {
+		case "env":
+			lines = append(lines, "  env: "+result.Password.Env)
+		case "saved":
+			lines = append(lines, "  saved: "+result.Password.Value)
+		case "prompt":
+			lines = append(lines, "  prompt every time")
+		default:
+			lines = append(lines, "  not configured")
+		}
+	}
+	if result.Proxy != nil {
+		lines = append(lines, "")
+		lines = append(lines, "Proxy:")
+		lines = append(lines, "  url: "+result.Proxy.URL)
+	}
+	if result.SSH != nil {
+		lines = append(lines, "")
+		lines = append(lines, "SSH:")
+		lines = append(lines, fmt.Sprintf("  host: %s:%d", result.SSH.Host, result.SSH.Port))
+		lines = append(lines, "  user: "+result.SSH.User)
+		if result.SSH.PrivateKey != "" {
+			lines = append(lines, "  private_key: "+result.SSH.PrivateKey)
+		}
+		if result.SSH.PasswordEnv != "" {
+			lines = append(lines, "  password_env: "+result.SSH.PasswordEnv)
+		} else if result.SSH.PasswordMode == "saved" {
+			lines = append(lines, "  password: [redacted]")
+		}
+	}
+	return lines
 }
 
 func toSchemaColumnResults(columns []driver.SchemaColumn) []SchemaColumnResult {

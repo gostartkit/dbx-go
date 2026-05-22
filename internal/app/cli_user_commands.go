@@ -28,11 +28,10 @@ type dropUserFlags struct {
 }
 
 func (b *cliBuilder) showUsersCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "users",
-		UsageLine: "dbx show users",
-		Short:     "Show MySQL users",
-		Long:      helpLong("show users"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show users",
+		UsageFallback: "dbx show users",
+		ShortFallback: "Show MySQL users",
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "show users", err)
@@ -44,7 +43,7 @@ func (b *cliBuilder) showUsersCommand() *cmd.Command {
 				return b.runShowUsers(ctx, application, meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) createUserCommand() *cmd.Command {
@@ -52,23 +51,23 @@ func (b *cliBuilder) createUserCommand() *cmd.Command {
 		host:   "%",
 		inputs: inputValues{},
 	}
-	return &cmd.Command{
-		Name:      "user",
-		UsageLine: "dbx create user <name> [flags]",
-		Short:     "Create a MySQL user",
-		Long:      helpLong("create user"),
+	flags.host = manifestFlagDefaultString("create user", "host", flags.host)
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "create user",
+		Name:          "user",
+		UsageFallback: "dbx create user <name> [flags]",
+		ShortFallback: "Create a MySQL user",
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
 			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Completion: b.completeUsers}},
 		),
 		SetFlags: func(f *cmd.FlagSet) {
-			f.StringVar(&flags.template, "template", "", "template name", "")
-			f.StringVar(&flags.host, "host", "%", "MySQL user host", "")
-			f.StringVar(&flags.password, "password", "", "MySQL user password", "")
-			f.StringVar(&flags.passwordEnv, "password-env", "", "environment variable containing the MySQL user password", "")
-			f.BoolVar(&flags.generatePassword, "generate-password", false, "generate a password automatically", "")
-			f.StringVar(&flags.grant, "grant", "", "database grant mode", "")
-			f.SetEnum("grant", "all", "readonly")
+			b.bindManifestStringFlag(f, "create user", "template", &flags.template, "", "template name")
+			b.bindManifestStringFlag(f, "create user", "host", &flags.host, "%", "MySQL user host")
+			b.bindManifestStringFlag(f, "create user", "password", &flags.password, "", "MySQL user password")
+			b.bindManifestStringFlag(f, "create user", "password-env", &flags.passwordEnv, "", "environment variable containing the MySQL user password")
+			b.bindManifestBoolFlag(f, "create user", "generate-password", &flags.generatePassword, false, "generate a password automatically")
+			b.bindManifestStringFlag(f, "create user", "grant", &flags.grant, "", "database grant mode")
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
@@ -83,7 +82,7 @@ func (b *cliBuilder) createUserCommand() *cmd.Command {
 				return b.runCreateUser(ctx, application, args[0], flags, meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) dropUserCommand() *cmd.Command {
@@ -91,18 +90,19 @@ func (b *cliBuilder) dropUserCommand() *cmd.Command {
 		host:   "%",
 		inputs: inputValues{},
 	}
-	return &cmd.Command{
-		Name:      "user",
-		UsageLine: "dbx drop user <name> [flags]",
-		Short:     "Drop a MySQL user",
-		Long:      helpLong("drop user"),
+	flags.host = manifestFlagDefaultString("drop user", "host", flags.host)
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "drop user",
+		Name:          "user",
+		UsageFallback: "dbx drop user <name> [flags]",
+		ShortFallback: "Drop a MySQL user",
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Required: true, Completion: b.completeUsers}},
 			[]cmd.PositionalArg{{Name: "name", Usage: "MySQL username", Completion: b.completeUsers}},
 		),
 		SetFlags: func(f *cmd.FlagSet) {
-			f.StringVar(&flags.template, "template", "", "template name", "")
-			f.StringVar(&flags.host, "host", "%", "MySQL user host", "")
+			b.bindManifestStringFlag(f, "drop user", "template", &flags.template, "", "template name")
+			b.bindManifestStringFlag(f, "drop user", "host", &flags.host, "%", "MySQL user host")
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
@@ -117,7 +117,7 @@ func (b *cliBuilder) dropUserCommand() *cmd.Command {
 				return b.runDropUser(ctx, application, args[0], flags, meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) runShowUsers(ctx context.Context, application *Application, meta *auditMetadata) error {

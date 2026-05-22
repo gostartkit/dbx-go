@@ -30,6 +30,12 @@ type Store struct {
 	auditAppend   *os.File
 }
 
+type ConnectionRecord struct {
+	Name   string
+	Config *ConnectionConfig
+	Error  error
+}
+
 func DefaultRootDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -122,6 +128,17 @@ func (s *Store) SaveSession(session *SessionFile) error {
 }
 
 func (s *Store) LoadConnection(name string) (*ConnectionConfig, error) {
+	cfg, err := s.LoadConnectionUnchecked(name)
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func (s *Store) LoadConnectionUnchecked(name string) (*ConnectionConfig, error) {
 	path := s.ConnectionConfigPath(name)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -133,9 +150,6 @@ func (s *Store) LoadConnection(name string) (*ConnectionConfig, error) {
 		return nil, err
 	}
 	cfg.ApplyDefaults()
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
 	return &cfg, nil
 }
 
@@ -171,31 +185,70 @@ func (s *Store) ConnectionExists(name string) bool {
 }
 
 func (s *Store) ListConnections() ([]ConnectionConfig, error) {
+	records, err := s.ListConnectionRecords()
+	if err != nil {
+		return nil, err
+	}
+
+	connections := make([]ConnectionConfig, 0, len(records))
+	for _, record := range records {
+		if record.Error != nil || record.Config == nil {
+			continue
+		}
+		connections = append(connections, *record.Config)
+	}
+	return connections, nil
+}
+
+func (s *Store) LoadConnectionRecord(name string) (*ConnectionRecord, error) {
+	path := s.ConnectionConfigPath(name)
+	if _, err := os.Stat(path); err != nil {
+		return nil, err
+	}
+
+	record := &ConnectionRecord{Name: name}
+	cfg, err := s.LoadConnectionUnchecked(name)
+	if cfg != nil {
+		record.Config = cfg
+		if strings.TrimSpace(cfg.Name) != "" {
+			record.Name = cfg.Name
+		}
+		if validateErr := cfg.Validate(); validateErr != nil {
+			record.Error = validateErr
+		}
+		return record, nil
+	}
+
+	record.Error = err
+	return record, nil
+}
+
+func (s *Store) ListConnectionRecords() ([]ConnectionRecord, error) {
 	entries, err := os.ReadDir(s.RootDir)
 	if err != nil {
 		return nil, err
 	}
 
-	connections := make([]ConnectionConfig, 0)
+	records := make([]ConnectionRecord, 0)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		if strings.HasPrefix(entry.Name(), ".") || entry.Name() == "templates" {
+		if strings.HasPrefix(entry.Name(), ".") || entry.Name() == "templates" || entry.Name() == "logs" {
 			continue
 		}
 
-		cfg, err := s.LoadConnection(entry.Name())
+		record, err := s.LoadConnectionRecord(entry.Name())
 		if err != nil {
-			continue
+			return nil, err
 		}
-		connections = append(connections, *cfg)
+		records = append(records, *record)
 	}
 
-	sort.Slice(connections, func(i, j int) bool {
-		return connections[i].Name < connections[j].Name
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].Name < records[j].Name
 	})
-	return connections, nil
+	return records, nil
 }
 
 func (s *Store) LoadHistory() ([]string, error) {

@@ -1,12 +1,11 @@
 package app
 
 import (
-	"io"
 	"slices"
 	"strings"
 	"sync"
 
-	"pkg.gostartkit.com/cmd"
+	"pkg.gostartkit.com/dbx/internal/commandmeta"
 )
 
 type CommandSpec struct {
@@ -36,38 +35,6 @@ var (
 
 func replCommandSpecs() []CommandSpec {
 	return replCommandSpecCatalog().specs
-}
-
-func appendCommandSpecs(dst *[]CommandSpec, spec cmd.CommandSpec) {
-	path := normalizeHelpTopic(strings.Join(spec.Path, " "))
-	*dst = append(*dst, CommandSpec{
-		Path:        path,
-		UsageLine:   spec.UsageLine,
-		Description: spec.Short,
-		Category:    "command",
-		Hidden:      spec.Hidden,
-	})
-
-	parentPath := normalizeHelpTopic(strings.Join(spec.Path[:max(0, len(spec.Path)-1)], " "))
-	for _, alias := range spec.Aliases {
-		aliasPath := normalizeHelpTopic(alias)
-		if parentPath != "" && aliasPath != "" {
-			aliasPath = parentPath + " " + aliasPath
-		} else if aliasPath == "" {
-			aliasPath = parentPath
-		}
-		*dst = append(*dst, CommandSpec{
-			Path:        aliasPath,
-			UsageLine:   spec.UsageLine,
-			Description: spec.Short,
-			Category:    "alias",
-			Hidden:      spec.Hidden,
-		})
-	}
-
-	for _, subCommand := range spec.SubCommands {
-		appendCommandSpecs(dst, subCommand)
-	}
 }
 
 func commandSpecByPath(path string) (CommandSpec, bool) {
@@ -107,16 +74,16 @@ func helpCompletionTopics() []Suggestion {
 
 func replCommandSpecCatalog() *commandSpecCatalog {
 	replCommandSpecCatalogOnce.Do(func() {
-		app := (&cliBuilder{
-			mode:    ModeREPL,
-			out:     io.Discard,
-			err:     io.Discard,
-			globals: &cliGlobals{Format: "text"},
-		}).buildApp()
-
 		specs := make([]CommandSpec, 0, 64)
-		for _, command := range app.SpecFor(cmd.SurfaceREPL).Commands {
-			appendCommandSpecs(&specs, command)
+		for _, command := range commandmeta.FlattenCommands(commandmeta.DefaultManifest()) {
+			path := normalizeHelpTopic(strings.Join(command.Path, " "))
+			specs = append(specs, CommandSpec{
+				Path:        path,
+				UsageLine:   command.Command.UsageLine,
+				Description: command.Command.Description,
+				Category:    commandCategory(command.Alias),
+				Hidden:      command.Hidden,
+			})
 		}
 
 		indexed := make([]indexedCommandSpec, 0, len(specs))
@@ -155,4 +122,11 @@ func replCommandSpecCatalog() *commandSpecCatalog {
 		}
 	})
 	return &replCommandSpecCatalogData
+}
+
+func commandCategory(alias bool) string {
+	if alias {
+		return "alias"
+	}
+	return "command"
 }

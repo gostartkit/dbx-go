@@ -8,27 +8,27 @@ import (
 )
 
 func (a *Application) listConnectionSummaries() (*ConnectionsResult, error) {
-	connections, err := a.store.ListConnections()
+	records, err := a.store.ListConnectionRecords()
 	if err != nil {
 		return nil, util.WrapLayer("config", "list configured connections", err)
 	}
 
 	result := &ConnectionsResult{
 		OK:          true,
-		Connections: make([]ConnectionSummary, 0, len(connections)),
+		Connections: make([]ConnectionSummary, 0, len(records)),
 	}
-	for _, connection := range connections {
-		result.Connections = append(result.Connections, summarizeConnection(connection))
+	for _, record := range records {
+		result.Connections = append(result.Connections, summarizeConnectionRecord(record))
 	}
 	return result, nil
 }
 
 func (a *Application) showConnection(name string) (*RedactedConnection, error) {
-	cfg, err := a.store.LoadConnection(name)
+	record, err := a.store.LoadConnectionRecord(name)
 	if err != nil {
 		return nil, util.WrapLayer("config", "load connection "+name, err)
 	}
-	return redactConnection(cfg), nil
+	return redactConnectionRecord(*record), nil
 }
 
 func (a *Application) connectNonInteractive(ctx context.Context, name string) (*ConnectResult, error) {

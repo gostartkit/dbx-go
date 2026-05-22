@@ -141,6 +141,15 @@ func (b *cliBuilder) completeTemplateTags(cmd.CompletionContext) []string {
 	return b.resolver.TemplateTags()
 }
 
+func (b *cliBuilder) completeHelpTopics(cmd.CompletionContext) []string {
+	topics := helpCompletionTopics()
+	results := make([]string, 0, len(topics))
+	for _, topic := range topics {
+		results = append(results, topic.Value)
+	}
+	return results
+}
+
 func (b *cliBuilder) completeVariables(cmd.CompletionContext) []string {
 	return []string{"max_connections", "wait_timeout", "innodb_buffer_pool_size"}
 }

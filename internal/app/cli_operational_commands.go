@@ -11,11 +11,10 @@ import (
 )
 
 func (b *cliBuilder) showTablesCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "tables",
-		UsageLine: "dbx show tables",
-		Short:     "List tables in the selected database",
-		Long:      helpLong("show tables"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show tables",
+		UsageFallback: "dbx show tables",
+		ShortFallback: "List tables in the selected database",
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				if err := b.requireNoArgs(args); err != nil {
@@ -30,15 +29,14 @@ func (b *cliBuilder) showTablesCommand() *cmd.Command {
 				return b.runShowTables(ctx, application, meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) showContextCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "context",
-		UsageLine: "dbx show context",
-		Short:     "Show the current operational context",
-		Long:      helpLong("show context"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show context",
+		UsageFallback: "dbx show context",
+		ShortFallback: "Show the current operational context",
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				if err := b.requireNoArgs(args); err != nil {
@@ -71,7 +69,7 @@ func (b *cliBuilder) showContextCommand() *cmd.Command {
 				})
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) runShowTables(ctx context.Context, application *Application, meta *auditMetadata) error {

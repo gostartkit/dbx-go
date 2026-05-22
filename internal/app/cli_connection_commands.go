@@ -33,12 +33,12 @@ type connectionCreateFlags struct {
 }
 
 func (b *cliBuilder) connectCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:        "connect",
-		UsageLine:   "dbx connect <name>",
-		Short:       "Connect to a saved connection",
-		Long:        helpLong("connect"),
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}},
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:                "connect",
+		UsageFallback:       "dbx connect <name>",
+		PreferFallbackUsage: true,
+		ShortFallback:       "Connect to a saved connection",
+		Positionals:         b.manifestPositionals("connect", []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Completion: b.completeConnections}}),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				switch len(args) {
@@ -74,15 +74,17 @@ func (b *cliBuilder) connectCommand() *cmd.Command {
 				})
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) connectionsCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "connections",
-		UsageLine: "dbx connections",
-		Short:     "List saved connections",
-		Long:      helpLong("connections"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:                "show connections",
+		Name:                "connections",
+		UsageFallback:       "dbx connections",
+		PreferFallbackUsage: true,
+		ShortFallback:       "List saved connections",
+		Long:                helpLong("connections"),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				if err := b.requireNoArgs(args); err != nil {
@@ -105,65 +107,60 @@ func (b *cliBuilder) connectionsCommand() *cmd.Command {
 					}
 					fmt.Fprintln(b.out, "Configured connections:")
 					for _, connection := range result.Connections {
-						if connection.ViaProxy != "" && connection.ViaSSH != "" {
-							fmt.Fprintf(b.out, "  - %s (%s %s %s via %s -> %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaProxy, connection.ViaSSH)
-							continue
-						}
-						if connection.ViaProxy != "" {
-							fmt.Fprintf(b.out, "  - %s (%s %s %s via %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaProxy)
-							continue
-						}
-						if connection.ViaSSH != "" {
-							fmt.Fprintf(b.out, "  - %s (%s %s %s via %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address, connection.ViaSSH)
-							continue
-						}
-						fmt.Fprintf(b.out, "  - %s (%s %s %s)\n", connection.Name, connection.Driver, connection.Mode, connection.Address)
+						fmt.Fprintln(b.out, formatConnectionSummaryLine(connection))
 					}
 					return nil
 				})
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) showConnectionsCommand() *cmd.Command {
-	command := b.connectionsCommand()
-	command.Name = "connections"
-	command.UsageLine = "dbx show connections"
-	command.Short = "Show saved connections"
-	return command
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show connections",
+		Name:          "connections",
+		UsageFallback: "dbx show connections",
+		ShortFallback: "Show saved connections",
+		Long:          helpLong("connections"),
+		Run:           b.connectionsCommand().Run,
+	})
 }
 
 func (b *cliBuilder) showConnectionCommand() *cmd.Command {
 	command := b.connectionShowCommand()
-	command.Name = "connection"
-	command.UsageLine = "dbx show connection <name>"
-	command.Short = "Show a saved connection"
-	return command
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show connection",
+		Name:          "connection",
+		UsageFallback: "dbx show connection <name>",
+		ShortFallback: "Show a saved connection",
+		Long:          command.Long,
+		Positionals:   append([]cmd.PositionalArg(nil), command.Positionals...),
+		Run:           command.Run,
+	})
 }
 
 func (b *cliBuilder) createConnectionCommand() *cmd.Command {
 	command := b.connectionCreateCommand()
 	command.Name = "connection"
 	command.UsageLine = "dbx create connection <name> [flags]"
-	command.Short = "Create a saved connection"
+	command.Short = manifestShort("create connection", "Create a saved connection")
 	return command
 }
 
 func (b *cliBuilder) dropConnectionCommand() *cmd.Command {
 	command := b.connectionDeleteCommand()
 	command.Name = "connection"
-	command.UsageLine = "dbx drop connection <name> [flags]"
-	command.Short = "Drop a saved connection"
+	command.UsageLine = manifestUsageLine("drop connection", "dbx drop connection <name> [flags]")
+	command.Short = manifestShort("drop connection", "Drop a saved connection")
 	return command
 }
 
 func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "doctor",
-		UsageLine: "dbx doctor",
-		Short:     "Inspect the selected connection statically",
-		Long:      helpLong("doctor"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "doctor",
+		UsageFallback: "dbx doctor",
+		ShortFallback: "Inspect the selected connection statically",
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if err := b.requireNoArgs(args); err != nil {
 				return util.WrapLayer("validation", "doctor", err)
@@ -207,7 +204,7 @@ func (b *cliBuilder) doctorGroupCommand() *cmd.Command {
 				return nil
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
@@ -215,7 +212,7 @@ func (b *cliBuilder) connectionCreateCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:      "create",
 		UsageLine: "dbx connection create <name> [flags]",
-		Short:     "Create a saved connection",
+		Short:     manifestShort("connection create", "Create a saved connection"),
 		Long:      helpLong("connection create"),
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
@@ -314,9 +311,9 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "delete",
 		UsageLine:   "dbx connection delete <name> [flags]",
-		Short:       "Delete a saved connection",
+		Short:       manifestShort("connection delete", "Delete a saved connection"),
 		Long:        helpLong("connection delete"),
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
+		Positionals: b.manifestPositionals("connection delete", []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}}),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				return b.application.handleConnectionDelete(ctx, args[0])
@@ -343,10 +340,10 @@ func (b *cliBuilder) connectionDeleteCommand() *cmd.Command {
 func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 	return &cmd.Command{
 		Name:        "show",
-		UsageLine:   "dbx connection show <name>",
-		Short:       "Show a saved connection",
+		UsageLine:   manifestUsageLine("connection show", "dbx connection show <name>"),
+		Short:       manifestShort("connection show", "Show a saved connection"),
 		Long:        helpLong("connection show"),
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}},
+		Positionals: b.manifestPositionals("connection show", []cmd.PositionalArg{{Name: "name", Usage: "saved connection name", Required: true, Completion: b.completeConnections}}),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				return b.application.handleConnectionShow(ctx, args[0])
@@ -358,42 +355,8 @@ func (b *cliBuilder) connectionShowCommand() *cmd.Command {
 				}
 				meta.Mode = result.Mode
 				return b.writeOutput(result, func() error {
-					fmt.Fprintf(b.out, "Name: %s\n", result.Name)
-					fmt.Fprintf(b.out, "Driver: %s\n", result.Driver)
-					fmt.Fprintf(b.out, "Mode: %s\n\n", result.Mode)
-					fmt.Fprintf(b.out, "Host: %s:%d\n", result.Host, result.Port)
-					fmt.Fprintf(b.out, "User: %s\n", result.User)
-					fmt.Fprintf(b.out, "Connect timeout: %d\n", result.ConnectTimeout)
-					fmt.Fprintf(b.out, "Query timeout: %d\n\n", result.QueryTimeout)
-					fmt.Fprintln(b.out, "Password:")
-					switch result.Password.Mode {
-					case "env":
-						fmt.Fprintf(b.out, "  env: %s\n", result.Password.Env)
-					case "saved":
-						fmt.Fprintf(b.out, "  saved: %s\n", result.Password.Value)
-					case "prompt":
-						fmt.Fprintln(b.out, "  prompt every time")
-					default:
-						fmt.Fprintln(b.out, "  not configured")
-					}
-					if result.Proxy != nil {
-						fmt.Fprintln(b.out)
-						fmt.Fprintln(b.out, "Proxy:")
-						fmt.Fprintf(b.out, "  url: %s\n", result.Proxy.URL)
-					}
-					if result.SSH != nil {
-						fmt.Fprintln(b.out)
-						fmt.Fprintln(b.out, "SSH:")
-						fmt.Fprintf(b.out, "  host: %s:%d\n", result.SSH.Host, result.SSH.Port)
-						fmt.Fprintf(b.out, "  user: %s\n", result.SSH.User)
-						if result.SSH.PrivateKey != "" {
-							fmt.Fprintf(b.out, "  private_key: %s\n", result.SSH.PrivateKey)
-						}
-						if result.SSH.PasswordEnv != "" {
-							fmt.Fprintf(b.out, "  password_env: %s\n", result.SSH.PasswordEnv)
-						} else if result.SSH.PasswordMode == "saved" {
-							fmt.Fprintln(b.out, "  password: [redacted]")
-						}
+					for _, line := range formatRedactedConnectionLines(result) {
+						fmt.Fprintln(b.out, line)
 					}
 					return nil
 				})

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"pkg.gostartkit.com/dbx/internal/commandmeta"
 )
 
 type ValueType string
@@ -115,248 +117,81 @@ var (
 
 func DefaultRegistry() *Registry {
 	defaultRegistryOnce.Do(func() {
-		defaultRegistryData = &Registry{
-			Commands: []*CommandSpec{
-				{
-					Name:        "exec",
-					Description: "Execute a named operation.",
-					HandlerName: "exec",
-					Args: []*ArgSpec{{
-						Name:               "operation",
-						Description:        "Operation name to execute.",
-						Required:           true,
-						ValueType:          ValueOperation,
-						CompletionProvider: "operation",
-					}},
-					Flags: []*FlagSpec{
-						{Name: "--dry-run", Description: "Render and validate without applying changes.", ValueType: ValueBool},
-						{Name: "--validate", Description: "Validate the resolved operation and exit.", ValueType: ValueBool},
-						{Name: "--yes", Description: "Skip confirmation prompts.", ValueType: ValueBool},
-						{Name: "--preview", Description: "Show the execution preview before running.", ValueType: ValueBool},
-						{Name: "--verbose", Description: "Include detailed execution output.", ValueType: ValueBool},
-					},
-				},
-				{
-					Name:        "help",
-					Description: "Show help for a command or topic.",
-					HandlerName: "help",
-					Args: []*ArgSpec{{
-						Name:               "topic",
-						Description:        "Command or topic to describe.",
-						Required:           false,
-						ValueType:          ValueString,
-						CompletionProvider: "topic",
-					}},
-				},
-				{
-					Name:        "template",
-					Description: "Template maintenance and rendering commands.",
-					HandlerName: "template",
-					Hidden:      true,
-					Subcommands: []*CommandSpec{
-						{
-							Name:        "list",
-							Description: "List available templates.",
-							HandlerName: "template.list",
-						},
-						{
-							Name:        "show",
-							Description: "Show template details.",
-							HandlerName: "template.show",
-							Args: []*ArgSpec{{
-								Name:               "template",
-								Description:        "Template name.",
-								Required:           true,
-								ValueType:          ValueTemplate,
-								CompletionProvider: "template",
-							}},
-						},
-						{
-							Name:        "render",
-							Description: "Render a template preview.",
-							HandlerName: "template.render",
-							Args: []*ArgSpec{{
-								Name:               "template",
-								Description:        "Template name.",
-								Required:           true,
-								ValueType:          ValueTemplate,
-								CompletionProvider: "template",
-							}},
-							Flags: []*FlagSpec{
-								{Name: "--var", Description: "Template input override in key=value form.", ValueType: ValueString},
-							},
-						},
-					},
-				},
-				{
-					Name:        "connect",
-					Description: "Connect to a saved connection.",
-					HandlerName: "connect",
-					Args: []*ArgSpec{{
-						Name:               "connection",
-						Description:        "Saved connection name.",
-						Required:           true,
-						ValueType:          ValueConnection,
-						CompletionProvider: "connection",
-					}},
-				},
-				{
-					Name:        "connection",
-					Description: "Connection management commands.",
-					HandlerName: "connection",
-					Hidden:      true,
-					Subcommands: []*CommandSpec{
-						{
-							Name:        "list",
-							Description: "List saved connections.",
-							HandlerName: "connection.list",
-						},
-						{
-							Name:        "use",
-							Description: "Select a saved connection.",
-							HandlerName: "connection.use",
-							Args: []*ArgSpec{{
-								Name:               "connection",
-								Description:        "Saved connection name.",
-								Required:           true,
-								ValueType:          ValueConnection,
-								CompletionProvider: "connection",
-							}},
-						},
-					},
-				},
-				{
-					Name:        "database",
-					Description: "Database selection commands.",
-					HandlerName: "database",
-					Hidden:      true,
-					Subcommands: []*CommandSpec{
-						{
-							Name:        "use",
-							Description: "Select the current database.",
-							HandlerName: "database.use",
-							Args: []*ArgSpec{{
-								Name:               "database",
-								Description:        "Database name.",
-								Required:           true,
-								ValueType:          ValueDatabase,
-								CompletionProvider: "database",
-							}},
-						},
-					},
-				},
-				{
-					Name:        "use",
-					Description: "Select the current database.",
-					HandlerName: "use",
-					Args: []*ArgSpec{{
-						Name:               "database",
-						Description:        "Database name.",
-						Required:           true,
-						ValueType:          ValueDatabase,
-						CompletionProvider: "database",
-					}},
-				},
-				{
-					Name:        "show",
-					Description: "Inspect configuration and database state.",
-					HandlerName: "show",
-					Subcommands: []*CommandSpec{
-						{
-							Name:        "connection",
-							Description: "Show a saved connection.",
-							HandlerName: "show.connection",
-							Args: []*ArgSpec{{
-								Name:               "connection",
-								Description:        "Saved connection name.",
-								Required:           true,
-								ValueType:          ValueConnection,
-								CompletionProvider: "connection",
-							}},
-						},
-						{
-							Name:        "columns",
-							Description: "Show columns for a table.",
-							HandlerName: "show.columns",
-							Args: []*ArgSpec{{
-								Name:               "table",
-								Description:        "Table name.",
-								Required:           true,
-								ValueType:          ValueTable,
-								CompletionProvider: "table",
-							}},
-						},
-						{
-							Name:        "connections",
-							Description: "Show saved connections.",
-							HandlerName: "show.connections",
-						},
-						{
-							Name:        "context",
-							Description: "Show current session context.",
-							HandlerName: "show.context",
-						},
-						{
-							Name:        "databases",
-							Description: "Show databases on the selected connection.",
-							HandlerName: "show.databases",
-						},
-						{
-							Name:        "rows",
-							Description: "Show rows from a table.",
-							HandlerName: "show.rows",
-							Args: []*ArgSpec{{
-								Name:               "table",
-								Description:        "Table name.",
-								Required:           true,
-								ValueType:          ValueTable,
-								CompletionProvider: "table",
-							}},
-						},
-						{
-							Name:        "table",
-							Description: "Show CREATE TABLE output for one table.",
-							HandlerName: "show.table",
-							Args: []*ArgSpec{{
-								Name:               "table",
-								Description:        "Table name.",
-								Required:           true,
-								ValueType:          ValueTable,
-								CompletionProvider: "table",
-							}},
-						},
-						{
-							Name:        "tables",
-							Description: "Show tables in the selected database.",
-							HandlerName: "show.tables",
-						},
-						{
-							Name:        "templates",
-							Description: "Show resolved workflow templates.",
-							HandlerName: "show.templates",
-							Args: []*ArgSpec{{
-								Name:               "query",
-								Description:        "Optional template search query.",
-								Required:           false,
-								ValueType:          ValueString,
-								CompletionProvider: "template",
-							}},
-							Flags: []*FlagSpec{
-								{Name: "--tag", Description: "Filter templates by tag.", ValueType: ValueString, CompletionProvider: "template-tag"},
-							},
-						},
-					},
-				},
-				{
-					Name:        "exit",
-					Aliases:     []string{"quit", "q"},
-					Description: "Exit the REPL.",
-					HandlerName: "exit",
-				},
-			},
-		}
+		defaultRegistryData = registryFromManifest(commandmeta.DefaultManifest())
 	})
 	return defaultRegistryData
+}
+
+func registryFromManifest(manifest *commandmeta.Manifest) *Registry {
+	if manifest == nil {
+		return &Registry{}
+	}
+	commands := make([]*CommandSpec, 0, len(manifest.Commands))
+	for _, command := range manifest.Commands {
+		commands = append(commands, commandSpecFromManifest(command))
+	}
+	return &Registry{Commands: commands}
+}
+
+func commandSpecFromManifest(command *commandmeta.Command) *CommandSpec {
+	if command == nil {
+		return nil
+	}
+	spec := &CommandSpec{
+		Name:        command.Name,
+		Aliases:     append([]string(nil), command.Aliases...),
+		Description: command.Description,
+		HandlerName: command.HandlerName,
+		Hidden:      command.Hidden,
+		Flags:       make([]*FlagSpec, 0, len(command.Flags)),
+		Args:        make([]*ArgSpec, 0, len(command.Args)),
+		Subcommands: make([]*CommandSpec, 0, len(command.Subcommands)),
+	}
+	for _, flag := range command.Flags {
+		spec.Flags = append(spec.Flags, flagSpecFromManifest(flag))
+	}
+	for _, arg := range command.Args {
+		spec.Args = append(spec.Args, argSpecFromManifest(arg))
+	}
+	for _, sub := range command.Subcommands {
+		spec.Subcommands = append(spec.Subcommands, commandSpecFromManifest(sub))
+	}
+	return spec
+}
+
+func flagSpecFromManifest(flag *commandmeta.Flag) *FlagSpec {
+	if flag == nil {
+		return nil
+	}
+	return &FlagSpec{
+		Name:               flag.Name,
+		Short:              flag.Short,
+		Description:        flag.Description,
+		ValueType:          valueTypeFromManifest(flag.ValueType),
+		Required:           flag.Required,
+		Repeatable:         flag.Repeatable,
+		EnumValues:         append([]string(nil), flag.EnumValues...),
+		CompletionProvider: flag.CompletionProvider,
+	}
+}
+
+func argSpecFromManifest(arg *commandmeta.Arg) *ArgSpec {
+	if arg == nil {
+		return nil
+	}
+	return &ArgSpec{
+		Name:               arg.Name,
+		Description:        arg.Description,
+		Required:           arg.Required,
+		Repeatable:         arg.Repeatable,
+		ValueType:          valueTypeFromManifest(arg.ValueType),
+		EnumValues:         append([]string(nil), arg.EnumValues...),
+		CompletionProvider: arg.CompletionProvider,
+	}
+}
+
+func valueTypeFromManifest(value commandmeta.ValueType) ValueType {
+	return ValueType(value)
 }
 
 func (r *Registry) LookupCommand(path []string) (*CommandSpec, int) {

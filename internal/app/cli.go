@@ -233,26 +233,26 @@ func (b *cliBuilder) requireNoArgs(args []string) error {
 }
 
 func (b *cliBuilder) exitCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "exit",
-		Aliases:   []string{"quit", "q"},
-		UsageLine: "dbx exit",
-		Short:     "Exit the shell",
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "exit",
+		UsageFallback: "dbx exit",
+		ShortFallback: "Exit the shell",
+		Aliases:       []string{"quit", "q"},
 		Run: func(context.Context, *cmd.Command, []string) error {
 			if b.mode == ModeREPL {
 				return errREPLExit
 			}
 			return nil
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) helpCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "help",
-		UsageLine: "dbx help [command...]",
-		Short:     "Show command help",
-		Long:      helpLong(""),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "help",
+		UsageFallback: "dbx help [command...]",
+		ShortFallback: "Show command help",
+		Long:          helpLong(""),
 		Run: func(_ context.Context, _ *cmd.Command, args []string) error {
 			topic := normalizeHelpTopic(strings.Join(args, " "))
 			if b.mode == ModeREPL {
@@ -263,5 +263,5 @@ func (b *cliBuilder) helpCommand() *cmd.Command {
 			}
 			return printHelpTopic(writerPrinter{w: b.out}, topic)
 		},
-	}
+	})
 }

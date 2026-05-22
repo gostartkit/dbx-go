@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,6 +92,88 @@ func TestSaveLoadAndDeleteConnection(t *testing.T) {
 	_, err = store.LoadConnection("prod")
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("LoadConnection after delete error = %v, want os.ErrNotExist", err)
+	}
+}
+
+func TestListConnectionRecordsIncludesInvalidConnections(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	valid := &ConnectionConfig{
+		Name:        "prod",
+		Driver:      "mysql",
+		Mode:        "direct",
+		Host:        "127.0.0.1",
+		Port:        3306,
+		User:        "root",
+		PasswordEnv: "MYSQL_PROD_PASSWORD",
+	}
+	if err := store.SaveConnection(valid); err != nil {
+		t.Fatalf("SaveConnection returned error: %v", err)
+	}
+
+	invalidPath := store.ConnectionConfigPath("broken")
+	if err := os.MkdirAll(filepath.Dir(invalidPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invalidPath, []byte(`{"name":"broken","driver":"mysql","mode":"direct","host":"127.0.0.1","port":70000,"user":"root"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	records, err := store.ListConnectionRecords()
+	if err != nil {
+		t.Fatalf("ListConnectionRecords returned error: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("record count = %d, want 2", len(records))
+	}
+
+	if records[0].Name != "broken" || records[0].Error == nil {
+		t.Fatalf("unexpected invalid record: %+v", records[0])
+	}
+	if !strings.Contains(records[0].Error.Error(), "port must be greater than zero") {
+		t.Fatalf("unexpected invalid record error: %v", records[0].Error)
+	}
+	if records[1].Name != "prod" || records[1].Error != nil || records[1].Config == nil {
+		t.Fatalf("unexpected valid record: %+v", records[1])
+	}
+
+	connections, err := store.ListConnections()
+	if err != nil {
+		t.Fatalf("ListConnections returned error: %v", err)
+	}
+	if len(connections) != 1 || connections[0].Name != "prod" {
+		t.Fatalf("unexpected valid connections: %+v", connections)
+	}
+}
+
+func TestLoadConnectionRecordPreservesParseErrors(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	path := store.ConnectionConfigPath("broken")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"name":"broken",`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	record, err := store.LoadConnectionRecord("broken")
+	if err != nil {
+		t.Fatalf("LoadConnectionRecord returned error: %v", err)
+	}
+	if record.Name != "broken" || record.Config != nil || record.Error == nil {
+		t.Fatalf("unexpected record: %+v", record)
+	}
+	if !strings.Contains(record.Error.Error(), "unexpected end of JSON input") {
+		t.Fatalf("unexpected parse error: %v", record.Error)
 	}
 }
 

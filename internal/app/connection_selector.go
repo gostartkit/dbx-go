@@ -78,3 +78,35 @@ func (a *Application) promptForConnectionSelection(ctx context.Context, connecti
 		a.prompt.Println(util.WrapLayer("validation", "select connection", fmt.Errorf("please choose a listed number or connection name")).Error())
 	}
 }
+
+func (a *Application) promptForConnectionRecordSelection(ctx context.Context, records []config.ConnectionRecord) (string, error) {
+	if len(records) == 0 {
+		return "", nil
+	}
+
+	names := make([]string, 0, len(records))
+	for index, record := range records {
+		summary := summarizeConnectionRecord(record)
+		a.prompt.Printf("%d) %s\n", index+1, strings.TrimSpace(formatConnectionSummaryLine(summary)))
+		names = append(names, record.Name)
+	}
+
+	for {
+		value, err := a.ask(ctx, "Select connection by number or name", "")
+		if err != nil {
+			return "", err
+		}
+
+		if index, err := strconv.Atoi(strings.TrimSpace(value)); err == nil {
+			if index >= 1 && index <= len(records) {
+				return records[index-1].Name, nil
+			}
+		}
+
+		if slices.Contains(names, value) {
+			return value, nil
+		}
+
+		a.prompt.Println(util.WrapLayer("validation", "select connection", fmt.Errorf("please choose a listed number or connection name")).Error())
+	}
+}

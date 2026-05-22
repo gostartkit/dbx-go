@@ -23,17 +23,16 @@ type planOnlyFlags struct {
 }
 
 func (b *cliBuilder) createGroupCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "create",
-		UsageLine: "dbx create <subcommand>",
-		Short:     "Create database resources",
-		Long:      helpLong("create"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "create",
+		UsageFallback: "dbx create <subcommand>",
+		ShortFallback: "Create database resources",
 		SubCommands: []*cmd.Command{
 			b.createConnectionCommand(),
 			b.createDatabaseCommand(),
 			b.createUserCommand(),
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) showGroupCommand() *cmd.Command {
@@ -49,12 +48,11 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 		b.showTemplatesCommand(),
 		b.showContextCommand(),
 	}
-	return &cmd.Command{
-		Name:        "show",
-		UsageLine:   "dbx show <subcommand>",
-		Short:       "Show resources",
-		Long:        helpLong("show"),
-		SubCommands: subcommands,
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show",
+		UsageFallback: "dbx show <subcommand>",
+		ShortFallback: "Show resources",
+		SubCommands:   subcommands,
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if len(args) == 0 {
 				usage := "dbx show <subcommand>"
@@ -65,32 +63,30 @@ func (b *cliBuilder) showGroupCommand() *cmd.Command {
 			}
 			return util.WrapLayer("validation", "show", cmd.UnknownSubcommandError("show", args[0], subcommands))
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) dropGroupCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:      "drop",
-		UsageLine: "dbx drop <subcommand>",
-		Short:     "Drop resources",
-		Long:      helpLong("drop"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "drop",
+		UsageFallback: "dbx drop <subcommand>",
+		ShortFallback: "Drop resources",
 		SubCommands: []*cmd.Command{
 			b.dropConnectionCommand(),
 			b.dropDatabaseCommand(),
 			b.dropUserCommand(),
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) showDatabasesCommand() *cmd.Command {
 	flags := &planOnlyFlags{inputs: inputValues{}}
-	return &cmd.Command{
-		Name:      "databases",
-		UsageLine: "dbx show databases [flags]",
-		Short:     "Show databases on a connection",
-		Long:      helpLong("show databases"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "show databases",
+		UsageFallback: "dbx show databases [flags]",
+		ShortFallback: "Show databases on a connection",
 		SetFlags: func(f *cmd.FlagSet) {
-			f.StringVar(&flags.template, "template", "", "template name", "")
+			b.bindManifestStringFlag(f, "show databases", "template", &flags.template, "", "template name")
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
@@ -107,7 +103,7 @@ func (b *cliBuilder) showDatabasesCommand() *cmd.Command {
 				return b.runShowDatabases(ctx, application, flags, meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
@@ -116,20 +112,22 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 		collation: "utf8mb4_unicode_ci",
 		inputs:    inputValues{},
 	}
-	return &cmd.Command{
-		Name:      "database",
-		UsageLine: "dbx create database <name> [flags]",
-		Short:     "Create a database from a template",
-		Long:      helpLong("create database"),
+	flags.charset = manifestFlagDefaultString("create database", "charset", flags.charset)
+	flags.collation = manifestFlagDefaultString("create database", "collation", flags.collation)
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "create database",
+		Name:          "database",
+		UsageFallback: "dbx create database <name> [flags]",
+		ShortFallback: "Create a database from a template",
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true}},
 			nil,
 		),
 		SetFlags: func(f *cmd.FlagSet) {
-			f.StringVar(&flags.template, "template", "", "template name", "")
-			f.StringVar(&flags.charset, "charset", "utf8mb4", "database charset", "")
-			f.StringVar(&flags.collation, "collation", "utf8mb4_unicode_ci", "database collation", "")
-			f.BoolVar(&flags.ifNotExists, "if-not-exists", false, "use IF NOT EXISTS when supported by the template", "")
+			b.bindManifestStringFlag(f, "create database", "template", &flags.template, "", "template name")
+			b.bindManifestStringFlag(f, "create database", "charset", &flags.charset, "utf8mb4", "database charset")
+			b.bindManifestStringFlag(f, "create database", "collation", &flags.collation, "utf8mb4_unicode_ci", "database collation")
+			b.bindManifestBoolFlag(f, "create database", "if-not-exists", &flags.ifNotExists, false, "use IF NOT EXISTS when supported by the template")
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
@@ -140,22 +138,22 @@ func (b *cliBuilder) createDatabaseCommand() *cmd.Command {
 				return b.runCreateDatabase(ctx, application, args[0], flags, meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 	flags := &planOnlyFlags{inputs: inputValues{}}
-	return &cmd.Command{
-		Name:      "database",
-		UsageLine: "dbx drop database <name> [flags]",
-		Short:     "Drop a database from a template",
-		Long:      helpLong("drop database"),
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "drop database",
+		Name:          "database",
+		UsageFallback: "dbx drop database <name> [flags]",
+		ShortFallback: "Drop a database from a template",
 		Positionals: b.positionalsForMode(
 			[]cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true}},
 			nil,
 		),
 		SetFlags: func(f *cmd.FlagSet) {
-			f.StringVar(&flags.template, "template", "", "template name", "")
+			b.bindManifestStringFlag(f, "drop database", "template", &flags.template, "", "template name")
 			bindInputFlag(f, flags.inputs)
 		},
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
@@ -166,16 +164,15 @@ func (b *cliBuilder) dropDatabaseCommand() *cmd.Command {
 				return b.runDropDatabase(ctx, application, args[0], flags, meta)
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) useGroupCommand() *cmd.Command {
-	return &cmd.Command{
-		Name:        "use",
-		UsageLine:   "dbx use <name>",
-		Short:       "Select the current database",
-		Long:        helpLong("use"),
-		Positionals: []cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true, Completion: b.completeDatabases}},
+	return b.newManifestCommand(manifestCommandOptions{
+		Path:          "use",
+		UsageFallback: "dbx use <name>",
+		ShortFallback: "Select the current database",
+		Positionals:   b.manifestPositionals("use", []cmd.PositionalArg{{Name: "name", Usage: "database name", Required: true, Completion: b.completeDatabases}}),
 		Run: func(ctx context.Context, _ *cmd.Command, args []string) error {
 			if b.mode == ModeREPL {
 				return b.application.handleUseDatabase(ctx, args[0])
@@ -192,7 +189,7 @@ func (b *cliBuilder) useGroupCommand() *cmd.Command {
 				})
 			})
 		},
-	}
+	})
 }
 
 func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Application, name string, flags *createDatabaseFlags, meta *auditMetadata) error {

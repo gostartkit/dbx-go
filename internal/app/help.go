@@ -6,8 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	cmdpkg "pkg.gostartkit.com/cmd"
-	"pkg.gostartkit.com/dbx/internal/commandlang"
+	"pkg.gostartkit.com/dbx/internal/commandmeta"
 )
 
 type helpEntry struct {
@@ -20,8 +19,13 @@ type helpCommandOverride struct {
 	extra   string
 }
 
+type helpCommandSpec struct {
+	path    []string
+	command *commandmeta.Command
+}
+
 type helpCommandCatalog struct {
-	byPath map[string]cmdpkg.CommandSpec
+	byPath map[string]helpCommandSpec
 }
 
 var (
@@ -137,16 +141,6 @@ func printHelpTopic(prompt printer, topic string) error {
 		return nil
 	}
 
-	if doc, ok := commandlang.DefaultRegistry().Help(topic); ok {
-		printHelpEntry(prompt, helpEntry{title: doc.Title, body: doc.Body})
-		return nil
-	}
-
-	if spec, ok := commandSpecByPath(topic); ok {
-		printHelpEntry(prompt, helpEntry{title: spec.Path, body: spec.Description})
-		return nil
-	}
-
 	return fmt.Errorf("unknown help topic %q; use help", topic)
 }
 
@@ -177,51 +171,32 @@ func helpLong(topic string) string {
 	return helpExtraBodies[topic]
 }
 
-func commandHelpSpec(topic string) (cmdpkg.CommandSpec, bool) {
+func commandHelpSpec(topic string) (helpCommandSpec, bool) {
 	spec, ok := helpCommandSpecCatalog().byPath[canonicalHelpTopic(topic)]
 	return spec, ok
 }
 
 func helpCommandSpecCatalog() *helpCommandCatalog {
 	helpCommandCatalogOnce.Do(func() {
-		app := (&cliBuilder{
-			mode:    ModeREPL,
-			out:     io.Discard,
-			err:     io.Discard,
-			globals: &cliGlobals{Format: "text"},
-		}).buildApp()
-		spec := app.SpecFor(cmdpkg.SurfaceREPL)
-
-		byPath := make(map[string]cmdpkg.CommandSpec, len(spec.Commands)*2)
-		for _, command := range spec.Commands {
-			indexHelpCommandSpec(byPath, nil, command)
+		resolved := commandmeta.FlattenCommands(commandmeta.DefaultManifest())
+		byPath := make(map[string]helpCommandSpec, len(resolved))
+		for _, command := range resolved {
+			key := normalizeHelpTopic(strings.Join(command.Path, " "))
+			if key == "" || command.Command == nil {
+				continue
+			}
+			byPath[key] = helpCommandSpec{
+				path:    append([]string(nil), command.CanonicalPath...),
+				command: command.Command,
+			}
 		}
 		helpCommandCatalogData = helpCommandCatalog{byPath: byPath}
 	})
 	return &helpCommandCatalogData
 }
 
-func indexHelpCommandSpec(dst map[string]cmdpkg.CommandSpec, parent []string, spec cmdpkg.CommandSpec) {
-	path := append(append([]string(nil), parent...), spec.Name)
-	key := normalizeHelpTopic(strings.Join(path, " "))
-	if key != "" {
-		spec.Path = append([]string(nil), path...)
-		dst[key] = spec
-		for _, alias := range spec.Aliases {
-			aliasKey := normalizeHelpTopic(strings.Join(append(append([]string(nil), parent...), alias), " "))
-			if aliasKey != "" {
-				dst[aliasKey] = spec
-			}
-		}
-	}
-
-	for _, sub := range spec.SubCommands {
-		indexHelpCommandSpec(dst, path, sub)
-	}
-}
-
-func renderCommandHelp(topic string, spec cmdpkg.CommandSpec) helpEntry {
-	title := normalizeHelpTopic(strings.Join(spec.Path, " "))
+func renderCommandHelp(topic string, spec helpCommandSpec) helpEntry {
+	title := normalizeHelpTopic(strings.Join(spec.path, " "))
 	if title == "" {
 		title = topic
 	}
@@ -230,7 +205,7 @@ func renderCommandHelp(topic string, spec cmdpkg.CommandSpec) helpEntry {
 	override := helpCommandOverrides[title]
 	summary := strings.TrimSpace(override.summary)
 	if summary == "" {
-		summary = strings.TrimSpace(spec.Short)
+		summary = strings.TrimSpace(spec.command.Description)
 	}
 	if summary != "" {
 		sections = append(sections, summary)
@@ -242,7 +217,7 @@ func renderCommandHelp(topic string, spec cmdpkg.CommandSpec) helpEntry {
 	if extra != "" {
 		sections = append(sections, extra)
 	}
-	if usage := strings.TrimSpace(spec.UsageLine); usage != "" {
+	if usage := strings.TrimSpace(spec.command.UsageLine); usage != "" {
 		sections = append(sections, "Usage:\n  "+usage)
 	}
 
@@ -251,29 +226,29 @@ func renderCommandHelp(topic string, spec cmdpkg.CommandSpec) helpEntry {
 		sections = append(sections, "Aliases:\n  "+strings.Join(aliases, "\n  "))
 	}
 
-	subcommands := visibleSubcommands(spec.SubCommands)
+	subcommands := visibleSubcommands(spec.command.Subcommands)
 	if len(subcommands) > 0 {
 		lines := make([]string, 0, len(subcommands))
 		for _, sub := range subcommands {
 			line := sub.Name
-			if len(sub.Positionals) > 0 {
-				line += " " + formatPositionals(sub.Positionals)
+			if desc := strings.TrimSpace(sub.Description); desc != "" {
+				line += "  " + desc
 			}
 			lines = append(lines, line)
 		}
 		sections = append(sections, "Subcommands:\n  "+strings.Join(lines, "\n  "))
 	}
 
-	flags := visibleFlags(spec.Flags)
+	flags := visibleFlags(spec.command.Flags)
 	if len(flags) > 0 {
 		lines := make([]string, 0, len(flags))
 		for _, flag := range flags {
-			line := "--" + flag.Name
-			if flag.Type != "" && flag.Type != "bool" {
-				line += " <" + flag.Type + ">"
+			line := flag.Name
+			if flag.ValueType != commandmeta.ValueBool {
+				line += " <value>"
 			}
-			if usage := strings.TrimSpace(flag.Usage); usage != "" {
-				line += "  " + usage
+			if desc := strings.TrimSpace(flag.Description); desc != "" {
+				line += "  " + desc
 			}
 			lines = append(lines, line)
 		}
@@ -286,9 +261,9 @@ func renderCommandHelp(topic string, spec cmdpkg.CommandSpec) helpEntry {
 	}
 }
 
-func visibleAliases(spec cmdpkg.CommandSpec, topic string) []string {
-	aliases := make([]string, 0, len(spec.Aliases))
-	for _, alias := range spec.Aliases {
+func visibleAliases(spec helpCommandSpec, topic string) []string {
+	aliases := make([]string, 0, len(spec.command.Aliases))
+	for _, alias := range spec.command.Aliases {
 		alias = normalizeHelpTopic(alias)
 		if alias == "" || alias == topic {
 			continue
@@ -298,10 +273,10 @@ func visibleAliases(spec cmdpkg.CommandSpec, topic string) []string {
 	return aliases
 }
 
-func visibleSubcommands(subcommands []cmdpkg.CommandSpec) []cmdpkg.CommandSpec {
-	visible := make([]cmdpkg.CommandSpec, 0, len(subcommands))
+func visibleSubcommands(subcommands []*commandmeta.Command) []*commandmeta.Command {
+	visible := make([]*commandmeta.Command, 0, len(subcommands))
 	for _, sub := range subcommands {
-		if sub.Hidden {
+		if sub == nil || sub.Hidden {
 			continue
 		}
 		visible = append(visible, sub)
@@ -309,31 +284,15 @@ func visibleSubcommands(subcommands []cmdpkg.CommandSpec) []cmdpkg.CommandSpec {
 	return visible
 }
 
-func visibleFlags(flags []cmdpkg.FlagSpec) []cmdpkg.FlagSpec {
-	visible := make([]cmdpkg.FlagSpec, 0, len(flags))
+func visibleFlags(flags []*commandmeta.Flag) []*commandmeta.Flag {
+	visible := make([]*commandmeta.Flag, 0, len(flags))
 	for _, flag := range flags {
-		if flag.Hidden {
+		if flag == nil {
 			continue
 		}
 		visible = append(visible, flag)
 	}
 	return visible
-}
-
-func formatPositionals(positionals []cmdpkg.PositionalSpec) string {
-	parts := make([]string, 0, len(positionals))
-	for _, positional := range positionals {
-		name := positional.Name
-		if positional.Variadic {
-			name += "..."
-		}
-		if positional.Required {
-			parts = append(parts, "<"+name+">")
-			continue
-		}
-		parts = append(parts, "["+name+"]")
-	}
-	return strings.Join(parts, " ")
 }
 
 func normalizeHelpTopic(topic string) string {

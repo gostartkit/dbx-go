@@ -47,6 +47,46 @@ func TestHandleLineRemovedDoctorConnectionCommandFails(t *testing.T) {
 	}
 }
 
+func TestHandleConnectionDoctorCanSelectInvalidConnection(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	writeRawConnectionConfig(t, store, "broken", `{
+  "name": "broken",
+  "driver": "mysql",
+  "mode": "direct",
+  "host": "127.0.0.1",
+  "port": 70000,
+  "user": "root"
+}`)
+
+	var out bytes.Buffer
+	app, err := NewWithOptions(strings.NewReader("broken\n"), &out, &out, Options{ConfigDir: root})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	if err := app.handleConnectionDoctor(context.Background(), ""); err != nil {
+		t.Fatalf("handleConnectionDoctor returned error: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "broken [invalid]") {
+		t.Fatalf("selection output missing invalid connection: %q", output)
+	}
+	if !strings.Contains(output, "Connection doctor: broken") {
+		t.Fatalf("doctor output missing selected connection: %q", output)
+	}
+	if !strings.Contains(output, "database port 70000") {
+		t.Fatalf("doctor output missing invalid check: %q", output)
+	}
+}
+
 func TestHelpConnectionOmitsDoctorConnection(t *testing.T) {
 	t.Parallel()
 

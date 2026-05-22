@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"pkg.gostartkit.com/dbx/internal/config"
 	tpl "pkg.gostartkit.com/dbx/internal/template"
 )
 
@@ -43,6 +46,114 @@ func TestRedactTemplateValues(t *testing.T) {
 	}
 	if values["api_key"] != "typed-secret" {
 		t.Fatalf("original typed secret was mutated")
+	}
+}
+
+func TestHandleConnectionsIncludesInvalidConfigurations(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveConnection(sampleConnection("prod")); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidPath := store.ConnectionConfigPath("broken")
+	if err := os.MkdirAll(filepath.Dir(invalidPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invalidPath, []byte(`{"name":"broken","driver":"mysql","mode":"direct","host":"127.0.0.1","port":70000,"user":"root"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, out := newReadOnlyTestApp(t, root, &readOnlyConnector{})
+	if err := app.handleConnections(context.Background()); err != nil {
+		t.Fatalf("handleConnections returned error: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Configured connections:") {
+		t.Fatalf("output missing header: %q", output)
+	}
+	if !strings.Contains(output, "broken [invalid]") {
+		t.Fatalf("output missing invalid connection: %q", output)
+	}
+	if !strings.Contains(output, "port must be greater than zero") {
+		t.Fatalf("output missing invalid reason: %q", output)
+	}
+	if !strings.Contains(output, "prod (mysql direct 127.0.0.1:3306)") {
+		t.Fatalf("output missing valid connection: %q", output)
+	}
+}
+
+func TestHandleConnectionShowIncludesInvalidConfigurationStatus(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidPath := store.ConnectionConfigPath("broken")
+	if err := os.MkdirAll(filepath.Dir(invalidPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invalidPath, []byte(`{"name":"broken","driver":"mysql","mode":"direct","host":"127.0.0.1","port":70000,"user":"root"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, out := newReadOnlyTestApp(t, root, &readOnlyConnector{})
+	if err := app.handleConnectionShow(context.Background(), "broken"); err != nil {
+		t.Fatalf("handleConnectionShow returned error: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Name: broken") {
+		t.Fatalf("output missing name: %q", output)
+	}
+	if !strings.Contains(output, "Status: invalid") {
+		t.Fatalf("output missing invalid status: %q", output)
+	}
+	if !strings.Contains(output, "Issue: port must be greater than zero") {
+		t.Fatalf("output missing issue: %q", output)
+	}
+}
+
+func TestHandleConnectionShowIncludesParseErrors(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	store := config.NewStore(root)
+	if err := store.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidPath := store.ConnectionConfigPath("broken")
+	if err := os.MkdirAll(filepath.Dir(invalidPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invalidPath, []byte(`{"name":"broken",`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, out := newReadOnlyTestApp(t, root, &readOnlyConnector{})
+	if err := app.handleConnectionShow(context.Background(), "broken"); err != nil {
+		t.Fatalf("handleConnectionShow returned error: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Name: broken") {
+		t.Fatalf("output missing name: %q", output)
+	}
+	if !strings.Contains(output, "Status: invalid") {
+		t.Fatalf("output missing invalid status: %q", output)
+	}
+	if !strings.Contains(output, "Issue: unexpected end of JSON input") {
+		t.Fatalf("output missing parse issue: %q", output)
 	}
 }
 
