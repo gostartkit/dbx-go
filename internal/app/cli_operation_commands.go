@@ -43,7 +43,7 @@ func (b *cliBuilder) execGroupCommand() *cmd.Command {
 					return b.application.handleExecValidate(ctx, args[0])
 				}
 				return b.withAuditedApplication(ctx, auditMetadata{Command: "exec"}, func(application *Application, meta *auditMetadata) error {
-					cfg, err := application.templateScopeConfig(b.globals.Connection)
+					cfg, err := application.commandContext().resolveTemplateScope(b.globals.Connection)
 					if err != nil {
 						return err
 					}
@@ -92,7 +92,7 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 				return b.application.handleShowTemplates(ctx, filters)
 			}
 			return b.withAuditedApplication(ctx, auditMetadata{Command: "show templates"}, func(application *Application, meta *auditMetadata) error {
-				cfg, err := application.templateScopeConfig(b.globals.Connection)
+				cfg, err := application.commandContext().resolveTemplateScope(b.globals.Connection)
 				if err != nil {
 					return err
 				}
@@ -118,7 +118,7 @@ func (b *cliBuilder) showTemplatesCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) execOperation(ctx context.Context, application *Application, name string, flags *execOperationFlags, meta *auditMetadata) error {
-	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	cfg, err := application.commandContext().resolveCLIConnection(b.globals.Connection)
 	if err != nil {
 		return err
 	}

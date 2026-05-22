@@ -39,7 +39,7 @@ func (b *cliBuilder) runShowCreateTable(ctx context.Context, application *Applic
 		meta.Mode = cfg.Mode
 	}
 
-	template, err := application.selectTemplateForCLI("show create table", cfg, "")
+	template, err := application.commandContext().selectCLITemplate("show create table", cfg, "")
 	if err != nil {
 		return err
 	}

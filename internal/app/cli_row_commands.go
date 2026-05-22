@@ -53,7 +53,7 @@ func (b *cliBuilder) runRowPreview(ctx context.Context, application *Application
 		meta.Mode = cfg.Mode
 	}
 
-	template, err := application.selectTemplateForCLI(templateCommand, cfg, "")
+	template, err := application.commandContext().selectCLITemplate(templateCommand, cfg, "")
 	if err != nil {
 		return err
 	}

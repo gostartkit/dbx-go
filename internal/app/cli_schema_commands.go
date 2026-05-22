@@ -39,7 +39,7 @@ func (b *cliBuilder) runShowColumns(ctx context.Context, application *Applicatio
 		meta.Mode = cfg.Mode
 	}
 
-	template, err := application.selectTemplateForCLI("show columns", cfg, "")
+	template, err := application.commandContext().selectCLITemplate("show columns", cfg, "")
 	if err != nil {
 		return err
 	}

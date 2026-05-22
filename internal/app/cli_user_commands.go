@@ -121,7 +121,7 @@ func (b *cliBuilder) dropUserCommand() *cmd.Command {
 }
 
 func (b *cliBuilder) runShowUsers(ctx context.Context, application *Application, meta *auditMetadata) error {
-	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	cfg, err := application.commandContext().resolveCLIConnection(b.globals.Connection)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (b *cliBuilder) runShowUsers(ctx context.Context, application *Application,
 		meta.Mode = cfg.Mode
 	}
 
-	template, err := application.selectTemplateForCLI("show users", cfg, "")
+	template, err := application.commandContext().selectCLITemplate("show users", cfg, "")
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func (b *cliBuilder) runCreateUser(ctx context.Context, application *Application
 		return util.WrapLayer("validation", "validate MySQL user host", err)
 	}
 
-	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	cfg, err := application.commandContext().resolveCLIConnection(b.globals.Connection)
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func (b *cliBuilder) runCreateUser(ctx context.Context, application *Application
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 	}
-	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
+	if err := application.commandContext().applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
 		return err
 	}
 
@@ -197,7 +197,7 @@ func (b *cliBuilder) runCreateUser(ctx context.Context, application *Application
 		return util.WrapLayer("validation", "create user", fmt.Errorf("grant requires --database or an active database context"))
 	}
 
-	selectedTemplate, err := application.selectTemplateForCLI("create user", cfg, flags.template)
+	selectedTemplate, err := application.commandContext().selectCLITemplate("create user", cfg, flags.template)
 	if err != nil {
 		return err
 	}
@@ -281,7 +281,7 @@ func (b *cliBuilder) runDropUser(ctx context.Context, application *Application, 
 		return util.WrapLayer("validation", "validate MySQL user host", err)
 	}
 
-	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	cfg, err := application.commandContext().resolveCLIConnection(b.globals.Connection)
 	if err != nil {
 		return err
 	}
@@ -289,11 +289,11 @@ func (b *cliBuilder) runDropUser(ctx context.Context, application *Application, 
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 	}
-	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
+	if err := application.commandContext().applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
 		return err
 	}
 
-	selectedTemplate, err := application.selectTemplateForCLI("drop user", cfg, flags.template)
+	selectedTemplate, err := application.commandContext().selectCLITemplate("drop user", cfg, flags.template)
 	if err != nil {
 		return err
 	}
@@ -398,7 +398,7 @@ func resolveCLIPassword(ctx context.Context, application *Application, flags *cr
 }
 
 func (a *Application) buildCreateUserCLIPlans(cfg *config.ConnectionConfig, templateName string, options userCreateOptions, extraInputs map[string]string) (*tpl.ExecutionPlan, *tpl.ExecutionPlan, error) {
-	selectedTemplate, err := a.selectTemplateForCLI("create user", cfg, templateName)
+	selectedTemplate, err := a.commandContext().selectCLITemplate("create user", cfg, templateName)
 	if err != nil {
 		return nil, nil, err
 	}

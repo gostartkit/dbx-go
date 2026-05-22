@@ -9,7 +9,7 @@ import (
 
 func (a *Application) handleShowCreateTable(ctx context.Context, table string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show create table", DryRun: a.dryRun}, func(meta *auditMetadata) error {
-		cfg, db, database, err := a.requireDatabaseContext(ctx)
+		cfg, db, database, err := a.commandContext().requireDatabaseContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -59,7 +59,7 @@ func (a *Application) handleShowCreateTable(ctx context.Context, table string) e
 
 func (a *Application) handleShowTableStatus(ctx context.Context, table string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show table status", DryRun: a.dryRun}, func(meta *auditMetadata) error {
-		cfg, db, database, err := a.requireDatabaseContext(ctx)
+		cfg, db, database, err := a.commandContext().requireDatabaseContext(ctx)
 		if err != nil {
 			return err
 		}

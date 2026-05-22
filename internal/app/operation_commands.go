@@ -20,7 +20,7 @@ type templateListFilters struct {
 
 func (a *Application) handleShowTemplates(ctx context.Context, filters templateListFilters) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show templates"}, func(meta *auditMetadata) error {
-		cfg, err := a.templateScopeConfig("")
+		cfg, err := a.commandContext().resolveTemplateScope("")
 		if err != nil {
 			return err
 		}
@@ -40,7 +40,7 @@ func (a *Application) handleShowTemplates(ctx context.Context, filters templateL
 
 func (a *Application) handleExecValidate(ctx context.Context, name string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "exec"}, func(meta *auditMetadata) error {
-		cfg, err := a.templateScopeConfig("")
+		cfg, err := a.commandContext().resolveTemplateScope("")
 		if err != nil {
 			return err
 		}
@@ -60,7 +60,7 @@ func (a *Application) handleExecValidate(ctx context.Context, name string) error
 
 func (a *Application) handleDescribeTemplate(ctx context.Context, name string, verbose bool) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show template"}, func(meta *auditMetadata) error {
-		cfg, err := a.templateScopeConfig("")
+		cfg, err := a.commandContext().resolveTemplateScope("")
 		if err != nil {
 			return err
 		}
@@ -514,31 +514,6 @@ func (a *Application) printOperationValidation(result *OperationValidationResult
 	a.prompt.Printf("Category: %s\n", result.Category)
 	a.prompt.Printf("Command: %s\n", result.Command)
 	a.prompt.Println("Validation: OK")
-}
-
-func (a *Application) templateScopeConfig(connectionName string) (*config.ConnectionConfig, error) {
-	if strings.TrimSpace(connectionName) != "" {
-		cfg, err := a.store.LoadConnection(strings.TrimSpace(connectionName))
-		if err != nil {
-			return nil, util.WrapLayer("config", "load connection "+strings.TrimSpace(connectionName), err)
-		}
-		return cfg, nil
-	}
-	if a.session != nil && a.session.Connection != nil {
-		return cloneConnectionConfig(a.session.Connection), nil
-	}
-	sessionFile, err := a.store.LoadSession()
-	if err != nil {
-		return nil, util.WrapLayer("config", "load session", err)
-	}
-	if strings.TrimSpace(sessionFile.CurrentConnection) == "" {
-		return &config.ConnectionConfig{Driver: "mysql"}, nil
-	}
-	cfg, err := a.store.LoadConnection(sessionFile.CurrentConnection)
-	if err != nil {
-		return nil, util.WrapLayer("config", "load current session connection "+sessionFile.CurrentConnection, err)
-	}
-	return cfg, nil
 }
 
 func (a *Application) requireOperationConnection(ctx context.Context) (*config.ConnectionConfig, error) {

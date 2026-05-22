@@ -8,7 +8,7 @@ import (
 
 func (a *Application) handleShowColumns(ctx context.Context, table string) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show columns", DryRun: a.dryRun}, func(meta *auditMetadata) error {
-		cfg, db, database, err := a.requireDatabaseContext(ctx)
+		cfg, db, database, err := a.commandContext().requireDatabaseContext(ctx)
 		if err != nil {
 			return err
 		}

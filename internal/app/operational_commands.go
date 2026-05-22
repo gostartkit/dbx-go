@@ -2,11 +2,8 @@ package app
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"strings"
 
-	"pkg.gostartkit.com/dbx/internal/config"
 	"pkg.gostartkit.com/dbx/internal/util"
 )
 
@@ -31,7 +28,7 @@ func (a *Application) handleContext(ctx context.Context) error {
 
 func (a *Application) handleShowTables(ctx context.Context) error {
 	return a.auditCommand(ctx, auditMetadata{Command: "show tables", DryRun: a.dryRun}, func(meta *auditMetadata) error {
-		cfg, db, database, err := a.requireDatabaseContext(ctx)
+		cfg, db, database, err := a.commandContext().requireDatabaseContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -86,17 +83,6 @@ func (a *Application) handleShowTables(ctx context.Context) error {
 		}
 		return nil
 	})
-}
-
-func (a *Application) requireDatabaseContext(ctx context.Context) (*config.ConnectionConfig, *sql.DB, string, error) {
-	cfg, db, err := a.requireConnection(ctx)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	if strings.TrimSpace(a.session.Database) == "" {
-		return nil, nil, "", util.WrapLayer("validation", "database context", fmt.Errorf("no database selected; use: use <database>"))
-	}
-	return cfg, db, a.session.Database, nil
 }
 
 func (a *Application) resolveTableName(ctx context.Context, table string) (string, error) {

@@ -200,7 +200,7 @@ func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Applica
 		return util.WrapLayer("validation", "validate database name", err)
 	}
 
-	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	cfg, err := application.commandContext().resolveCLIConnection(b.globals.Connection)
 	if err != nil {
 		return err
 	}
@@ -208,11 +208,11 @@ func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Applica
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 	}
-	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
+	if err := application.commandContext().applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
 		return err
 	}
 
-	selectedTemplate, err := application.selectTemplateForCLI("create database", cfg, flags.template)
+	selectedTemplate, err := application.commandContext().selectCLITemplate("create database", cfg, flags.template)
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func (b *cliBuilder) runCreateDatabase(ctx context.Context, application *Applica
 }
 
 func (b *cliBuilder) runShowDatabases(ctx context.Context, application *Application, flags *planOnlyFlags, meta *auditMetadata) error {
-	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	cfg, err := application.commandContext().resolveCLIConnection(b.globals.Connection)
 	if err != nil {
 		return err
 	}
@@ -273,11 +273,11 @@ func (b *cliBuilder) runShowDatabases(ctx context.Context, application *Applicat
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 	}
-	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
+	if err := application.commandContext().applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
 		return err
 	}
 
-	selectedTemplate, err := application.selectTemplateForCLI("show databases", cfg, flags.template)
+	selectedTemplate, err := application.commandContext().selectCLITemplate("show databases", cfg, flags.template)
 	if err != nil {
 		return err
 	}
@@ -327,7 +327,7 @@ func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Applicati
 		return util.WrapLayer("validation", "validate database name", err)
 	}
 
-	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
+	cfg, err := application.commandContext().resolveCLIConnection(b.globals.Connection)
 	if err != nil {
 		return err
 	}
@@ -335,10 +335,10 @@ func (b *cliBuilder) runDropDatabase(ctx context.Context, application *Applicati
 		meta.Connection = cfg.Name
 		meta.Mode = cfg.Mode
 	}
-	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
+	if err := application.commandContext().applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
 		return err
 	}
-	selectedTemplate, err := application.selectTemplateForCLI("drop database", cfg, flags.template)
+	selectedTemplate, err := application.commandContext().selectCLITemplate("drop database", cfg, flags.template)
 	if err != nil {
 		return err
 	}

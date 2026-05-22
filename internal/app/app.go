@@ -258,7 +258,7 @@ func (a *Application) currentCompletionUsers() []string {
 }
 
 func (a *Application) currentCompletionTemplates() []string {
-	cfg, err := a.templateScopeConfig("")
+	cfg, err := a.commandContext().resolveTemplateScope("")
 	if err != nil {
 		return nil
 	}
@@ -274,7 +274,7 @@ func (a *Application) currentCompletionTemplates() []string {
 }
 
 func (a *Application) currentCompletionTemplateTags() []string {
-	cfg, err := a.templateScopeConfig("")
+	cfg, err := a.commandContext().resolveTemplateScope("")
 	if err != nil {
 		return nil
 	}

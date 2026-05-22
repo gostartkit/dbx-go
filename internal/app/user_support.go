@@ -126,7 +126,7 @@ func (a *Application) resolveCreateUserPlan(ctx context.Context, cfg *config.Con
 		err              error
 	)
 	if cli {
-		selectedTemplate, err = a.selectTemplateForCLI("create user", cfg, templateName)
+		selectedTemplate, err = a.commandContext().selectCLITemplate("create user", cfg, templateName)
 	} else {
 		selectedTemplate, err = a.resolveTemplateForAction(ctx, "create user", cfg)
 	}

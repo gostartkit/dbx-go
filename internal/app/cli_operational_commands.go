@@ -84,7 +84,7 @@ func (b *cliBuilder) runShowTables(ctx context.Context, application *Application
 		meta.Mode = cfg.Mode
 	}
 
-	template, err := application.selectTemplateForCLI("show tables", cfg, "")
+	template, err := application.commandContext().selectCLITemplate("show tables", cfg, "")
 	if err != nil {
 		return err
 	}
@@ -127,26 +127,16 @@ func (b *cliBuilder) runShowTables(ctx context.Context, application *Application
 }
 
 func (b *cliBuilder) resolveConnectionAndDatabase(ctx context.Context, application *Application, command string) (*config.ConnectionConfig, string, error) {
-	cfg, err := application.resolveConnectionConfig(b.globals.Connection)
-	if err != nil {
-		return nil, "", err
-	}
-	if err := application.applyCLIDatabaseSelection(ctx, cfg, b.globals.Database); err != nil {
-		return nil, "", err
-	}
-	if strings.TrimSpace(application.session.Database) == "" {
-		return nil, "", util.WrapLayer("validation", command, fmt.Errorf("no database selected; use --database <name>"))
-	}
-	return cfg, application.session.Database, nil
+	return application.commandContext().resolveCLIConnectionAndDatabase(ctx, b.globals.Connection, b.globals.Database, command)
 }
 
 func (a *Application) contextForCLI(ctx context.Context, connectionName string, database string) (*ContextResult, error) {
 	if strings.TrimSpace(connectionName) != "" {
-		cfg, err := a.store.LoadConnection(connectionName)
+		cfg, err := a.commandContext().resolveCLIConnection(connectionName)
 		if err != nil {
-			return nil, util.WrapLayer("config", "load connection "+connectionName, err)
+			return nil, err
 		}
-		if err := a.applyCLIDatabaseSelection(ctx, cfg, database); err != nil {
+		if err := a.commandContext().applyCLIDatabaseSelection(ctx, cfg, database); err != nil {
 			return nil, err
 		}
 		return &ContextResult{

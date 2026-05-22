@@ -254,7 +254,7 @@ func cloneTemplateValues(values map[string]string) map[string]string {
 }
 
 func (a *Application) listOperationNames(ctx context.Context) ([]operationNameEntry, error) {
-	cfg, err := a.templateScopeConfig("")
+	cfg, err := a.commandContext().resolveTemplateScope("")
 	if err != nil {
 		return nil, err
 	}

@@ -20,7 +20,7 @@ func (a *Application) handleShowRows(ctx context.Context, table string, limitArg
 
 func (a *Application) handleRowPreviewWithTemplate(ctx context.Context, command string, templateCommand string, table string, limitArg string, random bool) error {
 	return a.auditCommand(ctx, auditMetadata{Command: command, DryRun: a.dryRun}, func(meta *auditMetadata) error {
-		cfg, db, database, err := a.requireDatabaseContext(ctx)
+		cfg, db, database, err := a.commandContext().requireDatabaseContext(ctx)
 		if err != nil {
 			return err
 		}
