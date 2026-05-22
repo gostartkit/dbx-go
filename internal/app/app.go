@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"sync"
 
 	"pkg.gostartkit.com/cmd"
 	"pkg.gostartkit.com/dbx/internal/config"
@@ -22,24 +23,32 @@ type Options struct {
 }
 
 type Application struct {
-	prompt               *ui.Prompt
-	out                  io.Writer
-	store                *config.Store
-	connector            connectorClient
-	templates            *tpl.Service
-	replApp              *cmd.App
-	session              *Session
-	history              []string
-	dryRun               bool
-	reconnectCandidate   *config.ConnectionConfig
-	reconnectDatabase    string
-	completionDBs        []string
-	completionDBsConn    string
-	completionTables     []string
-	completionTablesConn string
-	completionTablesDB   string
-	completionUsers      []string
-	completionUsersConn  string
+	prompt                      *ui.Prompt
+	out                         io.Writer
+	store                       *config.Store
+	connector                   connectorClient
+	templates                   *tpl.Service
+	replApp                     *cmd.App
+	session                     *Session
+	history                     []string
+	dryRun                      bool
+	reconnectCandidate          *config.ConnectionConfig
+	reconnectDatabase           string
+	completionDBs               []string
+	completionDBsConn           string
+	completionTables            []string
+	completionTablesConn        string
+	completionTablesDB          string
+	completionUsers             []string
+	completionUsersConn         string
+	completionMu                sync.Mutex
+	completionDBsReady          bool
+	completionUsersReady        bool
+	completionTablesReady       bool
+	completionDBsLoadingConn    string
+	completionUsersLoadingConn  string
+	completionTablesLoadingConn string
+	completionTablesLoadingDB   string
 }
 
 func New(in io.Reader, out io.Writer, _ io.Writer) (*Application, error) {
@@ -226,35 +235,19 @@ func (a *Application) restoreSessionDatabase(ctx context.Context) error {
 }
 
 func (a *Application) currentCompletionDatabases() []string {
-	if a.session == nil || a.session.Connection == nil || a.session.DB == nil {
+	cfg, db, _ := a.completionSnapshot()
+	if cfg == nil || db == nil {
 		return nil
 	}
-	if a.completionDBsConn == a.session.Connection.Name && len(a.completionDBs) > 0 {
-		return append([]string(nil), a.completionDBs...)
-	}
-	databases, err := a.connector.ListDatabases(context.Background(), a.session.Connection, a.session.DB)
-	if err != nil {
-		return nil
-	}
-	a.completionDBsConn = a.session.Connection.Name
-	a.completionDBs = append([]string(nil), databases...)
-	return append([]string(nil), a.completionDBs...)
+	return a.currentDatabaseCompletionValues(cfg, db)
 }
 
 func (a *Application) currentCompletionUsers() []string {
-	if a.session == nil || a.session.Connection == nil || a.session.DB == nil {
+	cfg, db, _ := a.completionSnapshot()
+	if cfg == nil || db == nil {
 		return nil
 	}
-	if a.completionUsersConn == a.session.Connection.Name && len(a.completionUsers) > 0 {
-		return append([]string(nil), a.completionUsers...)
-	}
-	users, err := a.connector.QueryStrings(context.Background(), a.session.Connection, a.session.DB, "SELECT DISTINCT User FROM mysql.user ORDER BY User")
-	if err != nil {
-		return nil
-	}
-	a.completionUsersConn = a.session.Connection.Name
-	a.completionUsers = append([]string(nil), users...)
-	return append([]string(nil), a.completionUsers...)
+	return a.currentUserCompletionValues(cfg, db)
 }
 
 func (a *Application) currentCompletionTemplates() []string {
@@ -298,20 +291,11 @@ func (a *Application) currentCompletionTemplateTags() []string {
 }
 
 func (a *Application) currentCompletionTables() []string {
-	if a.session == nil || a.session.Connection == nil || a.session.DB == nil || strings.TrimSpace(a.session.Database) == "" {
+	cfg, db, database := a.completionSnapshot()
+	if cfg == nil || db == nil || strings.TrimSpace(database) == "" {
 		return nil
 	}
-	if a.completionTablesConn == a.session.Connection.Name && a.completionTablesDB == a.session.Database && len(a.completionTables) > 0 {
-		return append([]string(nil), a.completionTables...)
-	}
-	tables, err := a.connector.ListTables(context.Background(), a.session.Connection, a.session.DB, a.session.Database)
-	if err != nil {
-		return nil
-	}
-	a.completionTablesConn = a.session.Connection.Name
-	a.completionTablesDB = a.session.Database
-	a.completionTables = append([]string(nil), tables...)
-	return append([]string(nil), a.completionTables...)
+	return a.currentTableCompletionValues(cfg, db, database)
 }
 
 func (a *Application) recordHistory(line string) error {

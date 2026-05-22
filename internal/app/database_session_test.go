@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"pkg.gostartkit.com/dbx/internal/config"
 	"pkg.gostartkit.com/dbx/internal/driver"
@@ -309,9 +310,12 @@ func TestCurrentCompletionTablesCachesByConnectionAndDatabase(t *testing.T) {
 	}
 
 	first := app.currentCompletionTables()
-	second := app.currentCompletionTables()
-	if len(first) != 2 || len(second) != 2 {
-		t.Fatalf("unexpected tables: %#v %#v", first, second)
+	if first != nil {
+		t.Fatalf("first completion should return immediately without blocking, got %#v", first)
+	}
+	second := waitForTableCompletion(t, app)
+	if len(second) != 2 {
+		t.Fatalf("unexpected tables: %#v", second)
 	}
 	if connector.tableCalls != 1 {
 		t.Fatalf("tableCalls = %d, want 1", connector.tableCalls)
@@ -359,4 +363,17 @@ func TestCompletionFailuresFallBackToEmptySuggestions(t *testing.T) {
 	if got := app.currentCompletionUsers(); got != nil {
 		t.Fatalf("currentCompletionUsers() = %#v, want nil", got)
 	}
+}
+
+func waitForTableCompletion(t *testing.T, app *Application) []string {
+	t.Helper()
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if values := app.currentCompletionTables(); len(values) > 0 {
+			return values
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return app.currentCompletionTables()
 }

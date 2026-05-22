@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"pkg.gostartkit.com/dbx/internal/config"
@@ -79,29 +77,8 @@ func (a *Application) doctorConnection(name string) (*DoctorResult, error) {
 	}
 
 	cfg.ApplyDefaults()
-
-	addDoctorCheck(result, "connection name is valid", checkIdentifier(cfg.Name), "")
-	addDoctorCheck(result, "driver mysql", checkDriver(cfg.Driver), "")
-	addDoctorCheck(result, "mode "+cfg.Mode, checkMode(cfg.Mode), "")
-	addDoctorCheck(result, "database host "+cfg.Host, checkNonEmpty(cfg.Host), "")
-	addDoctorCheck(result, fmt.Sprintf("database port %d", cfg.Port), checkPort(cfg.Port), "")
-	addDoctorCheck(result, "database user "+cfg.User, checkNonEmpty(cfg.User), "")
-	checkDatabasePassword(result, &cfg)
-	checkTimeouts(result, &cfg)
-
-	switch cfg.Mode {
-	case "direct":
-		checkDirectMode(result, &cfg)
-	case "ssh":
-		checkSSHProxyAbsent(result, &cfg)
-		checkSSHMode(result, &cfg)
-	case "proxy":
-		checkProxyMode(result, &cfg)
-		checkProxySSHAbsent(result, &cfg)
-	case "proxy-ssh":
-		checkProxyMode(result, &cfg)
-		checkSSHMode(result, &cfg)
-	}
+	appendDoctorValidationChecks(result, cfg.ValidateDetailed())
+	checkSSHFilesystem(result, &cfg)
 
 	if result.OK {
 		return result, nil
@@ -162,108 +139,20 @@ func addDoctorCheck(result *DoctorResult, name string, status string, suggestion
 	}
 }
 
-func checkIdentifier(value string) string {
-	if err := util.ValidateIdentifier(value); err != nil {
-		return "fail"
-	}
-	return "ok"
-}
-
-func checkDriver(value string) string {
-	if strings.TrimSpace(value) != "mysql" {
-		return "fail"
-	}
-	return "ok"
-}
-
-func checkMode(value string) string {
-	switch strings.TrimSpace(value) {
-	case "direct", "ssh", "proxy", "proxy-ssh":
-		return "ok"
-	default:
-		return "fail"
-	}
-}
-
-func checkNonEmpty(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return "fail"
-	}
-	return "ok"
-}
-
-func checkPort(port int) string {
-	if port < 1 || port > 65535 {
-		return "fail"
-	}
-	return "ok"
-}
-
-func checkDatabasePassword(result *DoctorResult, cfg *config.ConnectionConfig) {
-	switch {
-	case strings.TrimSpace(cfg.Password) != "":
-		addDoctorCheck(result, "database password is inline in config", "warn", "prefer password_env or password_prompt")
-	case strings.TrimSpace(cfg.PasswordEnv) != "":
-		if os.Getenv(cfg.PasswordEnv) == "" {
-			addDoctorCheck(result, "database password env "+cfg.PasswordEnv+" is set", "warn", "export "+cfg.PasswordEnv+" before connecting")
-			return
-		}
-		addDoctorCheck(result, "database password env "+cfg.PasswordEnv+" is set", "ok", "")
-	case cfg.PasswordPrompt:
-		addDoctorCheck(result, "database password prompt enabled", "ok", "")
-	default:
-		addDoctorCheck(result, "database password source is configured", "warn", "set password_env or enable password_prompt")
-	}
-}
-
-func checkTimeouts(result *DoctorResult, cfg *config.ConnectionConfig) {
-	if cfg.Timeout == nil {
+func appendDoctorValidationChecks(result *DoctorResult, report *config.ValidationReport) {
+	if result == nil || report == nil {
 		return
 	}
-	if cfg.Timeout.ConnectSeconds <= 0 {
-		addDoctorCheck(result, "connect timeout is valid", "fail", "")
-	} else {
-		addDoctorCheck(result, fmt.Sprintf("connect timeout %d seconds", cfg.Timeout.ConnectSeconds), "ok", "")
-	}
-	if cfg.Timeout.QuerySeconds <= 0 {
-		addDoctorCheck(result, "query timeout is valid", "fail", "")
-	} else {
-		addDoctorCheck(result, fmt.Sprintf("query timeout %d seconds", cfg.Timeout.QuerySeconds), "ok", "")
+	for _, check := range report.Checks {
+		addDoctorCheck(result, check.Name, string(check.Status), check.Suggestion)
 	}
 }
 
-func checkDirectMode(result *DoctorResult, cfg *config.ConnectionConfig) {
-	addDoctorCheck(result, "no SSH config required", "ok", "")
-	if cfg.Proxy != nil && strings.TrimSpace(cfg.Proxy.URL) != "" {
-		addDoctorCheck(result, "proxy config must be empty for direct mode", "fail", "remove proxy config or use mode proxy")
-	}
-}
-
-func checkSSHProxyAbsent(result *DoctorResult, cfg *config.ConnectionConfig) {
-	if cfg.Proxy != nil && strings.TrimSpace(cfg.Proxy.URL) != "" {
-		addDoctorCheck(result, "proxy config must be empty for ssh mode", "fail", "remove proxy config or use mode proxy-ssh")
-	}
-}
-
-func checkProxySSHAbsent(result *DoctorResult, cfg *config.ConnectionConfig) {
-	if cfg.SSH != nil {
-		addDoctorCheck(result, "ssh config must be empty for proxy mode", "fail", "remove ssh config or use mode proxy-ssh")
-	}
-}
-
-func checkSSHMode(result *DoctorResult, cfg *config.ConnectionConfig) {
-	if cfg.SSH == nil {
-		addDoctorCheck(result, "ssh settings are configured", "fail", "set ssh.host, ssh.user, and an SSH auth method")
+func checkSSHFilesystem(result *DoctorResult, cfg *config.ConnectionConfig) {
+	if result == nil || cfg == nil || cfg.SSH == nil {
 		return
 	}
-
-	addDoctorCheck(result, "ssh host "+cfg.SSH.Host, checkNonEmpty(cfg.SSH.Host), "")
-	addDoctorCheck(result, fmt.Sprintf("ssh port %d", cfg.SSH.Port), checkPort(cfg.SSH.Port), "")
-	addDoctorCheck(result, "ssh user "+cfg.SSH.User, checkNonEmpty(cfg.SSH.User), "")
-
-	hasAuth := false
 	if strings.TrimSpace(cfg.SSH.PrivateKey) != "" {
-		hasAuth = true
 		privateKeyPath, err := cfg.SSH.PrivateKeyPath()
 		if err != nil {
 			addDoctorCheck(result, "ssh private key path expands", "fail", "")
@@ -276,62 +165,8 @@ func checkSSHMode(result *DoctorResult, cfg *config.ConnectionConfig) {
 			}
 		}
 	}
-
-	switch {
-	case strings.TrimSpace(cfg.SSH.Password) != "":
-		hasAuth = true
-		addDoctorCheck(result, "ssh password is inline in config", "warn", "prefer ssh password_env or a private key")
-	case strings.TrimSpace(cfg.SSH.PasswordEnv) != "":
-		hasAuth = true
-		if os.Getenv(cfg.SSH.PasswordEnv) == "" {
-			addDoctorCheck(result, "ssh password env "+cfg.SSH.PasswordEnv+" is set", "warn", "export "+cfg.SSH.PasswordEnv+" before connecting")
-		} else {
-			addDoctorCheck(result, "ssh password env "+cfg.SSH.PasswordEnv+" is set", "ok", "")
-		}
-	}
-
-	if !hasAuth {
-		addDoctorCheck(result, "ssh auth method is configured", "fail", "set ssh.private_key, ssh.password_env, or ssh.password")
-	}
-
 	for _, check := range knownHostsChecks(cfg.SSH.Host, cfg.SSH.Port) {
 		addDoctorCheck(result, check.Name, check.Status, check.Suggestion)
-	}
-}
-
-func checkProxyMode(result *DoctorResult, cfg *config.ConnectionConfig) {
-	if cfg.Proxy == nil || strings.TrimSpace(cfg.Proxy.URL) == "" {
-		addDoctorCheck(result, "proxy URL is configured", "fail", "set proxy.url for mode "+cfg.Mode)
-		return
-	}
-
-	parsed, err := config.ParseProxyURL(cfg.Proxy.URL)
-	if err != nil {
-		if strings.Contains(err.Error(), "unsupported proxy scheme") {
-			addDoctorCheck(result, "proxy scheme is supported", "fail", "supported schemes: socks5")
-		} else {
-			addDoctorCheck(result, "proxy URL is valid", "fail", "")
-		}
-		return
-	}
-
-	addDoctorCheck(result, "proxy scheme "+parsed.Scheme, "ok", "")
-	host, portText, splitErr := net.SplitHostPort(parsed.Address)
-	if splitErr != nil || strings.TrimSpace(host) == "" {
-		addDoctorCheck(result, "proxy host is valid", "fail", "")
-		return
-	}
-	addDoctorCheck(result, "proxy host "+host, "ok", "")
-
-	port, atoiErr := strconv.Atoi(portText)
-	if atoiErr != nil || checkPort(port) != "ok" {
-		addDoctorCheck(result, "proxy port is valid", "fail", "")
-	} else {
-		addDoctorCheck(result, fmt.Sprintf("proxy port %d", port), "ok", "")
-	}
-
-	if parsed.Password != "" {
-		addDoctorCheck(result, "proxy URL contains inline password", "warn", "avoid saving inline proxy passwords in config")
 	}
 }
 

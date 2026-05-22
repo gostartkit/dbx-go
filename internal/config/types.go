@@ -130,72 +130,11 @@ func (c *ConnectionConfig) Validate() error {
 	if c == nil {
 		return fmt.Errorf("connection config is required")
 	}
-
 	c.ApplyDefaults()
-
 	if c.Version != CurrentConnectionSchemaVersion {
 		return fmt.Errorf("unsupported version %d", c.Version)
 	}
-
-	if strings.TrimSpace(c.Name) == "" {
-		return fmt.Errorf("connection name is required")
-	}
-	if c.Driver != "mysql" {
-		return fmt.Errorf("unsupported driver %q", c.Driver)
-	}
-	if c.Mode != "direct" && c.Mode != "ssh" && c.Mode != "proxy" && c.Mode != "proxy-ssh" {
-		return fmt.Errorf("unsupported connection mode %q", c.Mode)
-	}
-	if strings.TrimSpace(c.Host) == "" {
-		return fmt.Errorf("host is required")
-	}
-	if c.Port <= 0 {
-		return fmt.Errorf("port must be greater than zero")
-	}
-	if strings.TrimSpace(c.User) == "" {
-		return fmt.Errorf("user is required")
-	}
-	if c.Timeout.ConnectSeconds <= 0 {
-		return fmt.Errorf("timeout.connect_seconds must be greater than zero")
-	}
-	if c.Timeout.QuerySeconds <= 0 {
-		return fmt.Errorf("timeout.query_seconds must be greater than zero")
-	}
-	if c.Mode == "direct" && c.Proxy != nil && strings.TrimSpace(c.Proxy.URL) != "" {
-		return fmt.Errorf("proxy settings are not supported for direct mode")
-	}
-	if c.Mode == "ssh" && c.Proxy != nil && strings.TrimSpace(c.Proxy.URL) != "" {
-		return fmt.Errorf("proxy settings are not supported for ssh mode")
-	}
-	if c.Mode == "proxy" || c.Mode == "proxy-ssh" {
-		if c.Proxy == nil || strings.TrimSpace(c.Proxy.URL) == "" {
-			return fmt.Errorf("proxy.url is required for %s mode", c.Mode)
-		}
-		if _, err := ParseProxyURL(c.Proxy.URL); err != nil {
-			return fmt.Errorf("proxy.url is invalid: %w", err)
-		}
-	}
-	if c.Mode == "proxy" && c.SSH != nil {
-		return fmt.Errorf("ssh settings are not supported for proxy mode")
-	}
-	if c.Mode == "ssh" || c.Mode == "proxy-ssh" {
-		if c.SSH == nil {
-			return fmt.Errorf("ssh settings are required for %s mode", c.Mode)
-		}
-		if strings.TrimSpace(c.SSH.Host) == "" {
-			return fmt.Errorf("ssh.host is required")
-		}
-		if c.SSH.Port <= 0 {
-			return fmt.Errorf("ssh.port must be greater than zero")
-		}
-		if strings.TrimSpace(c.SSH.User) == "" {
-			return fmt.Errorf("ssh.user is required")
-		}
-		if strings.TrimSpace(c.SSH.PrivateKey) == "" && strings.TrimSpace(c.SSH.PasswordEnv) == "" && strings.TrimSpace(c.SSH.Password) == "" {
-			return fmt.Errorf("ssh.private_key or ssh.password_env or ssh.password is required")
-		}
-	}
-	return nil
+	return c.ValidateDetailed().Error()
 }
 
 func (c *ConnectionConfig) Address() string {

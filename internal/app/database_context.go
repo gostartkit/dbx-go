@@ -20,17 +20,24 @@ func (a *Application) clearDatabaseSelection() {
 func (a *Application) clearDatabaseCompletion() {
 	a.completionDBs = nil
 	a.completionDBsConn = ""
+	a.completionDBsReady = false
+	a.completionDBsLoadingConn = ""
 }
 
 func (a *Application) clearUserCompletion() {
 	a.completionUsers = nil
 	a.completionUsersConn = ""
+	a.completionUsersReady = false
+	a.completionUsersLoadingConn = ""
 }
 
 func (a *Application) clearTableCompletion() {
 	a.completionTables = nil
 	a.completionTablesConn = ""
 	a.completionTablesDB = ""
+	a.completionTablesReady = false
+	a.completionTablesLoadingConn = ""
+	a.completionTablesLoadingDB = ""
 }
 
 func (a *Application) saveCurrentSession() error {
