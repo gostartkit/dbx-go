@@ -21,8 +21,8 @@
 
 ### 1. 启动与模式选择
 
-- [`cmd/dbx/main.go`](cmd/dbx/main.go) 创建带信号感知的 context，然后把控制权交给 `app.NewCommandApp(...)`。
-- [`internal/app/cli.go`](internal/app/cli.go) 构建根 `cmd.App`，开启 REPL 模式，并注册全局 flags 与整棵命令树。
+- [`cmd/dbx/main.go`](../cmd/dbx/main.go) 创建带信号感知的 context，然后把控制权交给 `app.NewCommandApp(...)`。
+- [`internal/app/cli.go`](../internal/app/cli.go) 构建根 `cmd.App`，开启 REPL 模式，并注册全局 flags 与整棵命令树。
 - 当前真正的 REPL 循环由 `pkg.gostartkit.com/cmd` 提供，而不是由本地 `internal/repl/` 中的代码实现。
 
 ### 2. 共享命令树
@@ -38,7 +38,7 @@
 
 ### 3. 应用生命周期与会话状态
 
-[`internal/app/app.go`](internal/app/app.go) 持有长生命周期状态：
+[`internal/app/app.go`](../internal/app/app.go) 持有长生命周期状态：
 
 - prompt 实例
 - 配置 store
@@ -53,7 +53,7 @@
 
 ### 4. 配置与持久化
 
-[`internal/config/store.go`](internal/config/store.go) 负责 `~/.config/dbx/` 下的磁盘布局：
+[`internal/config/store.go`](../internal/config/store.go) 负责 `~/.config/dbx/` 下的磁盘布局：
 
 - connection 配置
 - connection 级模板目录
@@ -70,7 +70,7 @@
 - connection 配置在 load/save 时都会校验
 - `SessionFile` 仍兼容旧 JSON 字段名
 
-[`internal/config/types.go`](internal/config/types.go) 会补齐这些默认值：
+[`internal/config/types.go`](../internal/config/types.go) 会补齐这些默认值：
 
 - driver `mysql`
 - 数据库端口 `3306`
@@ -78,18 +78,18 @@
 - connect timeout `10s`
 - query timeout `30s`
 
-[`internal/config/diagnostics.go`](internal/config/diagnostics.go) 负责严格的模式校验，并生成 `doctor` 使用的结构化诊断结果。
+[`internal/config/diagnostics.go`](../internal/config/diagnostics.go) 负责严格的模式校验，并生成 `doctor` 使用的结构化诊断结果。
 
 ### 5. 模板与 operation 解析
 
 `dbx` 不允许用户直接提交无限制 SQL。命令在执行前，必须先解析成模板或 operation。
 
-模板相关职责主要在 [`internal/template/`](internal/template/)：
+模板相关职责主要在 [`internal/template/`](../internal/template/)：
 
-- [`builtin.go`](internal/template/builtin.go)：内置模板定义
-- [`service.go`](internal/template/service.go)：connection/global/builtin 三层模板加载与缓存
-- [`render.go`](internal/template/render.go)：变量渲染
-- [`types.go`](internal/template/types.go)：模板 schema、输入类型和 action 结构校验
+- [`builtin.go`](../internal/template/builtin.go)：内置模板定义
+- [`service.go`](../internal/template/service.go)：connection/global/builtin 三层模板加载与缓存
+- [`render.go`](../internal/template/render.go)：变量渲染
+- [`types.go`](../internal/template/types.go)：模板 schema、输入类型和 action 结构校验
 
 查找优先级是：
 
@@ -99,7 +99,7 @@ connection template
 > builtin template
 ```
 
-[`internal/app/operation_runtime.go`](internal/app/operation_runtime.go) 会把模板暴露成 `exec` 使用的具名 operation。它内部合并了两类 provider：
+[`internal/app/operation_runtime.go`](../internal/app/operation_runtime.go) 会把模板暴露成 `exec` 使用的具名 operation。它内部合并了两类 provider：
 
 - builtin operation
 - 非 builtin 的已解析模板
@@ -120,10 +120,10 @@ connection template
 
 关键文件：
 
-- [`internal/app/context_resolver.go`](internal/app/context_resolver.go)
-- [`internal/app/template_inputs.go`](internal/app/template_inputs.go)
-- [`internal/app/plan_support.go`](internal/app/plan_support.go)
-- [`internal/app/execution.go`](internal/app/execution.go)
+- [`internal/app/context_resolver.go`](../internal/app/context_resolver.go)
+- [`internal/app/template_inputs.go`](../internal/app/template_inputs.go)
+- [`internal/app/plan_support.go`](../internal/app/plan_support.go)
+- [`internal/app/execution.go`](../internal/app/execution.go)
 
 执行计划会携带这些信息：
 
@@ -139,10 +139,10 @@ connection template
 
 连接相关代码分层比较清楚：
 
-- [`internal/connect/connect.go`](internal/connect/connect.go)：带超时的 driver 分发
-- [`internal/driver/mysql.go`](internal/driver/mysql.go)：MySQL DSN 和打开连接
-- [`internal/driver/mysql_transport.go`](internal/driver/mysql_transport.go)：direct、SSH、proxy、proxy-ssh 四种拨号方式
-- [`internal/driver/mysql_query.go`](internal/driver/mysql_query.go)：查询辅助与结果整形
+- [`internal/connect/connect.go`](../internal/connect/connect.go)：带超时的 driver 分发
+- [`internal/driver/mysql.go`](../internal/driver/mysql.go)：MySQL DSN 和打开连接
+- [`internal/driver/mysql_transport.go`](../internal/driver/mysql_transport.go)：direct、SSH、proxy、proxy-ssh 四种拨号方式
+- [`internal/driver/mysql_query.go`](../internal/driver/mysql_query.go)：查询辅助与结果整形
 
 几个重要的传输行为：
 
@@ -158,14 +158,14 @@ connection template
 
 交互层本身非常轻量。
 
-- [`internal/ui/prompt.go`](internal/ui/prompt.go) 实现了 `Ask`、`Choose`、`Confirm`、`AskPassword`。
+- [`internal/ui/prompt.go`](../internal/ui/prompt.go) 实现了 `Ask`、`Choose`、`Confirm`、`AskPassword`。
 - 当 stdin 是终端时，密码输入会借助 `golang.org/x/term` 隐藏回显。
 - history 和 prompt label 的管理主要在 `internal/app`。
 
 但补全系统其实比表面更“重”一些：
 
-- [`internal/app/completion*.go`](internal/app/completion*.go) 负责构建补全结果
-- [`internal/commandlang/`](internal/commandlang/) 负责对当前输入做词法和语法分析
+- [`internal/app/completion*.go`](../internal/app/completion*.go) 负责构建补全结果
+- [`internal/commandlang/`](../internal/commandlang/) 负责对当前输入做词法和语法分析
 - 各类 completion provider 会把语法上下文、命令元数据和动态 resolver 数据合并起来
 
 这意味着当前补全已经是“语法感知”的，而不只是简单前缀匹配。`commandlang` 的角色是给补全和上下文判断提供语法模型，并不是第二套命令执行引擎。
@@ -174,9 +174,9 @@ connection template
 
 安全相关能力目前分散但清晰：
 
-- [`internal/app/doctor.go`](internal/app/doctor.go)：静态配置与文件系统检查
-- [`internal/app/audit.go`](internal/app/audit.go)：best-effort JSONL 审计轨迹
-- [`internal/util/error_codes.go`](internal/util/error_codes.go)：稳定、脱敏的 JSON 错误封装
+- [`internal/app/doctor.go`](../internal/app/doctor.go)：静态配置与文件系统检查
+- [`internal/app/audit.go`](../internal/app/audit.go)：best-effort JSONL 审计轨迹
+- [`internal/util/error_codes.go`](../internal/util/error_codes.go)：稳定、脱敏的 JSON 错误封装
 
 值得特别记住的行为：
 
@@ -188,16 +188,16 @@ connection template
 
 当前真正处于活跃执行路径中的包大致如下：
 
-- [`cmd/dbx/`](cmd/dbx)：进程入口
-- [`internal/app/`](internal/app)：命令树、REPL 处理、CLI 处理、执行编排、输出整形
-- [`internal/commandlang/`](internal/commandlang)：补全和 help 感知解析所需的词法/语法模型
-- [`internal/config/`](internal/config)：配置类型、store、诊断、audit/history/session 持久化
-- [`internal/connect/`](internal/connect)：带超时的 connector 分发
-- [`internal/driver/`](internal/driver)：MySQL 传输和查询辅助
-- [`internal/template/`](internal/template)：内置模板、分层解析、渲染、校验
-- [`internal/ui/`](internal/ui)：prompt 和补全相关 UI 类型
-- [`internal/ui/editor/`](internal/ui/editor)：buffer 和 completion edit 原语
-- [`internal/util/`](internal/util)：校验辅助、分层错误、路径辅助、JSON 错误码
+- [`cmd/dbx/`](../cmd/dbx)：进程入口
+- [`internal/app/`](../internal/app)：命令树、REPL 处理、CLI 处理、执行编排、输出整形
+- [`internal/commandlang/`](../internal/commandlang)：补全和 help 感知解析所需的词法/语法模型
+- [`internal/config/`](../internal/config)：配置类型、store、诊断、audit/history/session 持久化
+- [`internal/connect/`](../internal/connect)：带超时的 connector 分发
+- [`internal/driver/`](../internal/driver)：MySQL 传输和查询辅助
+- [`internal/template/`](../internal/template)：内置模板、分层解析、渲染、校验
+- [`internal/ui/`](../internal/ui)：prompt 和补全相关 UI 类型
+- [`internal/ui/editor/`](../internal/ui/editor)：buffer 和 completion edit 原语
+- [`internal/util/`](../internal/util)：校验辅助、分层错误、路径辅助、JSON 错误码
 
 另外有两个目录目前存在，但不在活跃执行路径里：
 

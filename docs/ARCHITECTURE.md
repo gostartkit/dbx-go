@@ -21,8 +21,8 @@ The implementation reflects that in a few important ways:
 
 ### 1. Startup and mode selection
 
-- [`cmd/dbx/main.go`](cmd/dbx/main.go) creates a signal-aware context and delegates to `app.NewCommandApp(...)`.
-- [`internal/app/cli.go`](internal/app/cli.go) constructs the root `cmd.App`, enables REPL mode, and registers the global flags and command tree.
+- [`cmd/dbx/main.go`](../cmd/dbx/main.go) creates a signal-aware context and delegates to `app.NewCommandApp(...)`.
+- [`internal/app/cli.go`](../internal/app/cli.go) constructs the root `cmd.App`, enables REPL mode, and registers the global flags and command tree.
 - The active REPL loop is currently supplied by `pkg.gostartkit.com/cmd`, not by local code in `internal/repl/`.
 
 ### 2. Shared command tree
@@ -38,7 +38,7 @@ This is the main architectural seam in the repo: the user enters through differe
 
 ### 3. Application lifecycle and session state
 
-[`internal/app/app.go`](internal/app/app.go) owns the long-lived application state:
+[`internal/app/app.go`](../internal/app/app.go) owns the long-lived application state:
 
 - prompt instance
 - config store
@@ -53,7 +53,7 @@ On startup, the application loads persisted history and session state. If `sessi
 
 ### 4. Configuration and persistence
 
-[`internal/config/store.go`](internal/config/store.go) owns the on-disk layout under `~/.config/dbx/`:
+[`internal/config/store.go`](../internal/config/store.go) owns the on-disk layout under `~/.config/dbx/`:
 
 - connection configs
 - connection-local template directories
@@ -70,7 +70,7 @@ Important implementation details:
 - connection configs are validated on load and on save
 - `SessionFile` still accepts legacy JSON field names for compatibility
 
-[`internal/config/types.go`](internal/config/types.go) applies defaults such as:
+[`internal/config/types.go`](../internal/config/types.go) applies defaults such as:
 
 - driver `mysql`
 - database port `3306`
@@ -78,18 +78,18 @@ Important implementation details:
 - connect timeout `10s`
 - query timeout `30s`
 
-[`internal/config/diagnostics.go`](internal/config/diagnostics.go) performs strict mode-specific validation and produces structured diagnostics used by `doctor`.
+[`internal/config/diagnostics.go`](../internal/config/diagnostics.go) performs strict mode-specific validation and produces structured diagnostics used by `doctor`.
 
 ### 5. Template and operation resolution
 
 `dbx` does not let users submit unrestricted SQL. Instead, commands resolve a template or operation first.
 
-Template responsibilities live in [`internal/template/`](internal/template/):
+Template responsibilities live in [`internal/template/`](../internal/template/):
 
-- [`builtin.go`](internal/template/builtin.go) defines builtin templates
-- [`service.go`](internal/template/service.go) loads and caches templates from connection, global, and builtin layers
-- [`render.go`](internal/template/render.go) performs variable rendering
-- [`types.go`](internal/template/types.go) validates schema, input types, and action shape
+- [`builtin.go`](../internal/template/builtin.go) defines builtin templates
+- [`service.go`](../internal/template/service.go) loads and caches templates from connection, global, and builtin layers
+- [`render.go`](../internal/template/render.go) performs variable rendering
+- [`types.go`](../internal/template/types.go) validates schema, input types, and action shape
 
 Resolution order is:
 
@@ -99,7 +99,7 @@ connection template
 > builtin template
 ```
 
-[`internal/app/operation_runtime.go`](internal/app/operation_runtime.go) exposes templates as named operations for `exec`. It merges two providers:
+[`internal/app/operation_runtime.go`](../internal/app/operation_runtime.go) exposes templates as named operations for `exec`. It merges two providers:
 
 - builtin operations
 - non-builtin resolved templates
@@ -120,10 +120,10 @@ The execution path is intentionally explicit:
 
 Key files:
 
-- [`internal/app/context_resolver.go`](internal/app/context_resolver.go)
-- [`internal/app/template_inputs.go`](internal/app/template_inputs.go)
-- [`internal/app/plan_support.go`](internal/app/plan_support.go)
-- [`internal/app/execution.go`](internal/app/execution.go)
+- [`internal/app/context_resolver.go`](../internal/app/context_resolver.go)
+- [`internal/app/template_inputs.go`](../internal/app/template_inputs.go)
+- [`internal/app/plan_support.go`](../internal/app/plan_support.go)
+- [`internal/app/execution.go`](../internal/app/execution.go)
 
 Execution plans carry:
 
@@ -139,10 +139,10 @@ If a plan is transactional, `execution.go` runs every action inside a SQL transa
 
 The connectivity path is split cleanly:
 
-- [`internal/connect/connect.go`](internal/connect/connect.go): timeout-aware driver dispatch
-- [`internal/driver/mysql.go`](internal/driver/mysql.go): MySQL DSN/opening
-- [`internal/driver/mysql_transport.go`](internal/driver/mysql_transport.go): direct, SSH, proxy, and proxy-SSH dialers
-- [`internal/driver/mysql_query.go`](internal/driver/mysql_query.go): query helpers and result shaping
+- [`internal/connect/connect.go`](../internal/connect/connect.go): timeout-aware driver dispatch
+- [`internal/driver/mysql.go`](../internal/driver/mysql.go): MySQL DSN/opening
+- [`internal/driver/mysql_transport.go`](../internal/driver/mysql_transport.go): direct, SSH, proxy, and proxy-SSH dialers
+- [`internal/driver/mysql_query.go`](../internal/driver/mysql_query.go): query helpers and result shaping
 
 Important transport behaviors:
 
@@ -158,14 +158,14 @@ Important transport behaviors:
 
 The interactive UX is intentionally lightweight.
 
-- [`internal/ui/prompt.go`](internal/ui/prompt.go) implements `Ask`, `Choose`, `Confirm`, and `AskPassword`.
+- [`internal/ui/prompt.go`](../internal/ui/prompt.go) implements `Ask`, `Choose`, `Confirm`, and `AskPassword`.
 - Password input uses `golang.org/x/term` when stdin is a terminal.
 - History and prompt labeling are handled in `internal/app`.
 
 Completion is more sophisticated than the prompt layer suggests:
 
-- [`internal/app/completion*.go`](internal/app/completion*.go) builds completions
-- [`internal/commandlang/`](internal/commandlang/) lexes and parses the current line
+- [`internal/app/completion*.go`](../internal/app/completion*.go) builds completions
+- [`internal/commandlang/`](../internal/commandlang/) lexes and parses the current line
 - completion providers combine syntax context, command metadata, and live resolver data
 
 This means completion is syntax-aware rather than simple prefix matching. The `commandlang` package is used for parsing and completion context, not as a second command execution engine.
@@ -174,9 +174,9 @@ This means completion is syntax-aware rather than simple prefix matching. The `c
 
 Three subsystems reinforce safety:
 
-- [`internal/app/doctor.go`](internal/app/doctor.go): static config and filesystem checks
-- [`internal/app/audit.go`](internal/app/audit.go): best-effort JSONL audit trail
-- [`internal/util/error_codes.go`](internal/util/error_codes.go): stable, sanitized JSON error envelopes
+- [`internal/app/doctor.go`](../internal/app/doctor.go): static config and filesystem checks
+- [`internal/app/audit.go`](../internal/app/audit.go): best-effort JSONL audit trail
+- [`internal/util/error_codes.go`](../internal/util/error_codes.go): stable, sanitized JSON error envelopes
 
 Notable behavior:
 
@@ -188,16 +188,16 @@ Notable behavior:
 
 The active package layout today is:
 
-- [`cmd/dbx/`](cmd/dbx): process startup
-- [`internal/app/`](internal/app): command tree, REPL handlers, CLI handlers, execution orchestration, output shaping
-- [`internal/commandlang/`](internal/commandlang): lexical/syntax model for completion and help-aware parsing
-- [`internal/config/`](internal/config): config types, store, diagnostics, audit/history/session persistence
-- [`internal/connect/`](internal/connect): timeout-aware connector dispatch
-- [`internal/driver/`](internal/driver): MySQL transport and query helpers
-- [`internal/template/`](internal/template): builtin templates, layered resolution, rendering, validation
-- [`internal/ui/`](internal/ui): prompt and completion-facing UI types
-- [`internal/ui/editor/`](internal/ui/editor): buffer and completion edit primitives
-- [`internal/util/`](internal/util): validation helpers, layered errors, path helpers, JSON error codes
+- [`cmd/dbx/`](../cmd/dbx): process startup
+- [`internal/app/`](../internal/app): command tree, REPL handlers, CLI handlers, execution orchestration, output shaping
+- [`internal/commandlang/`](../internal/commandlang): lexical/syntax model for completion and help-aware parsing
+- [`internal/config/`](../internal/config): config types, store, diagnostics, audit/history/session persistence
+- [`internal/connect/`](../internal/connect): timeout-aware connector dispatch
+- [`internal/driver/`](../internal/driver): MySQL transport and query helpers
+- [`internal/template/`](../internal/template): builtin templates, layered resolution, rendering, validation
+- [`internal/ui/`](../internal/ui): prompt and completion-facing UI types
+- [`internal/ui/editor/`](../internal/ui/editor): buffer and completion edit primitives
+- [`internal/util/`](../internal/util): validation helpers, layered errors, path helpers, JSON error codes
 
 Two directories exist but are not part of the active execution path today:
 

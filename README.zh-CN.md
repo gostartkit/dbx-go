@@ -1,7 +1,7 @@
 # dbx
 
 [English README](README.md)
-[架构走读](ARCHITECTURE.zh-CN.md)
+[架构走读](docs/ARCHITECTURE.zh-CN.md)
 
 `dbx` 是一个以 REPL 为核心、使用 Go 编写的 MySQL 运维 CLI。它把日常数据库操作收敛成有引导的模板化流程，REPL 与一次性 CLI 共享同一棵命令树，并且原生支持直连、SSH、SOCKS5、SOCKS5 -> SSH 四种链路，不依赖外部 SSH 命令。
 
@@ -276,7 +276,7 @@ proxy-ssh -> proxy -> ssh -> db
 
 仓库里自带了一个示例模板：[examples/templates/create_database_with_user.json](examples/templates/create_database_with_user.json)。它匹配 `create database`，并额外引入 `user_host` 与 `password` 两个输入。
 
-如果你想系统地从零学习模板设计、优先级、输入类型、连接级覆盖、歧义处理和安全约束，可以继续看 [TEMPLATE_STARTKIT.zh-CN.md](TEMPLATE_STARTKIT.zh-CN.md)。英文版见 [TEMPLATE_STARTKIT.md](TEMPLATE_STARTKIT.md)。
+如果你想系统地从零学习模板设计、优先级、输入类型、连接级覆盖、歧义处理和安全约束，可以继续看 [TEMPLATE_STARTKIT.zh-CN.md](docs/TEMPLATE_STARTKIT.zh-CN.md)。英文版见 [TEMPLATE_STARTKIT.md](docs/TEMPLATE_STARTKIT.md)。
 
 要在本地试用它，可以先复制到配置目录：
 
@@ -353,17 +353,22 @@ dbx --connection prod create database app_demo \
 
 当前真正的 REPL runtime 由 `pkg.gostartkit.com/cmd` 提供；仓库中的 `internal/repl/` 目录目前存在，但不在活跃执行路径上。
 
-如果你想看更细的包职责说明、执行链路分析以及当前实现观察，可以继续阅读 [ARCHITECTURE.zh-CN.md](ARCHITECTURE.zh-CN.md)。
+如果你想看更细的包职责说明、执行链路分析以及当前实现观察，可以继续阅读 [ARCHITECTURE.zh-CN.md](docs/ARCHITECTURE.zh-CN.md)。
 
 ## 项目布局
 
 ```text
 dbx/
-├── ARCHITECTURE.md
-├── ARCHITECTURE.zh-CN.md
 ├── cmd/
 │   └── dbx/
 │       └── main.go
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── ARCHITECTURE.zh-CN.md
+│   ├── CONTRIBUTING.md
+│   ├── CONTRIBUTING.zh-CN.md
+│   ├── TEMPLATE_STARTKIT.md
+│   └── TEMPLATE_STARTKIT.zh-CN.md
 ├── internal/
 │   ├── app/
 │   ├── commandlang/
@@ -376,7 +381,6 @@ dbx/
 │   └── util/
 ├── examples/
 ├── AGENTS.md
-├── CONTRIBUTING.md
 ├── LICENSE
 ├── Makefile
 ├── README.md
@@ -404,4 +408,4 @@ make check
 
 ## 贡献
 
-开发与评审约束见 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)。
+开发与评审约束见 [CONTRIBUTING.zh-CN.md](docs/CONTRIBUTING.zh-CN.md)。

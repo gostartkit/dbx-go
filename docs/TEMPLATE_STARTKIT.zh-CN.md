@@ -1,6 +1,6 @@
 # dbx 模板系统 Startkit 教程
 
-[English README](README.md) | [中文 README](README.zh-CN.md) | [English Tutorial](TEMPLATE_STARTKIT.md)
+[English README](../README.md) | [中文 README](../README.zh-CN.md) | [English Tutorial](TEMPLATE_STARTKIT.md)
 
 这份教程面向两类人：
 
@@ -722,7 +722,7 @@ dbx --connection prod create database app_demo \
 
 仓库自带了这个例子：
 
-- [examples/templates/create_database_with_user.json](examples/templates/create_database_with_user.json)
+- [examples/templates/create_database_with_user.json](../examples/templates/create_database_with_user.json)
 
 它做 3 件事：
 

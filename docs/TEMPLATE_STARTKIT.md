@@ -1,6 +1,6 @@
 # dbx Template System Startkit
 
-[English README](README.md) | [中文 README](README.zh-CN.md) | [中文教程](TEMPLATE_STARTKIT.zh-CN.md)
+[English README](../README.md) | [中文 README](../README.zh-CN.md) | [中文教程](TEMPLATE_STARTKIT.zh-CN.md)
 
 This guide is for two groups of readers:
 
@@ -725,7 +725,7 @@ For those commands, you currently need one of these strategies:
 
 The repository includes:
 
-- [examples/templates/create_database_with_user.json](examples/templates/create_database_with_user.json)
+- [examples/templates/create_database_with_user.json](../examples/templates/create_database_with_user.json)
 
 It does 3 things:
 

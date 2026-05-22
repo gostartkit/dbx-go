@@ -1,7 +1,7 @@
 # dbx
 
 [中文文档](README.zh-CN.md)
-[Architecture walkthrough](ARCHITECTURE.md)
+[Architecture walkthrough](docs/ARCHITECTURE.md)
 
 `dbx` is a REPL-first MySQL operator CLI written in Go. It keeps day-to-day database work guided and template-driven, shares one command tree between the REPL and one-shot CLI mode, and supports direct, SSH, SOCKS5, and SOCKS5 -> SSH transport paths without shelling out to external SSH tools.
 
@@ -276,7 +276,7 @@ Built-in variables include:
 
 The repository includes an example template at [examples/templates/create_database_with_user.json](examples/templates/create_database_with_user.json). It matches the `create database` command and adds extra inputs for `user_host` and `password`.
 
-For a detailed end-to-end template walkthrough, including layering, input types, secret handling, and command-to-template matching notes, see [TEMPLATE_STARTKIT.md](TEMPLATE_STARTKIT.md). A Chinese version is available at [TEMPLATE_STARTKIT.zh-CN.md](TEMPLATE_STARTKIT.zh-CN.md).
+For a detailed end-to-end template walkthrough, including layering, input types, secret handling, and command-to-template matching notes, see [TEMPLATE_STARTKIT.md](docs/TEMPLATE_STARTKIT.md). A Chinese version is available at [TEMPLATE_STARTKIT.zh-CN.md](docs/TEMPLATE_STARTKIT.zh-CN.md).
 
 To try it locally, copy it into your config directory:
 
@@ -353,17 +353,22 @@ The session file persists the selected connection and selected database. Command
 
 The active REPL runtime is currently provided by `pkg.gostartkit.com/cmd`; `internal/repl/` exists in the repository but is not part of the active execution path today.
 
-For a package-by-package code walkthrough, execution flow analysis, and notes on the current implementation shape, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For a package-by-package code walkthrough, execution flow analysis, and notes on the current implementation shape, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Project Layout
 
 ```text
 dbx/
-├── ARCHITECTURE.md
-├── ARCHITECTURE.zh-CN.md
 ├── cmd/
 │   └── dbx/
 │       └── main.go
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── ARCHITECTURE.zh-CN.md
+│   ├── CONTRIBUTING.md
+│   ├── CONTRIBUTING.zh-CN.md
+│   ├── TEMPLATE_STARTKIT.md
+│   └── TEMPLATE_STARTKIT.zh-CN.md
 ├── internal/
 │   ├── app/
 │   ├── commandlang/
@@ -376,7 +381,6 @@ dbx/
 │   └── util/
 ├── examples/
 ├── AGENTS.md
-├── CONTRIBUTING.md
 ├── LICENSE
 ├── Makefile
 ├── README.md
@@ -404,4 +408,4 @@ Release packaging lives in [scripts/release.sh](scripts/release.sh). The install
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development and review expectations.
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for development and review expectations.
